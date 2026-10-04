@@ -1,0 +1,19 @@
+# systemd unit for GenericVectorBuilder on linus7795. Installed 2026-10-03 (restarts on crash and after reboot).
+# Install:  sudo cp deploy/genericvectorbuilder.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now genericvectorbuilder
+# Publish first: dotnet publish src/GenericVectorBuilder.Web -c Release -o /home/dan/gvb-app
+[Unit]
+Description=GenericVectorBuilder web UI (port 5080)
+After=network-online.target mssql-server.service qdrant.service
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=dan
+WorkingDirectory=/home/dan/gvb-app
+ExecStart=/usr/bin/dotnet /home/dan/gvb-app/GenericVectorBuilder.Web.dll
+Restart=always
+RestartSec=5
+Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vector Engine Benchmark | Azure DevOps Forager</title>
+  <meta name="description" content="Seventeen vector engines, nineteen configurations, measured on the same 524 eShopOnWeb vectors and 20 labelled questions: searches per second, single-search latency, load rate, recall and nDCG. By Dan Weaver." />
+  <meta name="author" content="Dan Weaver" />
+  <link rel="canonical" href="https://azuredevops.aidataforager.com/vector-engines.html" />
+  <link rel="stylesheet" href="style.css?v=20260929" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%8C%BE%3C/text%3E%3C/svg%3E" />
+  <style>
+    .doc { max-width: 900px; margin: 0 auto; padding: 0 20px 72px; }
+    .doc h2 { font-size: 1.35rem; margin: 2.4rem 0 .6rem; letter-spacing: -0.01em; }
+    .doc h3 { font-size: 1.02rem; margin: 1.7rem 0 .5rem; color: var(--acc); letter-spacing: .01em; }
+    .doc p, .doc li { line-height: 1.65; }
+    .doc ul { padding-left: 1.15rem; }
+    .doc li { margin: .3rem 0; }
+    .lede { font-size: 1.06rem; opacity: .92; border-left: 3px solid var(--acc);
+            padding: .1rem 0 .1rem 1rem; margin: 1.2rem 0 1.8rem; }
+    .card { background: var(--surface); border: 1px solid var(--line);
+            border-radius: var(--radius); padding: 1.1rem 1.25rem; margin: 1.2rem 0;
+            box-shadow: var(--shadow); }
+    .card.flag { border-color: var(--acc); border-left-width: 3px; }
+    .card.caveat { border-color: var(--amber); border-left-width: 3px; }
+    .tbl-wrap { overflow-x: auto; margin: 1rem 0; }
+    table.ev { width: 100%; border-collapse: collapse; font-size: .92rem; min-width: 520px; }
+    table.ev th, table.ev td { text-align: left; padding: .5rem .7rem;
+                               border-bottom: 1px solid var(--line); vertical-align: top; }
+    table.ev th { color: var(--cyan); font-weight: 600; white-space: nowrap; }
+    table.ev td.num { font-family: var(--font-mono); white-space: nowrap; }
+    table.ev.wide { min-width: 860px; }
+    .win { color: var(--acc); font-weight: 600; }
+    .lose { color: var(--amber); }
+    .kill { opacity: .62; }
+    code, .mono { font-family: var(--font-mono); font-size: .9em; }
+    .bigstat { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1.2rem 0; }
+    .bigstat > div { flex: 1 1 170px; background: var(--surface); border: 1px solid var(--line);
+                     border-radius: var(--radius-sm); padding: .85rem 1rem; }
+    .bigstat b { display: block; font-family: var(--font-mono); font-size: 1.5rem;
+                 color: var(--acc); line-height: 1.15; }
+    .bigstat span { font-size: .82rem; opacity: .78; }
+    .backlink { display: inline-block; margin: 1.4rem 0 .2rem; }
+    .rng { display: block; font-size: .74rem; opacity: .68; }
+    .sub { font-size: .74rem; opacity: .68; }
+    .tag { font-family: var(--font-mono); font-size: .7rem; font-weight: 600; letter-spacing: .02em;
+           border: 1px solid var(--line); border-radius: 999px; padding: .05rem .5rem;
+           margin-left: .45rem; vertical-align: middle; white-space: nowrap; }
+    .tag.m { color: var(--acc); background: var(--acc-soft); }
+    .tag.l { color: var(--amber); }
+    .cmd { font-family: var(--font-mono); font-size: .82rem; word-break: break-all; margin: 0; }
+    .note { font-size: .86rem; opacity: .85; }
+  </style>
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="bg-glow" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-text">
+        <h1>Vector&nbsp;<span class="accent">Engines</span></h1>
+        <p class="tagline">Seventeen engines on the same 524 vectors and 20 questions: speed, load and recall</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <a class="topbar-link" href="/writeups.html">Writeups</a>
+      <a class="topbar-link" href="/benchmarks.html">Benchmarks</a>
+      <a class="topbar-link" href="/">&larr; Back to search</a>
+      <button class="theme-toggle" id="themeToggle" type="button" title="Toggle light / dark theme" aria-label="Switch to light theme">☀</button>
+    </div>
+  </header>
+
+  <main class="doc">
+
+    <p class="lede">
+      Seventeen engines, nineteen configurations, the same 524 vectors and the same 20 questions.
+      With 8 searchers, MariaDB answered the most searches per second in all three runs, and pgvector
+      came second in all three. Redis was the fastest with one searcher and 7th with eight. The two
+      in-process engines, DuckDB and sqlite-vec, answered fewer searches with eight searchers than
+      with one. Sixteen configurations returned the exact top 10 on every question in every run.
+    </p>
+
+    <div class="bigstat">
+      <div><b>4,558/s</b><span>MariaDB, 8 searchers, median of 3 runs</span></div>
+      <div><b>783/s</b><span>Redis, 1 searcher, fastest alone</span></div>
+      <div><b>16 of 19</b><span>configurations with the exact top 10 on all 20 questions, every run</span></div>
+    </div>
+
+    <h2>Setup</h2>
+
+    <ul>
+      <li><strong>Box:</strong> Intel Xeon E5-1620 v3 at 3.50 GHz, 8 logical CPUs, 62.7 GiB RAM,
+          NVIDIA GeForce RTX 3060 12 GB, Ubuntu 24.04.5. The benchmark client (.NET 10) and every
+          engine ran on this one box.</li>
+      <li><strong>One engine at a time.</strong> Docker engines were started for their turn and
+          stopped after it. SQL Server and Qdrant are always-on services on the box. DuckDB and
+          sqlite-vec run inside the client process.</li>
+      <li><strong>Data:</strong> eShopOnWeb at commit <code>4da8212117e8</code>. 254 C# files, 524
+          chunks, 1,024-dimension vectors from qwen3-emb-0.6b, built by GenericVectorBuilder. Every
+          engine got the same vectors.</li>
+      <li><strong>Queries:</strong> the 20 hand-labelled golden questions, embedded once and cached.
+          Every engine got the same query vectors. Top 10.</li>
+      <li><strong>Per engine, in this order:</strong> empty collection, load, and a wait until the
+          engine counts 524 rows. Then 20 warm-up searches and 200 timed single searches. Then 20 seconds
+          with 1 searcher and 20 seconds with 8 concurrent searchers. Last, the engine's exact mode if it
+          has one (20 searches). SQL DiskANN builds its index, and Qdrant waits for green status, before
+          the warm-up.</li>
+      <li><strong>Scoring:</strong> recall@10 against a brute-force search over the same vectors in
+          memory, with exact ties counted. nDCG@10 against the labels, by file. Both come from the
+          first pass of the 20 questions.</li>
+      <li><strong>Runs:</strong> three, on 3 Oct 18:44 UTC and 4 Oct 13:08 and 13:27 UTC. SQL DiskANN
+          joined at run 2. Its third run is a four-target run from 3 Oct 23:48 UTC. Tables show the
+          median of three runs. No search returned an error.</li>
+      <li><strong>Box load:</strong> the load average when searching began ranged from 1.8 to 8.3 on
+          8 threads. The harness flagged two passes as busy: Vespa in run 1, DuckDB in run 3. Both are
+          kept.</li>
+    </ul>
+
+    <h2>Ranked by searches per second, 8 searchers</h2>
+
+    <div class="tbl-wrap">
+      <table class="ev wide">
+        <thead><tr><th>#</th><th>Engine</th><th>8 searchers /s<span class="rng">median, min to max</span></th><th>1 searcher /s</th><th>Gain<span class="rng">8 vs 1</span></th><th>p50 ms<span class="rng">1 searcher</span></th><th>Load rows/s</th><th>Recall@10</th><th>nDCG@10</th></tr></thead>
+        <tbody>
+          <tr><td class="num">1</td><td class="win">MariaDB 11.8.9</td><td class="num"><b>4,558</b><span class="rng">4,132 to 4,559</span></td><td class="num">458</td><td class="num">10.0&times;</td><td class="num">1.98</td><td class="num">681</td><td class="num">1.000</td><td class="num">0.518</td></tr>
+          <tr><td class="num">2</td><td>PostgreSQL 17 + pgvector 0.8.7</td><td class="num"><b>3,823</b><span class="rng">3,312 to 3,831</span></td><td class="num">403</td><td class="num">9.5&times;</td><td class="num">2.87</td><td class="num">528</td><td class="num">1.000</td><td class="num">0.518</td></tr>
+          <tr><td class="num">3</td><td>Qdrant 1.17.0, exact=false <span class="sub">no graph built</span></td><td class="num"><b>3,355</b><span class="rng">3,041 to 3,432</span></td><td class="num">412</td><td class="num">8.2&times;</td><td class="num">2.42</td><td class="num">5,965</td><td class="num">1.000</td><td class="num">0.518</td></tr>
+          <tr><td class="num">4</td><td>Qdrant 1.17.0, exact=true</td><td class="num"><b>3,213</b><span class="rng">3,051 to 3,444</span></td><td class="num">425</td><td class="num">7.6&times;</td><td class="num">2.30</td><td class="num">2,721</td><td class="num">1.000</td><td class="num">0.518</td></tr>
+          <tr><td class="num">5</td><td>MongoDB 8.0.32 Atlas Local</td><td class="num"><b>2,807</b><span class="rng">2,427 to 2,928</span></td><td class="num">253</td><td class="num">10.8&times;</td><td class="num">5.51</td><td class="num">2,322</td><td class="num">1.000 <span class="sub">0.965 in run 3</span></td><td class="num">0.518 <span class="sub">0.535 in run 3</span></td></tr>
+          <tr><td class="num">6</td><td>Elasticsearch 9.5.3</td><td class="num"><b>2,544</b><span class="rng">2,543 to 2,632</span></td><td class="num">160</td><td class="num">15.9&times;</td><td class="num">11.76</td><td class="num">474</td><td class="num">1.000</td><td class="num">0.518</td></tr>
+          <tr><td class="num">7</td><td>Redis 8.10.2 <a href="#redis-note">*</a></td><td class="num"><b>2,107</b><span class="rng">2,011 to 3,154</span></td><td class="num win">783</td><td class="num">2.7&times;</td><td class="num win">1.51</td><td class="num">6,874</td><td class="num">1.000</td><td class="num">0.518</td></tr>
+          <tr><td class="num">8</td><td>OpenSearch 3.9.0</td><td class="num"><b>1,875</b><span class="rng">1,702 to 1,967</span></td><td class="num">145</td><td class="num">13.6&times;</td><td class="num">10.62</td><td class="num">414</td><td class="num">1.000</td><td class="num">0.518</td></tr>
+          <tr><td class="num">9</td><td>Milvus 2.6.25</td><td class="num"><b>1,691</b><span class="rng">1,493 to 1,724</span></td><td class="num">151</td><td class="num">10.9&times;</td><td class="num">7.42</td><td class="num">745</td><td class="num">1.000</td><td class="num">0.518</td></tr>
+          <tr><td class="num">10</td><td>Vespa 8.754.14</td><td class="num"><b>1,553</b><span class="rng">1,489 to 1,564</span></td><td class="num">201</td><td class="num">7.8&times;</td><td class="num">6.41</td><td class="num">498</td><td class="num">1.000</td><td class="num">0.518</td></tr>
+          <tr><td class="num">11</td><td>SQL Server 2025, DiskANN <span class="sub">preview</span></td><td class="num"><b>1,003</b><span class="rng">890 to 1,025</span></td><td class="num">227</td><td class="num">4.3&times;</td><td class="num">4.50</td><td class="num">668</td><td class="num lose">0.965</td><td class="num">0.526</td></tr>
+          <tr><td class="num">12</td><td>Typesense 30.2</td><td class="num"><b>944</b><span class="rng">896 to 974</span></td><td class="num">106</td><td class="num">8.9&times;</td><td class="num">8.92</td><td class="num">764</td><td class="num">1.000</td><td class="num">0.518</td></tr>
+          <tr><td class="num">13</td><td>SQL Server 2025, exact scan</td><td class="num"><b>806</b><span class="rng">765 to 914</span></td><td class="num">192</td><td class="num">4.3&times;</td><td class="num">6.72</td><td class="num">550</td><td class="num">1.000</td><td class="num">0.518</td></tr>
+          <tr><td class="num">14</td><td>Oracle 23ai Free <span class="sub">reports 26ai</span></td><td class="num"><b>671</b><span class="rng">509 to 695</span></td><td class="num">269</td><td class="num">2.6&times;</td><td class="num">5.56</td><td class="num">1,486</td><td class="num">1.000</td><td class="num">0.518</td></tr>
+          <tr><td class="num">15</td><td>ClickHouse 26.3</td><td class="num"><b>665</b><span class="rng">625 to 711</span></td><td class="num">167</td><td class="num">4.1&times;</td><td class="num">6.25</td><td class="num">2,711</td><td class="num lose">0.995 <span class="sub">0.985 in run 1</span></td><td class="num">0.528 <span class="sub">0.520 in run 1</span></td></tr>
+          <tr><td class="num">16</td><td>Chroma 1.4.4</td><td class="num"><b>600</b><span class="rng">331 to 610</span></td><td class="num">168</td><td class="num">3.1&times;</td><td class="num">6.01</td><td class="num">431</td><td class="num">1.000</td><td class="num">0.518</td></tr>
+          <tr><td class="num">17</td><td>Weaviate 1.39.8</td><td class="num"><b>523</b><span class="rng">485 to 541</span></td><td class="num">64</td><td class="num">7.7&times;</td><td class="num">15.36</td><td class="num">735</td><td class="num">1.000</td><td class="num">0.518</td></tr>
+          <tr><td class="num">18</td><td>sqlite-vec 0.1.7-alpha.2.1 <span class="sub">in process</span></td><td class="num"><b>458</b><span class="rng">457 to 528</span></td><td class="num">527</td><td class="num lose">0.9&times;</td><td class="num">2.16</td><td class="num">4,027</td><td class="num">1.000</td><td class="num">0.518</td></tr>
+          <tr><td class="num">19</td><td>DuckDB 1.5.6 + vss <span class="sub">in process</span></td><td class="num"><b>181</b><span class="rng">171 to 200</span></td><td class="num">255</td><td class="num lose">0.7&times;</td><td class="num">4.05</td><td class="num">1,530</td><td class="num">1.000</td><td class="num">0.518</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="note">
+      Gain is the 8-searcher rate divided by the 1-searcher rate within one run, median of the three
+      runs. p50 comes from the 200 single searches right after warm-up. For some engines it reads high:
+      see <a href="#order">pass order</a>. The Load column is explained under
+      <a href="#settings">settings</a>.
+    </p>
+
+    <div class="card caveat" id="redis-note">
+      <p style="margin:0 0 .5rem"><strong>* Redis holds everything in memory.</strong> As configured
+      here it writes a snapshot every 5 minutes and keeps no append-only log. A crash can lose recent
+      writes.</p>
+      <p style="margin:0">Two other settings trade durability too. MariaDB flushed its log once a
+      second, so a crash can lose the last second of writes. DuckDB's index ran with DuckDB's
+      experimental persistence switch, which DuckDB documents as not fully crash safe.</p>
+    </div>
+
+    <h2>Answers: the same, with three exceptions</h2>
+
+    <p>
+      Brute force over these vectors scores nDCG@10 0.518 on the labels. Sixteen configurations
+      returned exactly that top 10 for every question in every run. Three did not:
+    </p>
+
+    <ul>
+      <li><strong>SQL Server DiskANN:</strong> missed 7 of 200 top-10 slots in every run. Recall 0.965,
+          nDCG 0.526.</li>
+      <li><strong>ClickHouse</strong> (bf16 graph, no rescoring): missed 3 of 200 in run 1 and 1 of 200
+          in runs 2 and 3. Recall 0.985 and 0.995, nDCG 0.520 and 0.528. Its full-precision exact mode
+          returned recall 1.000 in every run.</li>
+      <li><strong>MongoDB:</strong> missed 7 of 200 in run 3 only. Recall 0.965, nDCG 0.535. Runs 1 and 2
+          were exact.</li>
+    </ul>
+
+    <p>
+      In all three, nDCG went up, not down. On 20 questions a few swapped chunks can move it either
+      way.
+    </p>
+
+    <h2>Why the order came out this way</h2>
+
+    <p>
+      Each cause is tagged. <span class="tag m" style="margin-left:0">measured</span> means a number in
+      the results shows it. <span class="tag l" style="margin-left:0">likely</span> means it fits the
+      numbers and the client code, but was not isolated.
+    </p>
+
+    <h3 id="order">Pass order moved the numbers <span class="tag m">measured</span></h3>
+
+    <p>The same query, timed later, came back faster:</p>
+
+    <ul>
+      <li>sqlite-vec's exact mode is the same query as its default search. Timed last, its p50 was
+          1.95 ms against 2.16 ms in the first timed pass. Lower in all three runs.</li>
+      <li>Qdrant with exact=true: 2.30 ms p50 as its own target, 0.87 ms when the same search was timed
+          at the end of the next target. Lower in all three runs.</li>
+      <li>SQL Server's exact scan: 6.18 to 6.81 ms p50 as the first target of a run. The same query,
+          timed inside the DiskANN target that followed, took 4.28 to 4.77 ms.</li>
+      <li>Elasticsearch: one searcher completed 148 to 167 searches a second, 6.0 to 6.8 ms each. The
+          timed pass just before it had a p50 of 11.0 to 13.2 ms. OpenSearch: 6.7 to 7.7 ms against
+          9.8 to 12.3 ms.</li>
+    </ul>
+
+    <p>
+      So 20 warm-up searches were not enough for every engine, or for the client. Which side was still
+      warming up was not separated. The p50 column carries part of it, Elasticsearch and OpenSearch the
+      most. The rates come from 20-second passes and are less exposed. The ranking uses the 8-searcher
+      pass, which ran after the timed single searches and the 1-searcher pass.
+    </p>
+
+    <p>
+      Five configurations got more than 8 times their 1-searcher rate with 8 searchers, in every run:
+      Elasticsearch (15.2 to 17.8), OpenSearch (11.3 to 14.4), Milvus (10.8 to 11.4), MongoDB (9.1 to
+      11.6) and MariaDB (8.2 to 10.5). On 8 threads, a gain above 8 means a lone search spent part of its
+      time waiting or warming up.
+    </p>
+
+    <h3>In-process engines ran one search at a time <span class="tag m">measured</span></h3>
+
+    <p>
+      DuckDB and sqlite-vec each hold one connection per collection and let one call through at a time
+      (client code). With 8 searchers they finished fewer searches than with one, in every run: DuckDB
+      0.67 to 0.78 times its 1-searcher rate, sqlite-vec 0.87 to 0.97. Alone, sqlite-vec was 2nd of 19 at
+      527 a second. With eight it was 18th.
+    </p>
+
+    <h3>Low gains with 8 searchers</h3>
+
+    <ul>
+      <li><span class="tag l" style="margin-left:0">likely</span> <strong>Oracle:</strong> 1.8 to 2.7
+          times its 1-searcher rate. Oracle caps the Free edition at 2 CPU threads. Not tested on a
+          licensed edition.</li>
+      <li><span class="tag l" style="margin-left:0">likely</span> <strong>Redis:</strong> 2.6 to 3.9
+          times. All 8 searchers share one multiplexed client connection (StackExchange.Redis). Whether
+          the client or the server is the limit was not tested. Run 3 reached 3,154 a second against
+          2,011 and 2,107 in runs 1 and 2. That spread is not explained.</li>
+      <li><strong>Not explained by this data:</strong> Chroma (2.0 to 3.9 times), ClickHouse (4.0 to
+          4.3) and both SQL Server rows (4.0 to 4.8). Chroma managed 331 a second with 8 searchers in
+          run 1, against 600 and 610 in the others.</li>
+    </ul>
+
+    <h3>How the query vector travels <span class="tag l">likely</span></h3>
+
+    <p>The 1-searcher rates sort into bands by how the client sends the 1,024 floats:</p>
+
+    <ul>
+      <li><strong>Binary</strong> (float32 bytes or a native vector type): Redis, MariaDB, Qdrant,
+          pgvector, Oracle, MongoDB. 253 to 783 a second.</li>
+      <li><strong>A JSON array in an HTTP body:</strong> Vespa, Chroma, Elasticsearch, Milvus,
+          OpenSearch. 145 to 201 a second.</li>
+      <li><strong>Decimal text inside a query string:</strong> ClickHouse (SQL over HTTP), Typesense
+          (the <code>vector_query</code> string in a JSON POST), Weaviate (GraphQL). 64 to 167 a
+          second.</li>
+      <li><strong>SQL Server</strong> sends JSON text in a TDS parameter and casts it to VECTOR(1024):
+          192 a second exact, 227 with DiskANN.</li>
+    </ul>
+
+    <p>
+      This is at most part of the story. The format was never varied with the engine held fixed. The
+      bands touch: ClickHouse (167) is level with Chroma (168). And the same JSON-over-HTTP clients got
+      exact-mode answers at 2.22 ms p50 from Vespa and 4.29 to 4.41 ms from OpenSearch and Elasticsearch.
+      For those three, the format costs at most that much per search.
+    </p>
+
+    <h3>Milvus: Strong consistency <span class="tag l">likely</span></h3>
+
+    <p>
+      Every Milvus search ran at Strong consistency, the client's default. Milvus gained 10.8 to 11.4
+      times with 8 searchers, the steadiest gain above 8 in the set. Its lone searches were waiting on
+      something. Strong consistency is the likely wait. Other levels were not tested, and warm-up may add
+      to it.
+    </p>
+
+    <h3>Weaviate: GraphQL text <span class="tag l">likely</span></h3>
+
+    <p>
+      Weaviate had the slowest single search, 15.36 ms p50, and the lowest 1-searcher rate, 64 a second.
+      The client writes the 1,024 floats as decimal text into a GraphQL query, which the server parses on
+      every search. Weaviate's gRPC port was open and not used. Weaviate has no exact mode, so there is no
+      same-path baseline to check against.
+    </p>
+
+    <h3>Index choices <span class="tag m">measured</span></h3>
+
+    <ul>
+      <li><strong>Qdrant built no graph.</strong> After each load it reported 0 of 524 vectors in HNSW
+          segments. Both Qdrant rows are scans, one with exact=true and one with exact=false. Their
+          8-searcher ranges overlap: 3,051 to 3,444 and 3,041 to 3,432.</li>
+      <li><strong>ClickHouse's bf16 graph without rescoring</strong> lost recall in every run. Its exact
+          mode did not.</li>
+      <li><strong>MariaDB</strong> searched with <code>mhnsw_ef_search</code> 3,200, six times the row
+          count. <strong>pgvector</strong> forced the index path with <code>enable_seqscan</code> off.
+          Both kept recall 1.000.</li>
+    </ul>
+
+    <p>Exact mode against the default search, single-search p50 in ms, median of three runs:</p>
+
+    <div class="tbl-wrap">
+      <table class="ev">
+        <thead><tr><th>Engine</th><th>Default search</th><th>Exact mode, timed last</th></tr></thead>
+        <tbody>
+          <tr><td>Qdrant, exact=false target</td><td class="num">2.42</td><td class="num">0.87</td></tr>
+          <tr><td>Redis</td><td class="num">1.51</td><td class="num">1.34</td></tr>
+          <tr><td>MariaDB</td><td class="num">1.98</td><td class="num">1.66</td></tr>
+          <tr><td>sqlite-vec <span class="sub">same query both times</span></td><td class="num">2.16</td><td class="num">1.95</td></tr>
+          <tr><td>pgvector</td><td class="num">2.87</td><td class="num">2.59</td></tr>
+          <tr><td>SQL Server DiskANN target</td><td class="num">4.50</td><td class="num">4.30</td></tr>
+          <tr><td>Oracle</td><td class="num">5.56</td><td class="num">4.71</td></tr>
+          <tr><td>MongoDB</td><td class="num">5.51</td><td class="num">2.35</td></tr>
+          <tr><td>Vespa</td><td class="num">6.41</td><td class="num">2.22</td></tr>
+          <tr><td>OpenSearch</td><td class="num">10.62</td><td class="num">4.29</td></tr>
+          <tr><td>Elasticsearch</td><td class="num">11.76</td><td class="num">4.41</td></tr>
+          <tr class="kill"><td>DuckDB</td><td class="num">4.05</td><td class="num lose">5.86</td></tr>
+          <tr class="kill"><td>ClickHouse</td><td class="num">6.25</td><td class="num lose">6.77</td></tr>
+          <tr class="kill"><td>Typesense</td><td class="num">8.92</td><td class="num lose">9.26</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Every exact mode returned recall 1.000 in every run. Exact mode ran last, with the most warm-up, so
+      its lower numbers do not show that the indexes are slow. In DuckDB, ClickHouse and Typesense it was
+      slower even when timed last.
+    </p>
+
+    <h3>SQL Server: exact scan against DiskANN <span class="tag m">measured</span><span class="tag l">cause likely</span></h3>
+
+    <p>
+      Paired within each run, DiskANN served more searches than the exact scan: 1.5%, 12.2% and 16.4%
+      more with 8 searchers, 14.7%, 18.4% and 15.3% more with one. The exact target always ran first and
+      DiskANN second. Inside the DiskANN target, the exact query timed later ran at 4.28 to 4.77 ms p50,
+      level with DiskANN's 4.24 to 4.56 ms. So the gap between the two SQL rows is <em>likely</em> run
+      order, not the index.
+    </p>
+
+    <p>
+      At 524 rows, DiskANN bought no measured speed. It cost recall (0.965). On SQL Server for Linux it
+      is a preview feature that has to be switched on per database, and it makes the table read-only. It
+      also needs a single INT clustered key, so the rows were copied into a second, INT-keyed table before
+      the index build.
+    </p>
+
+    <h2>What this does not show</h2>
+
+    <div class="card caveat">
+      <ul style="margin:0">
+        <li><strong>Scale.</strong> 524 vectors. Qdrant built no graph at all. Nothing here predicts
+            behaviour at 100,000 or 10 million vectors.</li>
+        <li><strong>Where the time goes.</strong> At this size, per-call cost (client, protocol, request
+            handling) likely outweighs the search itself. Likely, not measured. No empty-call baseline was
+            run, and the exact-mode timings that hint at it ran last.</li>
+        <li><strong>A clean client.</strong> The client shared the same 8 threads with each engine. With 8
+            searchers, the client's own work competes with the engine. That was not separated.</li>
+        <li><strong>Concurrency curves.</strong> One level above 1. Nothing about 16 or 64 searchers, or
+            where each engine tops out.</li>
+        <li><strong>Index readiness for every engine.</strong> The harness waits for the row count, the
+            DiskANN build and Qdrant's green status. It does not wait for Milvus's background index build
+            or for Oracle to merge new rows into its graph. Some of their searches may have run without the
+            full graph. Not checked.</li>
+        <li><strong>Tuning.</strong> One setting per engine, mostly M 16 and a search beam of 100. No sweep
+            on this data.</li>
+        <li><strong>Memory and disk.</strong> Recorded, and left out. RAM is the whole SQL Server or Qdrant
+            process, with everything else they serve. For containers it is docker stats. For the two
+            in-process engines it was not measured. Disk ranges from one table's pages to a whole data folder. The numbers
+            do not compare across engines.</li>
+        <li><strong>Bulk loading.</strong> One writer and 524 rows. The Load column is not a bulk-load
+            test.</li>
+      </ul>
+    </div>
+
+    <h2 id="settings">Settings, per engine</h2>
+
+    <p>
+      Load rows/s counts time inside each engine's write calls only: one writer, rows already in memory,
+      into an empty collection. The harness hands over all 524 rows in one call. Each client then splits
+      them:
+    </p>
+
+    <ul>
+      <li><strong>1 batch:</strong> SQL Server (bulk copy, then MERGE), ClickHouse, DuckDB, sqlite-vec.</li>
+      <li><strong>2 batches of up to 500:</strong> Redis, MongoDB, Oracle, MariaDB, pgvector,
+          Elasticsearch, OpenSearch, Typesense, Chroma, Milvus.</li>
+      <li><strong>3 batches:</strong> Qdrant (256 each), Weaviate (200 each).</li>
+      <li><strong>Vespa:</strong> one document per request, up to 64 in flight.</li>
+    </ul>
+
+    <p>
+      Work after the writes is not in the number. SQL DiskANN's copy and index build took 3.66 to 3.73 s.
+      Milvus took 1.57 to 1.64 s, and MongoDB 0.70 to 1.39 s, before they counted all 524 rows. The two
+      Qdrant targets write the same way. The second, timed right after the first, loaded 1.8 to 2.8 times
+      faster in every run. Run order likely shows here too.
+    </p>
+
+    <div class="tbl-wrap">
+      <table class="ev wide">
+        <thead><tr><th>Engine</th><th>Index and search</th><th>Server settings off default</th><th>Query vector sent as</th></tr></thead>
+        <tbody>
+          <tr><td>SQL Server 2025 RTM-CU9 (17.0.5005.3)</td><td>Exact: <code>VECTOR_DISTANCE</code> cosine, full scan. DiskANN: <code>VECTOR_SEARCH</code>, cosine, build parameters as reported L 48, M 8, R 48</td><td>DiskANN only: <code>PREVIEW_FEATURES</code> on, in a throwaway database</td><td>JSON text in a TDS parameter, cast to VECTOR(1024)</td></tr>
+          <tr><td>Qdrant 1.17.0</td><td>HNSW m 16, ef_construct 100 configured, never built at 524 points. One target exact=true, one exact=false with the server's default beam</td><td>none</td><td>gRPC, float array</td></tr>
+          <tr><td>PostgreSQL 17 + pgvector 0.8.7</td><td>HNSW m 16, ef_construction 128, <code>hnsw.ef_search</code> 100. Each search sets <code>enable_seqscan</code> off and <code>jit</code> off</td><td><code>shared_buffers</code> 2GB, <code>maintenance_work_mem</code> 1GB, <code>max_wal_size</code> 4GB</td><td>binary vector parameter</td></tr>
+          <tr><td>MariaDB 11.8.9</td><td>VECTOR INDEX, cosine, M 16 (MariaDB has no ef_construction setting), <code>mhnsw_ef_search</code> 3,200 per statement</td><td><code>mhnsw-max-cache-size</code> 4G (default 16M), <code>innodb-buffer-pool-size</code> 2G, <code>innodb-flush-log-at-trx-commit</code> 2, <code>max-allowed-packet</code> 64M</td><td>raw float32 bytes</td></tr>
+          <tr><td>Oracle 23ai Free (23.26)</td><td>In-memory HNSW, NEIGHBORS 16, EFCONSTRUCTION 128, EFSEARCH 100</td><td>vector memory pool 768 MB. Free is capped at 2 CPU threads</td><td>VECTOR bind parameter</td></tr>
+          <tr><td>Redis 8.10.2</td><td>HNSW M 16, EF_CONSTRUCTION 128, EF_RUNTIME 100, vectors in hashes</td><td>snapshot every 5 minutes, no append-only log</td><td>float32 blob, one multiplexed connection</td></tr>
+          <tr><td>MongoDB 8.0.32 Atlas Local</td><td>mongot HNSW, maxEdges 16, numEdgeCandidates 128, <code>numCandidates</code> 200</td><td>none</td><td>BSON float32 binData</td></tr>
+          <tr><td>ClickHouse 26.3.39.7</td><td><code>vector_similarity</code> HNSW, bf16, M 16, ef_construction 128, candidate list 256, rescoring off</td><td>none</td><td>float literal in SQL text over HTTP</td></tr>
+          <tr><td>Milvus 2.6.25 standalone</td><td>HNSW M 16, efConstruction 128, ef 100, Strong consistency</td><td>embedded etcd, local storage, session TTL 300 s</td><td>JSON array, REST v2</td></tr>
+          <tr><td>Weaviate 1.39.8</td><td>HNSW M 16, efConstruction 128, dynamic ef (100 at top 10), no quantization</td><td><code>GOMEMLIMIT</code> 6GiB</td><td>decimal text in a GraphQL query</td></tr>
+          <tr><td>Chroma 1.4.4</td><td>HNSW M 16, ef_construction 128, ef_search 100 (its default). Text and metadata also indexed, by Chroma's default</td><td>image tag <code>latest</code></td><td>JSON array, REST v2</td></tr>
+          <tr><td>Elasticsearch 9.5.3</td><td><code>dense_vector</code> HNSW float32 (the bbq_hnsw default overridden), m 16, ef_construction 128, <code>num_candidates</code> 100, 1 shard, 0 replicas</td><td>2 GB heap, security off</td><td>JSON array, REST</td></tr>
+          <tr><td>OpenSearch 3.9.0</td><td>faiss HNSW float32, m 16, ef_construction 128, ef_search 100, 1 shard, 0 replicas</td><td>2 GB heap, security off</td><td>JSON array, REST</td></tr>
+          <tr><td>Typesense 30.2</td><td>HNSW m 16, ef_construction 128, ef 100</td><td>snapshot every 5 minutes</td><td>decimal text in the <code>vector_query</code> string</td></tr>
+          <tr><td>Vespa 8.754.14</td><td>HNSW max-links-per-node 16, neighbors-to-explore-at-insert 128, ef 100, prenormalized-angular</td><td>none</td><td>JSON array, REST</td></tr>
+          <tr><td>DuckDB 1.5.6 + vss</td><td>HNSW m 16, ef_construction 128, ef_search 100, experimental persistence on</td><td>in process, one connection, one call at a time</td><td>in process</td></tr>
+          <tr><td>SQLite 3.53.3 + sqlite-vec 0.1.7-alpha.2.1</td><td>vec0 scan, no index</td><td>in process, one connection, one call at a time</td><td>in process</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Reproduce</h2>
+
+    <p>
+      The tool is the bench program in GenericVectorBuilder. It is not public yet. Runs 2 and 3 were this
+      one command. Run 1 left out sql-diskann.
+    </p>
+
+    <div class="card">
+      <p class="cmd">GenericVectorBuilder.Bench run-all --pipeline eshoponweb --targets sql,sql-diskann,qdrant,qdrant-hnsw,pgvector,mariadb,oracle,redis,mongodb,clickhouse,milvus,weaviate,chroma,elasticsearch,opensearch,typesense,vespa,duckdb,sqlitevec --queries golden</p>
+    </div>
+
+    <p>
+      Everything else is the default: concurrency 1 and 8, 20 seconds per level, 20 warm-up searches,
+      top 10, up to 60 seconds of exact mode. Each run writes <code>results.json</code> and
+      <code>results.md</code>. Every measurement on this page comes from those files.
+    </p>
+
+    <p class="backlink"><a href="/writeups.html">&larr; All writeups</a></p>
+
+  </main>
+
+  <footer class="foot">
+    <p class="foot-built">
+      Built by <strong>Dan Weaver</strong> &middot; Applied AI / RAG engineer &middot; remote
+    </p>
+    <p class="foot-links">
+      <a href="/">Live search</a>
+      &middot;
+      <a href="/writeups.html">Writeups</a>
+      &middot;
+      <a href="/benchmarks.html">Benchmarks</a>
+      &middot;
+      <a href="https://github.com/disisnoturbusiness/AzureDevOpsForager" target="_blank" rel="noopener">Source on GitHub</a>
+      &middot;
+      <a href="https://www.linkedin.com/in/dan-weaver-1861038" target="_blank" rel="noopener">LinkedIn</a>
+      &middot;
+      <a href="https://huggingface.co/disisnoturbusiness/bge-code-v1-onnx" target="_blank" rel="noopener">Hugging Face</a>
+    </p>
+  </footer>
+
+  <script>
+    (function () {
+      var KEY = "adf-theme";
+      var btn = document.getElementById("themeToggle");
+      function apply(t) {
+        var light = (t === "light");
+        if (light) document.documentElement.setAttribute("data-theme", "light");
+        else document.documentElement.removeAttribute("data-theme");
+        if (btn) {
+          btn.textContent = light ? "☾" : "☀";
+          btn.setAttribute("aria-label", light ? "Switch to dark theme" : "Switch to light theme");
+        }
+      }
+      try { apply(localStorage.getItem(KEY) || "dark"); } catch (e) { apply("dark"); }
+      if (btn) btn.addEventListener("click", function () {
+        var next;
+        try { next = (localStorage.getItem(KEY) === "light") ? "dark" : "light"; } catch (e) { next = "dark"; }
+        try { localStorage.setItem(KEY, next); } catch (e) {}
+        apply(next);
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,859 @@
+{
+  "startedUtc": "2026-10-04T13:08:58Z",
+  "command": "run-all",
+  "commandLine": "/home/dan/ForClaude/GenericVectorBuilder/src/GenericVectorBuilder.Bench/bin/Release/net10.0/GenericVectorBuilder.Bench.dll run-all --pipeline eshoponweb --targets sql,sql-diskann,qdrant,qdrant-hnsw,pgvector,mariadb,oracle,redis,mongodb,clickhouse,milvus,weaviate,chroma,elasticsearch,opensearch,typesense,vespa,duckdb,sqlitevec --queries golden",
+  "machine": {
+    "host": "linus7795",
+    "cpu": "Intel(R) Xeon(R) CPU E5-1620 v3 @ 3.50GHz",
+    "logicalCpus": 8,
+    "ramGiB": 62.7,
+    "gpu": "NVIDIA GeForce RTX 3060, 12288 MiB",
+    "os": "Ubuntu 24.04.5 LTS, kernel 6.8.0-142-generic",
+    "dotNet": ".NET 10.0.12",
+    "loadAverage": "1.60 0.95 0.46"
+  },
+  "pipeline": "eshoponweb",
+  "collection": "gvbbench_eshoponweb",
+  "rows": 524,
+  "dimension": 1024,
+  "source": "Read READ-ONLY from GenericVectorBuilder.dbo.gvb_eshoponweb in ChunkId order, vectors as native SqlVector\u003Cfloat\u003E, 0.3 s.",
+  "queries": "golden: 20 labelled questions from /home/dan/ForClaude/evalkit/questions_golden.json, embedded with qwen3-emb-0.6b (cached in /home/dan/gvb-data/bench-cache/golden-eshoponweb-68df42ca69efa079.json, no embedding calls)",
+  "queryCount": 20,
+  "top": 10,
+  "concurrency": [
+    1,
+    8
+  ],
+  "secondsPerLevel": 20,
+  "truthSeconds": 0.0321048,
+  "truthNdcg": 0.5181699774768911,
+  "notes": [
+    "Load rows/s counts only time inside each target\u0027s upsert calls: one writer, batches of 1000, rows already in memory, the collection dropped and created fresh first.",
+    "Latency is client-side wall time around each search (network and driver included), one query at a time, after 20 warm-up queries; at least 200 samples (small query sets are repeated).",
+    "QPS: N workers searching back to back for 20 s per level; completed searches divided by elapsed time.",
+    "Recall@10: share of the exact top 10 (brute force in memory) that the engine returned. A hit whose exact similarity ties the 10th best (within 1e-5) also counts, because duplicate rows embed to identical vectors.",
+    "RAM of always-on servers (SQL Server, Qdrant) is the whole process, including every other database or collection it serves; for compose engines it is docker stats of the engine\u0027s containers. Disk is the table\u0027s reserved pages (SQL), the collection folder (Qdrant), or for other engines what the load added to the engine\u0027s data folder (engines that keep data in memory until a snapshot show almost nothing).",
+    "The empty benchmark database GvbBench was dropped at the end."
+  ],
+  "targets": [
+    {
+      "name": "sql",
+      "engine": "Microsoft SQL Server 2025 (RTM-CU9) (KB5122048) - 17.0.5005.3 (X64)",
+      "index": "exact VECTOR_DISTANCE cosine, no vector index (full scan)",
+      "hosting": "always-on",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.9266353,
+        "rowsPerSecond": 565.4867670161066,
+        "countMatchSeconds": 0.0059514
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 6.719150000000001,
+        "p95Ms": 9.422304999999998,
+        "p99Ms": 10.873552999999982,
+        "qps": {
+          "1": 191.61057995538576,
+          "8": 913.992386629377
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 0
+      },
+      "ram": {
+        "bytes": 4431282176,
+        "text": "4.13 GiB (whole SQL Server process)"
+      },
+      "disk": {
+        "bytes": 5398528,
+        "text": "5.15 MiB (table and its indexes, reserved pages)"
+      },
+      "notes": [
+        "Load average 1.79 1.00 0.48 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "sql-diskann",
+      "engine": "Microsoft SQL Server 2025 (RTM-CU9) (KB5122048) - 17.0.5005.3 (X64)",
+      "index": "DiskANN (preview) via VECTOR_SEARCH, cosine, build {\u0022StartId\u0022:\u0022306\u0022, \u0022L\u0022:\u002248\u0022, \u0022M\u0022:\u00228\u0022, \u0022R\u0022:\u002248\u0022}",
+      "hosting": "always-on",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.7352889,
+        "rowsPerSecond": 712.6450569293239,
+        "countMatchSeconds": 0.0038466,
+        "indexSeconds": 3.7275766,
+        "indexNote": "copied to dbo.gvb_gvbbench_eshoponweb_ann (INT key) and built DiskANN, parameters {\u0022StartId\u0022:\u0022306\u0022, \u0022L\u0022:\u002248\u0022, \u0022M\u0022:\u00228\u0022, \u0022R\u0022:\u002248\u0022}"
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 4.5649999999999995,
+        "p95Ms": 5.497089999999999,
+        "p99Ms": 6.405207999999994,
+        "qps": {
+          "1": 226.9443819918238,
+          "8": 1025.3753381052097
+        },
+        "recall": 0.9650000000000002,
+        "ndcg": 0.5256995680516536,
+        "errors": 0,
+        "exactQueries": 20,
+        "exactP50Ms": 4.2806,
+        "exactP95Ms": 5.81272,
+        "exactRecall": 1
+      },
+      "ram": {
+        "bytes": 4431282176,
+        "text": "4.13 GiB (whole SQL Server process)"
+      },
+      "disk": {
+        "bytes": 4734976,
+        "text": "4.52 MiB (table and its indexes, reserved pages)"
+      },
+      "notes": [
+        "Load average 4.01 1.65 0.72 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "qdrant",
+      "engine": "Qdrant 1.17.0 (systemd, local)",
+      "index": "exact search (the builder\u0027s setting), HNSW m=16 ef_construct=100 built but not used",
+      "hosting": "always-on",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.1925977,
+        "rowsPerSecond": 2720.6970799755136,
+        "countMatchSeconds": 0.0184001,
+        "indexSeconds": 2.028651,
+        "indexNote": "status Green, 0 of 524 vectors in HNSW segments (4 segments)"
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 2.3032000000000004,
+        "p95Ms": 3.107584999999999,
+        "p99Ms": 3.6496309999999985,
+        "qps": {
+          "1": 425.07193037507767,
+          "8": 3213.0703779254413
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 0
+      },
+      "ram": {
+        "bytes": 4518760448,
+        "text": "4.21 GiB (whole Qdrant process, every collection)"
+      },
+      "disk": {
+        "bytes": 344082727,
+        "text": "328.14 MiB (collection folder)"
+      },
+      "notes": [
+        "Load average 5.17 2.26 0.97 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "qdrant-hnsw",
+      "engine": "Qdrant 1.17.0 (systemd, local)",
+      "index": "HNSW m=16 ef_construct=100, hnsw_ef=server default, cosine",
+      "hosting": "always-on",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.105482,
+        "rowsPerSecond": 4967.672209476498,
+        "countMatchSeconds": 0.0052232,
+        "indexSeconds": 2.0042153,
+        "indexNote": "status Green, 0 of 524 vectors in HNSW segments (4 segments)"
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 2.2582500000000003,
+        "p95Ms": 2.85694,
+        "p99Ms": 3.355043999999999,
+        "qps": {
+          "1": 407.85319680640043,
+          "8": 3355.332250035922
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 20,
+        "exactP50Ms": 0.8714,
+        "exactP95Ms": 0.9552350000000001,
+        "exactRecall": 1
+      },
+      "ram": {
+        "bytes": 4519903232,
+        "text": "4.21 GiB (whole Qdrant process, every collection)"
+      },
+      "disk": {
+        "bytes": 344082727,
+        "text": "328.14 MiB (collection folder)"
+      },
+      "notes": [
+        "Load average 6.31 2.85 1.22 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "pgvector",
+      "engine": "PostgreSQL 17 \u002B pgvector 0.8.7",
+      "index": "HNSW vector_cosine_ops m=16 ef_construction=128, hnsw.ef_search=100 per query, float32 vector(n), cosine; exact mode = same query with index scans off (sequential scan)",
+      "hosting": "compose",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.9749263,
+        "rowsPerSecond": 537.4765251486189,
+        "countMatchSeconds": 0.0287094
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 3.03105,
+        "p95Ms": 3.682155,
+        "p99Ms": 3.873932999999978,
+        "qps": {
+          "1": 399.12596662991933,
+          "8": 3822.735122683349
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 20,
+        "exactP50Ms": 2.5881999999999996,
+        "exactP95Ms": 2.76485,
+        "exactRecall": 1
+      },
+      "ram": {
+        "bytes": 104962457,
+        "text": "100.1 MiB (docker stats)"
+      },
+      "disk": {
+        "bytes": 8090788,
+        "text": "7.72 MiB added by this load (1.04 GiB (whole engine data folder), 1.03 GiB before)"
+      },
+      "notes": [
+        "Started by run-all for this measurement and stopped afterwards.",
+        "Load average 5.45 3.19 1.43 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "mariadb",
+      "engine": "MariaDB 11.8.9 (InnoDB \u002B VECTOR INDEX)",
+      "index": "VECTOR INDEX (HNSW variant) DISTANCE=cosine, M=16 (no ef_construction setting exists), mhnsw_ef_search=3200, mhnsw_max_cache_size 4G; exact mode = IGNORE INDEX full scan",
+      "hosting": "compose",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.7698863,
+        "rowsPerSecond": 680.6199824571498,
+        "countMatchSeconds": 0.0092199
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 1.69235,
+        "p95Ms": 2.4321349999999997,
+        "p99Ms": 2.6509229999999997,
+        "qps": {
+          "1": 457.78305744904384,
+          "8": 4558.368320930089
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 20,
+        "exactP50Ms": 1.6635499999999999,
+        "exactP95Ms": 1.7451950000000003,
+        "exactRecall": 1
+      },
+      "ram": {
+        "bytes": 178572492,
+        "text": "170.3 MiB (docker stats)"
+      },
+      "disk": {
+        "bytes": 23077570,
+        "text": "22.01 MiB added by this load (193.79 MiB (whole engine data folder), 171.78 MiB before)"
+      },
+      "notes": [
+        "Started by run-all for this measurement and stopped afterwards.",
+        "Load average 6.33 3.77 1.72 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "oracle",
+      "engine": "Oracle AI Database Free 23.26 (23ai line, VECTOR FLOAT32)",
+      "index": "HNSW in-memory neighbor graph NEIGHBORS=16 EFCONSTRUCTION=128, EFSEARCH=100 per query, cosine; exact mode = FETCH EXACT FIRST (full scan)",
+      "hosting": "compose",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.3525584,
+        "rowsPerSecond": 1486.2785853350822,
+        "countMatchSeconds": 0.051406
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 4.8459,
+        "p95Ms": 6.6818399999999984,
+        "p99Ms": 7.275296999999992,
+        "qps": {
+          "1": 288.51283954626643,
+          "8": 508.7347792035321
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 20,
+        "exactP50Ms": 5.6264,
+        "exactP95Ms": 17.62460000000006,
+        "exactRecall": 1
+      },
+      "ram": {
+        "bytes": 2295660019,
+        "text": "2.14 GiB (docker stats)"
+      },
+      "disk": {
+        "bytes": 0,
+        "text": "0 B added by this load (6.88 GiB (whole engine data folder), 6.88 GiB before)"
+      },
+      "notes": [
+        "Started by run-all for this measurement and stopped afterwards.",
+        "Load average 5.58 3.98 1.91 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "redis",
+      "engine": "Redis 8.10.2 (query engine, HASH \u002B vector index)",
+      "index": "HNSW TYPE FLOAT32 M=16 EF_CONSTRUCTION=128, EF_RUNTIME=100 per query, cosine; exact mode = FLAT index built on first exact query",
+      "hosting": "compose",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.0486709,
+        "rowsPerSecond": 10766.186776903653,
+        "countMatchSeconds": 0.0184396
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 1.8554,
+        "p95Ms": 2.187645,
+        "p99Ms": 3.010056999999998,
+        "qps": {
+          "1": 783.3278435719446,
+          "8": 2106.7936090054422
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 20,
+        "exactP50Ms": 1.48075,
+        "exactP95Ms": 12.461215000000154,
+        "exactRecall": 1
+      },
+      "ram": {
+        "bytes": 21894266,
+        "text": "20.88 MiB (docker stats)"
+      },
+      "disk": {
+        "bytes": 0,
+        "text": "0 B added by this load (89 B (whole engine data folder), 89 B before)"
+      },
+      "notes": [
+        "Started by run-all for this measurement and stopped afterwards.",
+        "Load average 3.83 3.79 1.97 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "mongodb",
+      "engine": "MongoDB 8.0.32 Atlas Local (mongod \u002B mongot Vector Search)",
+      "index": "vectorSearch index, HNSW maxEdges=16 numEdgeCandidates=128, float32 binData, cosine, numCandidates=20x hits (min 100); exact mode = $vectorSearch exact:true",
+      "hosting": "compose",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.2236671,
+        "rowsPerSecond": 2342.767443222539,
+        "countMatchSeconds": 0.9727209
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 5.50565,
+        "p95Ms": 9.319749999999999,
+        "p99Ms": 10.126405999999994,
+        "qps": {
+          "1": 253.36029464142527,
+          "8": 2927.7153675119707
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 20,
+        "exactP50Ms": 1.92305,
+        "exactP95Ms": 3.049835000000002,
+        "exactRecall": 1
+      },
+      "ram": {
+        "bytes": 698980761,
+        "text": "666.6 MiB (docker stats)"
+      },
+      "disk": {
+        "bytes": 118004,
+        "text": "115.24 KiB added by this load (1.11 GiB (whole engine data folder), 1.11 GiB before)"
+      },
+      "notes": [
+        "Started by run-all for this measurement and stopped afterwards.",
+        "Load average 3.27 3.63 2.01 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "clickhouse",
+      "engine": "ClickHouse 26.3.39.7 (MergeTree \u002B vector_similarity index)",
+      "index": "vector_similarity HNSW cosineDistance, quantization bf16, M=16 ef_construction=128, hnsw_candidate_list_size_for_search=256, rescoring off; exact mode = full scan with skip indexes off",
+      "hosting": "compose",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.1968045,
+        "rowsPerSecond": 2662.5407447492307,
+        "countMatchSeconds": 0.0036921
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 6.2211,
+        "p95Ms": 8.521149999999999,
+        "p99Ms": 9.414108999999998,
+        "qps": {
+          "1": 168.14535750667923,
+          "8": 665.047863806593
+        },
+        "recall": 0.9949999999999999,
+        "ndcg": 0.5276466892383727,
+        "errors": 0,
+        "exactQueries": 20,
+        "exactP50Ms": 6.7669,
+        "exactP95Ms": 9.032435000000001,
+        "exactRecall": 1
+      },
+      "ram": {
+        "bytes": 1068498944,
+        "text": "1019 MiB (docker stats)"
+      },
+      "disk": {
+        "bytes": 1067447036,
+        "text": "1018 MiB added by this load (1.53 GiB (whole engine data folder), 550.51 MiB before)"
+      },
+      "notes": [
+        "Started by run-all for this measurement and stopped afterwards.",
+        "Load average 1.87 3.19 2.04 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "milvus",
+      "engine": "Milvus 2.6.25 (standalone, embedded etcd, local storage, REST API v2)",
+      "index": "HNSW M=16 efConstruction=128, ef=100, metric COSINE, Strong consistency searches; approximate only (no exact mode)",
+      "hosting": "compose",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.7093102,
+        "rowsPerSecond": 738.7458970701394,
+        "countMatchSeconds": 1.5696909
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 7.11985,
+        "p95Ms": 7.932435,
+        "p99Ms": 10.401939999999911,
+        "qps": {
+          "1": 154.44278358196638,
+          "8": 1690.8707640022042
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 0
+      },
+      "ram": {
+        "bytes": 203528601,
+        "text": "194.1 MiB (docker stats)"
+      },
+      "disk": {
+        "bytes": 9745736,
+        "text": "9.29 MiB added by this load (5.21 GiB (whole engine data folder), 5.2 GiB before)"
+      },
+      "notes": [
+        "Started by run-all for this measurement and stopped afterwards.",
+        "Load average 3.67 3.54 2.23 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "weaviate",
+      "engine": "Weaviate 1.39.8 (single node, REST \u002B GraphQL)",
+      "index": "HNSW maxConnections(M)=16 efConstruction=128, ef=-1 (dynamic: limit x 8 clamped 100..500), cosine, no quantization; approximate only (no exact mode)",
+      "hosting": "compose",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.6268339,
+        "rowsPerSecond": 835.9471304918256,
+        "countMatchSeconds": 0.008003
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 15.3332,
+        "p95Ms": 23.004755,
+        "p99Ms": 24.962810999999988,
+        "qps": {
+          "1": 81.53546222708492,
+          "8": 523.3644374189535
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 0
+      },
+      "ram": {
+        "bytes": 113036492,
+        "text": "107.8 MiB (docker stats)"
+      },
+      "disk": {
+        "bytes": 3019737,
+        "text": "2.88 MiB added by this load (3.44 MiB (whole engine data folder), 576.14 KiB before)"
+      },
+      "notes": [
+        "Started by run-all for this measurement and stopped afterwards.",
+        "Load average 4.03 3.69 2.38 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "chroma",
+      "engine": "Chroma 1.4.4 (single node, REST API v2)",
+      "index": "HNSW M=16 ef_construction=128, ef_search=100 (Chroma default), cosine; approximate only (no exact mode)",
+      "hosting": "compose",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 1.1367922,
+        "rowsPerSecond": 460.9461606087727,
+        "countMatchSeconds": 0.0608624
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 5.9762,
+        "p95Ms": 6.732514999999999,
+        "p99Ms": 7.504569999999998,
+        "qps": {
+          "1": 193.89394332204617,
+          "8": 600.3243980355031
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 0
+      },
+      "ram": {
+        "bytes": 51621396,
+        "text": "49.23 MiB (docker stats)"
+      },
+      "disk": {
+        "bytes": 424100,
+        "text": "414.16 KiB added by this load (543.97 MiB (whole engine data folder), 543.56 MiB before)"
+      },
+      "notes": [
+        "Started by run-all for this measurement and stopped afterwards.",
+        "Load average 5.35 4.09 2.59 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "elasticsearch",
+      "engine": "Elasticsearch 9.5.3 (dense_vector)",
+      "index": "HNSW float32, no quantization, m=16, ef_construction=128, cosine; search k=top, num_candidates=100; 1 shard, 0 replicas",
+      "hosting": "compose",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 1.0335482,
+        "rowsPerSecond": 506.991352701306,
+        "countMatchSeconds": 0.0964483
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 11.76,
+        "p95Ms": 15.291699999999997,
+        "p99Ms": 17.17276199999999,
+        "qps": {
+          "1": 159.89006842839956,
+          "8": 2544.2182598797986
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 20,
+        "exactP50Ms": 4.4116,
+        "exactP95Ms": 8.323760000000028,
+        "exactRecall": 1
+      },
+      "ram": {
+        "bytes": 2792802484,
+        "text": "2.6 GiB (docker stats)"
+      },
+      "disk": {
+        "bytes": 9913134,
+        "text": "9.45 MiB added by this load (9.58 MiB (whole engine data folder), 129.42 KiB before)"
+      },
+      "notes": [
+        "Started by run-all for this measurement and stopped afterwards.",
+        "Load average 3.56 3.81 2.60 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "opensearch",
+      "engine": "OpenSearch 3.9.0 (k-NN plugin, faiss)",
+      "index": "faiss HNSW float32, no compression, m=16, ef_construction=128, cosinesimil; search k=top, ef_search=100; 1 shard, 0 replicas",
+      "hosting": "compose",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.9507877,
+        "rowsPerSecond": 551.1219802275524,
+        "countMatchSeconds": 0.1727471
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 10.6206,
+        "p95Ms": 14.096659999999995,
+        "p99Ms": 15.248185999999986,
+        "qps": {
+          "1": 144.7844624554116,
+          "8": 1966.6056581311475
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 20,
+        "exactP50Ms": 4.29235,
+        "exactP95Ms": 11.70600000000001,
+        "exactRecall": 1
+      },
+      "ram": {
+        "bytes": 2783138807,
+        "text": "2.59 GiB (docker stats)"
+      },
+      "disk": {
+        "bytes": 16846229,
+        "text": "16.07 MiB added by this load (16.79 MiB (whole engine data folder), 738.32 KiB before)"
+      },
+      "notes": [
+        "Started by run-all for this measurement and stopped afterwards.",
+        "Load average 4.87 4.14 2.80 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "typesense",
+      "engine": "Typesense 30.2 (vector search)",
+      "index": "HNSW float32 (hnswlib), m=16, ef_construction=128, cosine; search k=top, ef=100; exact mode = filter ordinal:\u003E=0 with flat_search_cutoff; index held in memory",
+      "hosting": "compose",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.6860302,
+        "rowsPerSecond": 763.8147708366191,
+        "countMatchSeconds": 0.0038191
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 11.88675,
+        "p95Ms": 12.906915,
+        "p99Ms": 13.253208999999993,
+        "qps": {
+          "1": 106.14995613393044,
+          "8": 944.0409834753639
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 20,
+        "exactP50Ms": 12.496749999999999,
+        "exactP95Ms": 16.591244999999997,
+        "exactRecall": 1
+      },
+      "ram": {
+        "bytes": 125514547,
+        "text": "119.7 MiB (docker stats)"
+      },
+      "disk": {
+        "bytes": 422087416,
+        "text": "402.53 MiB (whole engine data folder)"
+      },
+      "notes": [
+        "Started by run-all for this measurement and stopped afterwards.",
+        "Load average 5.43 4.46 3.00 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "vespa",
+      "engine": "Vespa 8.754.14 (tensor attribute \u002B HNSW)",
+      "index": "HNSW float32 tensor, prenormalized-angular (cosine), max-links-per-node=16, neighbors-to-explore-at-insert=128; search targetHits=top, ef=100 via exploreAdditionalHits; exact mode = approximate:false; vectors held in memory",
+      "hosting": "compose",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 1.0617682,
+        "rowsPerSecond": 493.516381447476,
+        "countMatchSeconds": 0.0101527
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 6.410299999999999,
+        "p95Ms": 9.58011,
+        "p99Ms": 14.073055999999863,
+        "qps": {
+          "1": 201.44118521715217,
+          "8": 1563.7614872791528
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 20,
+        "exactP50Ms": 1.9523,
+        "exactP95Ms": 2.7105600000000005,
+        "exactRecall": 1
+      },
+      "ram": {
+        "bytes": 3058016714,
+        "text": "2.85 GiB (docker stats)"
+      },
+      "disk": {
+        "bytes": 5779179,
+        "text": "5.51 MiB added by this load (1.3 GiB (whole engine data folder), 1.3 GiB before)"
+      },
+      "notes": [
+        "Started by run-all for this measurement and stopped afterwards.",
+        "Load average 5.74 4.74 3.23 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "duckdb",
+      "engine": "DuckDB 1.5.6 \u002B vss b833341 (HNSW, embedded, in process)",
+      "index": "HNSW (vss extension) FLOAT[n] metric=cosine m=16 ef_construction=128, ef_search=100 per connection, persistent (hnsw_enable_experimental_persistence=true, checkpoint_threshold=256MB); exact mode = array_cosine_similarity sequential scan; score = 1 - cosine distance",
+      "hosting": "embedded",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.3533064,
+        "rowsPerSecond": 1483.1319217540356,
+        "countMatchSeconds": 0.0037555
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 4.0506,
+        "p95Ms": 5.390834999999999,
+        "p99Ms": 6.492113999999997,
+        "qps": {
+          "1": 255.1369637768358,
+          "8": 171.20252564193189
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 20,
+        "exactP50Ms": 4.47495,
+        "exactP95Ms": 7.444695,
+        "exactRecall": 1
+      },
+      "ram": {
+        "text": "in this process, not measured"
+      },
+      "disk": {
+        "bytes": 3040286,
+        "text": "2.9 MiB added by this load (2.9 MiB (engine data folder), 0 B before)"
+      },
+      "notes": [
+        "Load average 7.57 5.42 3.55 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "sqlitevec",
+      "engine": "SQLite 3.53.3 \u002B sqlite-vec 0.1.7-alpha.2.1 (vec0, embedded, in process)",
+      "index": "vec0 brute-force scan, no ANN index (exact), float32, cosine distance, default chunk_size=1024; score = 1 - cosine distance",
+      "hosting": "embedded",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.192755,
+        "rowsPerSecond": 2718.4768229099113,
+        "countMatchSeconds": 0.0062024
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 2.0683499999999997,
+        "p95Ms": 2.348775,
+        "p99Ms": 2.5512109999999986,
+        "qps": {
+          "1": 526.5955371028231,
+          "8": 457.7958930551818
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 20,
+        "exactP50Ms": 1.80165,
+        "exactP95Ms": 1.8923900000000005,
+        "exactRecall": 1
+      },
+      "ram": {
+        "text": "in this process, not measured"
+      },
+      "disk": {
+        "bytes": 10196088,
+        "text": "9.72 MiB added by this load (9.72 MiB (engine data folder), 0 B before)"
+      },
+      "notes": [
+        "Load average 5.31 5.10 3.52 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    }
+  ]
+}

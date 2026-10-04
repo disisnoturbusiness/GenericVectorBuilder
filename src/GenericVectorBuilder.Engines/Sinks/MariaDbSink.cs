@@ -1,0 +1,440 @@
+using System.Globalization;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using GenericVectorBuilder.Core.Contracts;
+using GenericVectorBuilder.Engines.Common;
+using MySqlConnector;
+
+namespace GenericVectorBuilder.Engines.Sinks;
+
+/// <summary>
+/// Writes vectors to MariaDB 11.8 over the MySQL protocol (MySqlConnector): one InnoDB table per
+/// pipeline named gvb.gvb_{pipeline}, keyed by chunk id (BINARY(16)), with the payload
+/// in plain columns (doc_key, table, origin, ordinal, text, meta as a JSON object, written without
+/// the HTML-safe escaping so a quote or accent stays readable in a SQL client) and the vector
+/// in a VECTOR(n) column that holds raw float32 values.
+/// Default search: a VECTOR INDEX (MariaDB's HNSW variant, DISTANCE=cosine, M 16) queried with
+/// ORDER BY VEC_DISTANCE_COSINE(embedding, query) LIMIT n, with the beam width
+/// (mhnsw_ef_search) taken from <see cref="MariaDbSinkOptions.HnswEfSearch"/>.
+/// Why the key is BINARY(16) and not MariaDB's UUID type: UUID rejects any value whose version
+/// and variant bits are not valid ("Incorrect uuid value"), and chunk ids are derived from hashes,
+/// so many are not valid UUIDs.
+/// Why there is no ef_construction here: MariaDB exposes only M and DISTANCE when the index is
+/// created. The build-time candidate list is fixed inside the server (SHOW VARIABLES LIKE
+/// 'mhnsw%' lists default distance, default M, ef_search and the cache size, nothing else), so
+/// the "M 16, ef_construction 128" recipe the other engines use can only be matched on M.
+/// Measured 2026-10-03: running the INSERTs with mhnsw_ef_search set to 128 or 512 (20,000
+/// clustered vectors of 1024 dimensions) loaded in 129 s each against 131 s with the default,
+/// and recall stayed within build-to-build noise, so the search setting does not reach the build.
+/// Why mhnsw_ef_search is 3200: MariaDB defaults it to 20. Measured 2026-10-03 on this box (shared
+/// with other benchmark containers, so milliseconds are rough), 100,000 vectors of 1024 dimensions,
+/// M 16, 20 queries, recall@10 against an in-memory brute force. Clustered means 500 centres, each
+/// point its centre plus noise (0.7 of a random unit vector), normalized; neighbours inside a
+/// cluster are close to ties, so this is a hard set. Uniform random is the worst case:
+///   mhnsw_ef_search   clustered recall / ms p50   uniform random recall / ms p50
+///   20                0.48 / 2.1                  0.02 / 2.7
+///   100               0.52 / 1.4                  0.09 / 4.7
+///   200               0.61 / 1.5                  0.16 / 14
+///   400               0.61 / 3.5                  0.26 / 11
+///   800               0.69 / 4.7                  0.39 / 30
+///   1600              0.78 / 11                   0.60 / 39
+///   3200              0.83 / 16                   0.81 / 62
+///   6400              0.84 / 21                   0.85 / 59
+/// Latency rises slowly and recall keeps climbing to about 3200, then flattens (10000, the
+/// server's maximum, gave 0.87 and 0.90 at 40 to 70 ms). The exact scan took about 400 ms on both.
+/// The contract and scale tests use uniform random vectors, so their recall is a floor.
+/// Load speed: 100,000 vectors of 1024 dimensions took 486 s (about 200 rows per second, one core)
+/// because every row also updates the graph. Two tables loaded at the same time took 577 s and
+/// 785 s each (the box was also busy with other containers), so loading tables in parallel
+/// raises the total rate but not the rate of any one table.
+/// Why mhnsw_ef_search is set per statement (SET STATEMENT ... FOR SELECT): it is a session
+/// variable, and pooled connections are reset between uses, so a plain SET would silently
+/// revert. SET STATEMENT also leaves the server's own setting alone.
+/// Exact search: the same query with IGNORE INDEX on the vector index, so the optimizer reads
+/// every row, computes every distance and sorts (EXPLAIN shows type ALL with filesort).
+/// Why the vector goes over the wire as raw bytes: a VECTOR column stores little-endian float32,
+/// so the bytes of the float array are the value. Text through VEC_FromText would format and
+/// then parse every dimension.
+/// Why upserts use INSERT ... ON DUPLICATE KEY UPDATE: it is one statement, needs no existence
+/// check, and a re-sent batch overwrites rather than duplicates. Rows are written in batches of
+/// <see cref="MariaDbSinkOptions.UpsertBatch"/>.
+/// Why the server needs a big mhnsw_max_cache_size (4G in the compose file): the graph is read
+/// into a cache, and the 16M default holds only a few thousand 1024-dimension vectors, so a
+/// larger index is re-read from disk on every query.
+/// </summary>
+public sealed class MariaDbSink : ISink, IExactSearchSink, IEngineDescription, IDisposable
+{
+   #region Data Members
+
+   private const int DELETE_BATCH = 1000;
+   private const int MAX_ATTEMPTS = 3;
+   private const string INDEX_NAME = "vec_idx";
+   private static readonly JsonSerializerOptions META_JSON = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+   private static readonly Regex DIMENSION_PATTERN = new( @"^vector\((\d+)\)$", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase );
+
+   private readonly MariaDbSinkOptions _options;
+   private readonly MySqlDataSource _dataSource;
+   private bool _databaseReady;
+
+   #endregion Data Members
+
+   #region Constructor
+
+   /// <summary>
+   /// Creates a sink for the local MariaDB container with the password from the secrets file.
+   /// Opens no connection, so the engine catalog can create it just to read its name.
+   /// </summary>
+   public MariaDbSink() : this( MariaDbSinkOptions.LocalDefaults() )
+   {
+   }
+
+   /// <summary>
+   /// Creates a sink with explicit settings.
+   /// </summary>
+   /// <param name="options">Connection and index settings.</param>
+   public MariaDbSink( MariaDbSinkOptions options )
+   {
+      _options = options;
+      var builder = new MySqlConnectionStringBuilder
+      {
+         Server = options.Host,
+         Port = (uint)options.Port,
+         UserID = options.User,
+         Password = options.Password ?? string.Empty,
+         SslMode = MySqlSslMode.None,
+         ConnectionTimeout = 15,
+         DefaultCommandTimeout = 3600,
+         MaximumPoolSize = 20,
+         GuidFormat = MySqlGuidFormat.None
+      };
+      _dataSource = new MySqlDataSourceBuilder( builder.ConnectionString ).Build();
+   }
+
+   #endregion Constructor
+
+   #region Public Methods
+
+   /// <inheritdoc />
+   public string Name => "mariadb";
+
+   /// <inheritdoc />
+   public string Engine => "MariaDB 11.8.9 (InnoDB + VECTOR INDEX)";
+
+   /// <inheritdoc />
+   public string IndexDescription =>
+      $"VECTOR INDEX (HNSW variant) DISTANCE=cosine, M={_options.HnswM} (no ef_construction setting exists), mhnsw_ef_search={_options.HnswEfSearch}, "
+      + "mhnsw_max_cache_size 4G; exact mode = IGNORE INDEX full scan";
+
+   /// <inheritdoc />
+   public string ComposeFile => "mariadb.compose.yaml";
+
+   /// <inheritdoc />
+   public async Task<bool> EnsureCollectionAsync( string collection, int dimension, CancellationToken ct )
+   {
+      await EnsureDatabaseAsync( ct );
+      object? type = await ScalarAsync(
+         "SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = @tbl AND COLUMN_NAME = 'embedding'",
+         ct, ( "@db", _options.Database ), ( "@tbl", TableName( collection ) ) );
+      if( type is string definition )
+      {
+         Match match = DIMENSION_PATTERN.Match( definition );
+         int existing = match.Success ? int.Parse( match.Groups[1].Value, CultureInfo.InvariantCulture ) : 0;
+         if( existing != dimension )
+         {
+            throw new InvalidOperationException( $"MariaDB table {TableName( collection )} holds {existing}-dim vectors but the embedder produces {dimension}. Reset the pipeline or use a new name." );
+         }
+
+         return false;
+      }
+
+      await ExecuteAsync( CreateTableSql( collection, dimension ), ct );
+      return true;
+   }
+
+   /// <inheritdoc />
+   public async Task UpsertAsync( string collection, IReadOnlyList<VectorRecord> records, CancellationToken ct )
+   {
+      string table = Table( collection );
+      IEnumerable<VectorRecord> latest = records.Reverse().DistinctBy( r => r.Chunk.ChunkId ).Reverse();
+      foreach( VectorRecord[] batch in latest.Chunk( _options.UpsertBatch ) )
+      {
+         await WithRetryAsync( () => WriteBatchAsync( table, batch, ct ), ct );
+      }
+   }
+
+   /// <inheritdoc />
+   public async Task DeleteAsync( string collection, IReadOnlyList<Guid> chunkIds, CancellationToken ct )
+   {
+      string table = Table( collection );
+      foreach( Guid[] batch in chunkIds.Chunk( DELETE_BATCH ) )
+      {
+         string ids = string.Join( ",", batch.Select( id => $"X'{Convert.ToHexString( IdBytes( id ) )}'" ) );
+         await WithRetryAsync( () => ExecuteAsync( $"DELETE FROM {table} WHERE chunk_id IN ({ids})", ct ), ct );
+      }
+   }
+
+   /// <inheritdoc />
+   public async Task<long> CountAsync( string collection, CancellationToken ct )
+   {
+      object? count = await ScalarAsync( $"SELECT COUNT(*) FROM {Table( collection )}", ct );
+      return Convert.ToInt64( count, CultureInfo.InvariantCulture );
+   }
+
+   /// <inheritdoc />
+   public Task<IReadOnlyList<SearchHit>> SearchAsync( string collection, float[] vector, int top, CancellationToken ct )
+   {
+      string select = SearchSql( collection, top, string.Empty );
+      return RunSearchAsync( $"SET STATEMENT mhnsw_ef_search = {_options.HnswEfSearch} FOR {select}", vector, ct );
+   }
+
+   /// <inheritdoc />
+   public Task<IReadOnlyList<SearchHit>> SearchExactAsync( string collection, float[] vector, int top, CancellationToken ct )
+   {
+      return RunSearchAsync( SearchSql( collection, top, $"IGNORE INDEX ( {INDEX_NAME} )" ), vector, ct );
+   }
+
+   /// <inheritdoc />
+   public Task DropCollectionAsync( string collection, CancellationToken ct )
+   {
+      return ExecuteAsync( $"DROP TABLE IF EXISTS {Table( collection )}", ct );
+   }
+
+   #endregion Public Methods
+
+   #region Private Methods
+
+   /// <summary>
+   /// Builds the nearest-neighbour SELECT. The ORDER BY repeats the distance expression instead
+   /// of using the select alias because the optimizer only picks the vector index when it sees
+   /// the function itself, with a LIMIT.
+   /// </summary>
+   /// <param name="collection">Collection name.</param>
+   /// <param name="top">Hits wanted.</param>
+   /// <param name="hint">Index hint placed after the table name, or empty.</param>
+   /// <returns>The statement, with the query vector as parameter @q.</returns>
+   private string SearchSql( string collection, int top, string hint )
+   {
+      return "SELECT chunk_id, doc_key, `table`, `text`, VEC_DISTANCE_COSINE( embedding, @q ) AS dist "
+         + $"FROM {Table( collection )} {hint} ORDER BY VEC_DISTANCE_COSINE( embedding, @q ) LIMIT {top}";
+   }
+
+   /// <summary>
+   /// Runs one nearest-neighbour statement and converts the rows to hits.
+   /// </summary>
+   /// <param name="sql">The statement from <see cref="SearchSql"/>, possibly wrapped in SET STATEMENT.</param>
+   /// <param name="vector">Query vector.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>Hits, best first, with cosine similarity.</returns>
+   private async Task<IReadOnlyList<SearchHit>> RunSearchAsync( string sql, float[] vector, CancellationToken ct )
+   {
+      await using MySqlConnection connection = await _dataSource.OpenConnectionAsync( ct );
+      await using MySqlCommand command = new( sql, connection );
+      command.Parameters.AddWithValue( "@q", ToBytes( vector ) );
+      await using MySqlDataReader reader = await command.ExecuteReaderAsync( ct );
+      var hits = new List<SearchHit>();
+      while( await reader.ReadAsync( ct ) )
+      {
+         var chunkId = new Guid( (byte[])reader.GetValue( 0 ), bigEndian: true );
+         hits.Add( new SearchHit( chunkId, reader.GetString( 1 ), reader.GetString( 2 ), reader.GetString( 3 ), 1.0 - reader.GetDouble( 4 ) ) );
+      }
+
+      return hits;
+   }
+
+   /// <summary>
+   /// Writes one batch as a single multi-row INSERT that overwrites rows with the same chunk id.
+   /// </summary>
+   /// <param name="table">Quoted table name.</param>
+   /// <param name="batch">Records to write.</param>
+   /// <param name="ct">Cancellation.</param>
+   private async Task WriteBatchAsync( string table, VectorRecord[] batch, CancellationToken ct )
+   {
+      var sql = new StringBuilder( 256 + batch.Length * 80 );
+      sql.Append( $"INSERT INTO {table} ( chunk_id, doc_key, `table`, origin, ordinal, `text`, meta, embedding ) VALUES " );
+      await using MySqlConnection connection = await _dataSource.OpenConnectionAsync( ct );
+      await using MySqlCommand command = connection.CreateCommand();
+      for( int i = 0; i < batch.Length; i++ )
+      {
+         VectorRecord r = batch[i];
+         sql.Append( i == 0 ? string.Empty : "," ).Append( $"( @c{i}, @d{i}, @t{i}, @o{i}, @n{i}, @x{i}, @m{i}, @v{i} )" );
+         command.Parameters.AddWithValue( $"@c{i}", IdBytes( r.Chunk.ChunkId ) );
+         command.Parameters.AddWithValue( $"@d{i}", r.Document.DocKey );
+         command.Parameters.AddWithValue( $"@t{i}", r.Document.Table );
+         command.Parameters.AddWithValue( $"@o{i}", r.Document.Origin );
+         command.Parameters.AddWithValue( $"@n{i}", r.Chunk.Ordinal );
+         command.Parameters.AddWithValue( $"@x{i}", r.Chunk.Text );
+         command.Parameters.AddWithValue( $"@m{i}", JsonSerializer.Serialize( r.Document.Metadata, META_JSON ) );
+         command.Parameters.AddWithValue( $"@v{i}", ToBytes( r.Vector ) );
+      }
+
+      sql.Append( " ON DUPLICATE KEY UPDATE doc_key = VALUES( doc_key ), `table` = VALUES( `table` ), origin = VALUES( origin ), "
+         + "ordinal = VALUES( ordinal ), `text` = VALUES( `text` ), meta = VALUES( meta ), embedding = VALUES( embedding )" );
+      command.CommandText = sql.ToString();
+      await command.ExecuteNonQueryAsync( ct );
+   }
+
+   /// <summary>
+   /// Builds the CREATE TABLE statement for a pipeline.
+   /// </summary>
+   /// <param name="collection">Collection name.</param>
+   /// <param name="dimension">Vector length.</param>
+   /// <returns>The statement.</returns>
+   private string CreateTableSql( string collection, int dimension )
+   {
+      return $@"CREATE TABLE {Table( collection )} (
+   chunk_id BINARY(16) NOT NULL PRIMARY KEY,
+   doc_key VARCHAR(512) NOT NULL,
+   `table` VARCHAR(255) NOT NULL,
+   origin TEXT NOT NULL,
+   ordinal INT NOT NULL,
+   `text` LONGTEXT NOT NULL,
+   meta JSON NOT NULL,
+   embedding VECTOR({dimension}) NOT NULL,
+   VECTOR INDEX {INDEX_NAME} ( embedding ) M={_options.HnswM} DISTANCE=cosine
+) ENGINE=InnoDB";
+   }
+
+   /// <summary>
+   /// Creates the database on first use.
+   /// </summary>
+   /// <param name="ct">Cancellation.</param>
+   private async Task EnsureDatabaseAsync( CancellationToken ct )
+   {
+      if( !_databaseReady )
+      {
+         await ExecuteAsync( $"CREATE DATABASE IF NOT EXISTS {Quote( _options.Database )}", ct );
+         _databaseReady = true;
+      }
+   }
+
+   /// <summary>
+   /// Runs a statement that returns nothing.
+   /// </summary>
+   /// <param name="sql">Statement.</param>
+   /// <param name="ct">Cancellation.</param>
+   private async Task ExecuteAsync( string sql, CancellationToken ct )
+   {
+      await using MySqlConnection connection = await _dataSource.OpenConnectionAsync( ct );
+      await using MySqlCommand command = new( sql, connection );
+      await command.ExecuteNonQueryAsync( ct );
+   }
+
+   /// <summary>
+   /// Runs a statement and returns the first column of its first row.
+   /// </summary>
+   /// <param name="sql">Statement.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <param name="parameters">Named parameters.</param>
+   /// <returns>The value, or null when no row came back.</returns>
+   private async Task<object?> ScalarAsync( string sql, CancellationToken ct, params (string Name, object Value)[] parameters )
+   {
+      await using MySqlConnection connection = await _dataSource.OpenConnectionAsync( ct );
+      await using MySqlCommand command = new( sql, connection );
+      foreach( ( string name, object value ) in parameters )
+      {
+         command.Parameters.AddWithValue( name, value );
+      }
+
+      return await command.ExecuteScalarAsync( ct );
+   }
+
+   /// <summary>
+   /// Retries a call on lost connections, timeouts and deadlocks with a short backoff.
+   /// </summary>
+   /// <param name="call">The call. Must be safe to repeat.</param>
+   /// <param name="ct">Cancellation.</param>
+   private static async Task WithRetryAsync( Func<Task> call, CancellationToken ct )
+   {
+      for( int attempt = 1; ; attempt++ )
+      {
+         try
+         {
+            await call();
+            return;
+         }
+         catch( Exception ex ) when( attempt < MAX_ATTEMPTS && IsTransient( ex ) && !ct.IsCancellationRequested )
+         {
+            await Task.Delay( TimeSpan.FromSeconds( attempt * 2 ), ct );
+         }
+      }
+   }
+
+   /// <summary>
+   /// True for failures that a repeat can cure: a dropped connection, a timeout or a deadlock.
+   /// </summary>
+   /// <param name="ex">The failure.</param>
+   /// <returns>Whether to retry.</returns>
+   private static bool IsTransient( Exception ex )
+   {
+      return ex is MySqlException { IsTransient: true } or MySqlException { ErrorCode: MySqlErrorCode.LockDeadlock or MySqlErrorCode.LockWaitTimeout }
+         or TimeoutException;
+   }
+
+   /// <summary>
+   /// A chunk id as the 16 bytes stored in the BINARY(16) key, in the standard (big-endian) order
+   /// so the hex shown in a SQL client reads like the usual GUID text.
+   /// </summary>
+   /// <param name="id">The chunk id.</param>
+   /// <returns>16 bytes.</returns>
+   private static byte[] IdBytes( Guid id )
+   {
+      return id.ToByteArray( bigEndian: true );
+   }
+
+   /// <summary>
+   /// The bytes of a vector as MariaDB stores it: little-endian float32, no header.
+   /// </summary>
+   /// <param name="vector">The vector.</param>
+   /// <returns>A new byte array.</returns>
+   private static byte[] ToBytes( float[] vector )
+   {
+      return MemoryMarshal.AsBytes( vector.AsSpan() ).ToArray();
+   }
+
+   /// <summary>
+   /// Backtick-quotes an identifier, doubling any backtick in it.
+   /// </summary>
+   /// <param name="identifier">The identifier.</param>
+   /// <returns>The quoted identifier.</returns>
+   private static string Quote( string identifier )
+   {
+      return "`" + identifier.Replace( "`", "``" ) + "`";
+   }
+
+   /// <summary>
+   /// Fully qualified, quoted table name for a pipeline.
+   /// </summary>
+   /// <param name="collection">Pipeline collection name.</param>
+   /// <returns>database.table, quoted.</returns>
+   private string Table( string collection )
+   {
+      return $"{Quote( _options.Database )}.{Quote( TableName( collection ) )}";
+   }
+
+   /// <summary>
+   /// Table name for a pipeline. Pipeline names are already sanitized to [a-z0-9_].
+   /// </summary>
+   /// <param name="collection">Pipeline collection name.</param>
+   /// <returns>The table name.</returns>
+   private static string TableName( string collection )
+   {
+      return $"gvb_{collection}";
+   }
+
+   #endregion Private Methods
+
+   #region IDisposable
+
+   /// <summary>
+   /// Closes the connection pool.
+   /// </summary>
+   public void Dispose()
+   {
+      _dataSource.Dispose();
+   }
+
+   #endregion IDisposable
+}

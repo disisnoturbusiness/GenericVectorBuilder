@@ -1,0 +1,26 @@
+# Chroma (single node, local persistence). REST API v2 on 127.0.0.1:8000.
+# No password: Chroma has no auth in this setup and the port is bound to loopback only.
+# Start:  sudo docker compose -f deploy/engines/chroma.compose.yaml up -d
+# Stop:   sudo docker compose -f deploy/engines/chroma.compose.yaml down   (data is kept)
+name: gvb-chroma
+
+services:
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: gvb-chroma
+    restart: "no"
+    environment:
+      ANONYMIZED_TELEMETRY: "False"
+      IS_PERSISTENT: "1"
+      PERSIST_DIRECTORY: /data
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - /home/dan/gvb-data/engines/chroma:/data
+    mem_limit: 6g
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8000 && printf \"GET /api/v2/heartbeat HTTP/1.0\\r\\n\\r\\n\" >&3 && grep -q nanosecond <&3'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s

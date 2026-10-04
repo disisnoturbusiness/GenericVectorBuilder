@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/GenericVectorBuilder.Bench/GenericVectorBuilder.Bench.csproj" />
+    <Project Path="src/GenericVectorBuilder.Code/GenericVectorBuilder.Code.csproj" />
+    <Project Path="src/GenericVectorBuilder.Core/GenericVectorBuilder.Core.csproj" />
+    <Project Path="src/GenericVectorBuilder.Engines/GenericVectorBuilder.Engines.csproj" />
+    <Project Path="src/GenericVectorBuilder.Web/GenericVectorBuilder.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/GenericVectorBuilder.Engines.Tests/GenericVectorBuilder.Engines.Tests.csproj" />
+    <Project Path="tests/GenericVectorBuilder.Tests/GenericVectorBuilder.Tests.csproj" />
+  </Folder>
+</Solution>

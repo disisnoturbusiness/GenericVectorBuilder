@@ -1,0 +1,40 @@
+# PostgreSQL 17 with the pgvector 0.8.7 extension. Port 5432 on 127.0.0.1 only.
+# The password for the postgres user comes from secrets.env (POSTGRES_PASSWORD) through env_file.
+# The database "gvb" is created on first start; the sink creates the extension and one table
+# per pipeline itself. Data lives in /home/dan/gvb-data/engines/pgvector (owned by the image's
+# postgres user, uid 999, so use sudo to look inside).
+# Memory: shared_buffers 2GB holds the 100,000-vector benchmark set (about 400 MB of vectors
+# plus the HNSW graph) in the database's own cache; the container limit is 8g. shm_size is
+# raised because Postgres uses /dev/shm for parallel query and parallel index builds, and
+# Docker's default of 64 MB is too small for them.
+# Own project name so this file never sees (or removes) the other engines' containers.
+name: gvb-pgvector
+services:
+  pgvector:
+    image: pgvector/pgvector:0.8.7-pg17-trixie
+    container_name: gvb-pgvector
+    env_file:
+      - /home/dan/gvb-data/engines/secrets.env
+    environment:
+      POSTGRES_DB: gvb
+    command:
+      - postgres
+      - -c
+      - shared_buffers=2GB
+      - -c
+      - maintenance_work_mem=1GB
+      - -c
+      - max_wal_size=4GB
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - /home/dan/gvb-data/engines/pgvector:/var/lib/postgresql/data
+    shm_size: 1g
+    mem_limit: 8g
+    stop_grace_period: 60s
+    restart: "no"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d gvb"]
+      interval: 5s
+      timeout: 3s
+      retries: 20

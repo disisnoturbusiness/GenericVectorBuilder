@@ -1,0 +1,30 @@
+# Redis 8 with the built-in query engine (FT.* commands). Port 6379 on 127.0.0.1 only.
+# The password comes from secrets.env (REDIS_PASSWORD) through env_file; the shell entrypoint
+# expands it from the container environment so it never appears in this file. The entrypoint
+# must still go through the image's docker-entrypoint.sh: that script is what loads the query
+# engine, JSON, bloom and time series modules (a bare redis-server has only vector sets).
+# Saves a snapshot every 5 minutes if anything changed, and on a clean stop.
+# Own project name so this file never sees (or removes) the other engines' containers.
+name: gvb-redis
+services:
+  redis:
+    image: redis:8.10.2
+    container_name: gvb-redis
+    env_file:
+      - /home/dan/gvb-data/engines/secrets.env
+    entrypoint:
+      - sh
+      - -c
+      - exec /usr/local/bin/docker-entrypoint.sh redis-server --requirepass "$$REDIS_PASSWORD" --save "300 1" --appendonly no --dir /data
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - /home/dan/gvb-data/engines/redis:/data
+    mem_limit: 12g
+    stop_grace_period: 120s
+    restart: "no"
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20

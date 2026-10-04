@@ -1,0 +1,38 @@
+# MariaDB 11.8 with its built-in VECTOR type and VECTOR INDEX (a modified HNSW, "mhnsw").
+# Port 3306 on 127.0.0.1 only. The root password comes from secrets.env (MARIADB_ROOT_PASSWORD)
+# through env_file; it is applied only when the data directory is first created, so changing
+# it later means wiping /home/dan/gvb-data/engines/mariadb.
+# The image starts as root and gives the data dir to its mysql user (uid 999) itself.
+# Server settings, and why:
+#   innodb-buffer-pool-size 2G       table pages for the vector rows; the default 128M is far too small.
+#   mhnsw-max-cache-size 4G          memory for the loaded HNSW graph. The default is 16M, which at
+#                                    1024 dimensions holds about 4,000 vectors, so a bigger index is
+#                                    re-read from disk on every query.
+#   innodb-flush-log-at-trx-commit 2 flush the log once a second instead of at every commit; a crash can
+#                                    lose the last second, which a rebuildable benchmark index can afford.
+#   max-allowed-packet 64M           room for large batched INSERTs of 1024-dimension vectors.
+# Own project name so this file never sees (or removes) the other engines' containers.
+name: gvb-mariadb
+services:
+  mariadb:
+    image: mariadb:11.8.9
+    container_name: gvb-mariadb
+    env_file:
+      - /home/dan/gvb-data/engines/secrets.env
+    command:
+      - --innodb-buffer-pool-size=2G
+      - --mhnsw-max-cache-size=4G
+      - --innodb-flush-log-at-trx-commit=2
+      - --max-allowed-packet=64M
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - /home/dan/gvb-data/engines/mariadb:/var/lib/mysql
+    mem_limit: 8g
+    stop_grace_period: 60s
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30

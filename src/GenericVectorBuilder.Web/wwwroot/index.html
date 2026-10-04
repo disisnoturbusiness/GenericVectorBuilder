@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GenericVectorBuilder</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>GenericVectorBuilder</h1>
+    <div id="health" class="health" aria-live="polite">checking services...</div>
+  </header>
+
+  <main>
+    <p id="page-error" class="errors" role="alert"></p>
+
+    <section class="card" id="step-source">
+      <h2><span class="num">1</span> Your data</h2>
+      <div class="mode-switch" role="group" aria-label="Where your data is">
+        <button type="button" id="mode-folder" class="btn seg active" aria-pressed="true">Folder</button>
+        <button type="button" id="mode-odbc" class="btn seg" aria-pressed="false">Database (ODBC)</button>
+        <button type="button" id="mode-git" class="btn seg" aria-pressed="false">Git repo</button>
+      </div>
+
+      <div id="source-folder">
+        <div id="drop" class="drop">
+          <p class="drop-big">Drop a folder here</p>
+          <p class="muted">CSV, pipe, tab, Excel. Sub-folders are fine.</p>
+          <button type="button" id="choose-folder" class="btn">Or choose a folder</button>
+          <input type="file" id="folder-input" webkitdirectory multiple hidden>
+        </div>
+        <div class="row">
+          <label for="server-path" class="muted">Or a folder already on this server:</label>
+          <input id="server-path" type="text" list="roots" placeholder="/home/dan/share/...">
+          <datalist id="roots"></datalist>
+          <button id="scan-server" class="btn">Scan</button>
+        </div>
+        <p id="upload-status" class="muted" role="status" aria-live="polite"></p>
+      </div>
+
+      <div id="source-odbc" class="hidden">
+        <div class="grid">
+          <label>Connection <select id="odbc-connection"></select></label>
+          <label id="odbc-string-box" class="wide hidden">Connection string
+            <input id="odbc-string" type="text" autocomplete="off" spellcheck="false" placeholder="Driver={ODBC Driver 18 for SQL Server};Server=localhost;Database=Sales">
+          </label>
+        </div>
+        <div id="odbc-login" class="grid hidden">
+          <label>User <input id="odbc-user" type="text" autocomplete="off" spellcheck="false"></label>
+          <label>Password <input id="odbc-password" type="password" autocomplete="new-password"></label>
+        </div>
+        <p id="odbc-login-note" class="muted hidden"></p>
+        <button type="button" id="odbc-connect" class="btn">Connect</button>
+        <p id="odbc-status" class="muted" role="status" aria-live="polite"></p>
+
+        <div id="odbc-picker" class="hidden">
+          <div class="pick-tools">
+            <label class="pick-filter">Filter <input id="odbc-filter" type="text" autocomplete="off" placeholder="part of a table name"></label>
+            <button type="button" id="odbc-select-tables" class="btn btn-quiet">Select all tables</button>
+            <button type="button" id="odbc-select-views" class="btn btn-quiet">Select all views</button>
+            <button type="button" id="odbc-clear" class="btn btn-quiet">Clear</button>
+          </div>
+          <p id="odbc-picked" class="muted" aria-live="polite"></p>
+          <div id="odbc-list" class="pick-list"></div>
+        </div>
+      </div>
+
+      <div id="source-git" class="hidden">
+        <div class="grid">
+          <label class="wide">Repository address
+            <input id="git-url" type="text" autocomplete="off" spellcheck="false" placeholder="https://github.com/dotnet-architecture/eShopOnWeb" aria-describedby="git-url-note">
+          </label>
+          <label>Branch <input id="git-branch" type="text" autocomplete="off" spellcheck="false" placeholder="default branch"></label>
+          <label>File types <input id="git-extensions" type="text" autocomplete="off" spellcheck="false" value=".cs"></label>
+        </div>
+        <p id="git-url-note" class="muted">Leave the address empty to use the one shown in grey. Fetch copies the latest commit to this server and counts what Go would read.</p>
+        <button type="button" id="git-fetch" class="btn">Fetch</button>
+        <p id="git-status" class="muted" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section class="card hidden" id="step-tables">
+      <h2><span class="num">2</span> What we found</h2>
+      <p id="scan-summary"></p>
+      <div id="tables"></div>
+      <details id="rejects-box" class="hidden">
+        <summary id="rejects-summary"></summary>
+        <ul id="rejects"></ul>
+      </details>
+    </section>
+
+    <section class="card hidden" id="step-run">
+      <h2><span class="num">3</span> Build</h2>
+      <div class="grid">
+        <label>Name <input id="pipeline" type="text" aria-describedby="name-note"></label>
+        <label>Model <select id="model"></select></label>
+      </div>
+      <fieldset class="sinks">
+        <legend>Write to</legend>
+        <div id="sinks" class="dest-list"></div>
+        <button type="button" id="check-destinations" class="btn btn-quiet">Check which are running</button>
+        <p class="muted dest-help">Engines that are not running are greyed out. Start one with its compose file in deploy/engines, then press Check.</p>
+      </fieldset>
+      <label class="check" for="allow-large-deletes">
+        <input type="checkbox" id="allow-large-deletes" aria-describedby="large-deletes-note">
+        Allow large deletes
+      </label>
+      <p id="large-deletes-note" class="muted">Off is safer: a run that would delete more than half of what this pipeline holds deletes nothing. Turn it on only if you meant to remove that much.</p>
+      <p id="model-note" class="muted"></p>
+      <p id="name-note" class="muted" aria-live="polite"></p>
+      <button id="go" class="btn btn-go">Go</button>
+      <p id="go-note" class="muted" aria-live="polite"></p>
+      <p id="go-error" class="errors" role="alert"></p>
+    </section>
+
+    <section class="card hidden" id="step-progress">
+      <h2><span class="num">4</span> Progress</h2>
+      <div class="bar"><div id="bar-fill"></div></div>
+      <p id="status-line"></p>
+      <dl id="counters" class="counters"></dl>
+      <ul id="errors" class="errors"></ul>
+      <p id="run-note" class="muted" aria-live="polite"></p>
+      <button id="cancel" class="btn btn-quiet">Cancel</button>
+      <div id="active-runs-box" class="hidden">
+        <h3>Runs waiting or running</h3>
+        <ul id="active-runs" class="runs-list"></ul>
+      </div>
+    </section>
+
+    <section class="card" id="step-search">
+      <h2><span class="num">5</span> Try a search</h2>
+      <div class="grid">
+        <label>Pipeline <select id="search-pipeline"></select></label>
+        <label class="wide">Question <input id="query" type="text" placeholder="Ask in plain English"></label>
+      </div>
+      <fieldset class="sinks">
+        <legend>Search in</legend>
+        <div id="search-sinks" class="dest-list"></div>
+        <button type="button" id="check-search-destinations" class="btn btn-quiet">Check which are running</button>
+      </fieldset>
+      <button id="search" class="btn">Search</button>
+      <div id="results" class="results"></div>
+      <div id="pipelines-box" class="hidden">
+        <h3>Your pipelines</h3>
+        <ul id="pipeline-list" class="runs-list"></ul>
+        <p id="reset-status" class="muted" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

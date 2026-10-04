@@ -1,0 +1,29 @@
+# MongoDB 8.0 with Atlas Search / Vector Search (mongod + mongot in one container).
+# Port 27017 on 127.0.0.1 only. The root password comes from secrets.env
+# (MONGODB_INITDB_ROOT_PASSWORD) through env_file. Connect with directConnection=true.
+# The image runs as uid 1000 (mongod), the same uid as the host user that owns the data dirs.
+# Own project name so this file never sees (or removes) the other engines' containers.
+name: gvb-mongodb
+services:
+  mongodb:
+    image: mongodb/mongodb-atlas-local:8.0.32
+    container_name: gvb-mongodb
+    hostname: gvbmongo
+    env_file:
+      - /home/dan/gvb-data/engines/secrets.env
+    environment:
+      MONGODB_INITDB_ROOT_USERNAME: gvb
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - /home/dan/gvb-data/engines/mongodb/db:/data/db
+      - /home/dan/gvb-data/engines/mongodb/configdb:/data/configdb
+    mem_limit: 8g
+    stop_grace_period: 60s
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/runner", "healthcheck"]
+      interval: 10s
+      timeout: 30s
+      retries: 30
+      start_period: 60s

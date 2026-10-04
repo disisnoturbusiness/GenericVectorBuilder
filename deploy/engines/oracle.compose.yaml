@@ -1,0 +1,53 @@
+# Oracle AI Database Free (gvenzl/oracle-free:23-slim-faststart; the 23ai Free line, which reports
+# itself as 23.26 / 26ai) for the vector benchmark. Listener on 127.0.0.1:1521, pluggable database
+# FREEPDB1. Passwords come from secrets.env through env_file: ORACLE_PASSWORD (SYS, SYSTEM and
+# PDBADMIN) and APP_USER / APP_USER_PASSWORD (the account the sink logs in as, created on the first
+# start of an empty data directory).
+# Two services. oracle-seed runs once and copies the database files that ship inside the image into
+# the host data directory (a bind mount hides them otherwise, and a bind mount of an empty folder
+# makes the image build a database from scratch, which takes minutes instead of seconds); it does
+# nothing when the data directory is already seeded. oracle waits for it.
+# oracle-init/ is mounted as the image's startup-script folder. Its script gives the database the
+# vector memory pool that HNSW (in-memory neighbor graph) vector indexes need: Oracle Free has no
+# vector pool by default, and HNSW creation fails with ORA-51962 until one exists.
+# Oracle Free is capped by Oracle itself at 2 CPU threads, 2 GB of RAM (SGA plus PGA) and 12 GB of
+# user data, whatever this file allows; mem_limit only has to leave room for the processes around
+# the SGA.
+# Start: sudo docker compose -f deploy/engines/oracle.compose.yaml up -d   (first start ~1-2 minutes)
+# Stop (data kept): sudo docker compose -f deploy/engines/oracle.compose.yaml down
+# Own project name so this file never sees (or removes) the other engines' containers.
+name: gvb-oracle
+services:
+  oracle-seed:
+    image: gvenzl/oracle-free:23-slim-faststart
+    container_name: gvb-oracle-seed
+    user: root
+    entrypoint:
+      - sh
+      - -c
+      - "[ -d /dest/FREE ] || cp -a /opt/oracle/oradata/. /dest/"
+    volumes:
+      - /home/dan/gvb-data/engines/oracle:/dest
+    restart: "no"
+  oracle:
+    image: gvenzl/oracle-free:23-slim-faststart
+    container_name: gvb-oracle
+    depends_on:
+      oracle-seed:
+        condition: service_completed_successfully
+    env_file:
+      - /home/dan/gvb-data/engines/secrets.env
+    ports:
+      - "127.0.0.1:1521:1521"
+    volumes:
+      - /home/dan/gvb-data/engines/oracle:/opt/oracle/oradata
+      - ./oracle-init:/container-entrypoint-startdb.d:ro
+    mem_limit: 6g
+    stop_grace_period: 120s
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "/opt/oracle/healthcheck.sh"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+      start_period: 30s

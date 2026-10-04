@@ -1,0 +1,208 @@
+{
+  "startedUtc": "2026-10-03T15:15:06Z",
+  "command": "run-all",
+  "commandLine": "/tmp/claude-1000/gvblane-bench/src/GenericVectorBuilder.Bench/bin/Debug/net10.0/GenericVectorBuilder.Bench.dll run-all --pipeline adventureworks --limit 50000 --targets sql,qdrant,qdrant-hnsw,sql-diskann --queries random:200 --repo /home/dan/ForClaude/GenericVectorBuilder",
+  "machine": {
+    "host": "linus7795",
+    "cpu": "Intel(R) Xeon(R) CPU E5-1620 v3 @ 3.50GHz",
+    "logicalCpus": 8,
+    "ramGiB": 62.7,
+    "gpu": "NVIDIA GeForce RTX 3060, 12288 MiB",
+    "os": "Ubuntu 24.04.5 LTS, kernel 6.8.0-139-generic",
+    "dotNet": ".NET 10.0.12",
+    "loadAverage": "14.58 19.60 23.60"
+  },
+  "pipeline": "adventureworks",
+  "collection": "gvbbench_adventureworks",
+  "rows": 50000,
+  "dimension": 1024,
+  "source": "Read READ-ONLY from GenericVectorBuilder.dbo.gvb_adventureworks in ChunkId order, vectors as native SqlVector\u003Cfloat\u003E, 2.2 s.",
+  "queries": "random:200 (stored vectors picked with seed 20261003; each query\u0027s own row is left out of the exact answer and removed from every engine\u0027s hits)",
+  "queryCount": 200,
+  "top": 10,
+  "concurrency": [
+    1,
+    8
+  ],
+  "secondsPerLevel": 20,
+  "truthSeconds": 1.2339391,
+  "notes": [
+    "WARNING: load average 14.58 19.60 23.60 on 8 logical CPUs when the run started. Other work was competing for the CPU, so absolute latency and QPS are worse than this box can do; compare engines only within one run, and rerun on a quiet box before quoting numbers.",
+    "Load rows/s counts only time inside each target\u0027s upsert calls: one writer, batches of 1000, rows already in memory, the collection dropped and created fresh first.",
+    "Latency is client-side wall time around each search (network and driver included), one query at a time, after 20 warm-up queries; at least 200 samples (small query sets are repeated).",
+    "QPS: N workers searching back to back for 20 s per level; completed searches divided by elapsed time.",
+    "Recall@10: share of the exact top 10 (brute force in memory) that the engine returned. A hit whose exact similarity ties the 10th best (within 1e-5) also counts, because duplicate rows embed to identical vectors.",
+    "RAM of always-on servers (SQL Server, Qdrant) is the whole process, including every other database or collection it serves; for compose engines it is docker stats of the engine\u0027s containers. Disk of compose engines is the whole engine data folder.",
+    "The empty benchmark database GvbBench was dropped at the end."
+  ],
+  "targets": [
+    {
+      "name": "sql",
+      "engine": "Microsoft SQL Server 2025 (RTM-CU9) (KB5122048) - 17.0.5005.3 (X64)",
+      "index": "exact VECTOR_DISTANCE cosine, no vector index (full scan)",
+      "hosting": "always-on",
+      "load": {
+        "rows": 50000,
+        "batch": 1000,
+        "upsertSeconds": 137.3601409,
+        "rowsPerSecond": 364.0066155465046,
+        "countMatchSeconds": 0.0213642
+      },
+      "search": {
+        "countInTarget": 50000,
+        "latencySamples": 200,
+        "p50Ms": 66.76554999999999,
+        "p95Ms": 79.904885,
+        "p99Ms": 87.49519699999998,
+        "qps": {
+          "1": 14.118282431420866,
+          "8": 11.86263017857104
+        },
+        "recall": 1,
+        "errors": 0,
+        "exactQueries": 0
+      },
+      "ram": {
+        "bytes": 4431282176,
+        "text": "4.13 GiB (whole SQL Server process)"
+      },
+      "disk": {
+        "bytes": 418004992,
+        "text": "398.64 MiB (table and its indexes, reserved pages)"
+      },
+      "notes": [
+        "WARNING: load average 8.02 15.31 21.42 (1/5/15 min) on 8 logical CPUs when searching began; the box was busy, so latency and QPS are inflated by other work.",
+        "Benchmark copy gvbbench_adventureworks dropped afterwards."
+      ]
+    },
+    {
+      "name": "qdrant",
+      "engine": "Qdrant 1.17.0 (systemd, local)",
+      "index": "exact search (the builder\u0027s setting), HNSW m=16 ef_construct=100 built but not used",
+      "hosting": "always-on",
+      "load": {
+        "rows": 50000,
+        "batch": 1000,
+        "upsertSeconds": 18.1513944,
+        "rowsPerSecond": 2754.6093097949542,
+        "countMatchSeconds": 0.0425281,
+        "indexSeconds": 7.0340484,
+        "indexNote": "status Green, 50,000 of 50,000 vectors in HNSW segments (4 segments)"
+      },
+      "search": {
+        "countInTarget": 50000,
+        "latencySamples": 200,
+        "p50Ms": 12.2446,
+        "p95Ms": 14.520425,
+        "p99Ms": 16.178955999999992,
+        "qps": {
+          "1": 88.40507033312996,
+          "8": 124.23719868707566
+        },
+        "recall": 1,
+        "errors": 0,
+        "exactQueries": 0
+      },
+      "ram": {
+        "bytes": 6650314752,
+        "text": "6.19 GiB (whole Qdrant process, every collection)"
+      },
+      "disk": {
+        "bytes": 481401374,
+        "text": "459.1 MiB (collection folder)"
+      },
+      "notes": [
+        "WARNING: load average 9.12 13.81 20.38 (1/5/15 min) on 8 logical CPUs when searching began; the box was busy, so latency and QPS are inflated by other work.",
+        "Benchmark copy gvbbench_adventureworks dropped afterwards."
+      ]
+    },
+    {
+      "name": "qdrant-hnsw",
+      "engine": "Qdrant 1.17.0 (systemd, local)",
+      "index": "HNSW m=16 ef_construct=100, hnsw_ef=server default, cosine",
+      "hosting": "always-on",
+      "load": {
+        "rows": 50000,
+        "batch": 1000,
+        "upsertSeconds": 16.1069196,
+        "rowsPerSecond": 3104.255887637261,
+        "countMatchSeconds": 0.016156,
+        "indexSeconds": 4.0059458,
+        "indexNote": "status Green, 50,000 of 50,000 vectors in HNSW segments (4 segments)"
+      },
+      "search": {
+        "countInTarget": 50000,
+        "latencySamples": 200,
+        "p50Ms": 1.60535,
+        "p95Ms": 2.1378449999999987,
+        "p99Ms": 2.8832809999999967,
+        "qps": {
+          "1": 462.33725105030226,
+          "8": 1466.646895419358
+        },
+        "recall": 0.9984999999999999,
+        "errors": 0,
+        "exactQueries": 200,
+        "exactP50Ms": 10.8719,
+        "exactP95Ms": 13.43191,
+        "exactRecall": 1
+      },
+      "ram": {
+        "bytes": 6688403456,
+        "text": "6.23 GiB (whole Qdrant process, every collection)"
+      },
+      "disk": {
+        "bytes": 514946680,
+        "text": "491.09 MiB (collection folder)"
+      },
+      "notes": [
+        "WARNING: load average 8.99 12.93 19.63 (1/5/15 min) on 8 logical CPUs when searching began; the box was busy, so latency and QPS are inflated by other work.",
+        "Benchmark copy gvbbench_adventureworks dropped afterwards."
+      ]
+    },
+    {
+      "name": "sql-diskann",
+      "engine": "Microsoft SQL Server 2025 (RTM-CU9) (KB5122048) - 17.0.5005.3 (X64)",
+      "index": "DiskANN (preview) via VECTOR_SEARCH, cosine, build {\u0022StartId\u0022:\u002230588\u0022, \u0022L\u0022:\u002248\u0022, \u0022M\u0022:\u00228\u0022, \u0022R\u0022:\u002248\u0022}",
+      "hosting": "always-on",
+      "load": {
+        "rows": 50000,
+        "batch": 1000,
+        "upsertSeconds": 71.5365479,
+        "rowsPerSecond": 698.9434277691781,
+        "countMatchSeconds": 0.0122078,
+        "indexSeconds": 126.7477653,
+        "indexNote": "copied to dbo.gvb_gvbbench_adventureworks_ann (INT key) and built DiskANN, parameters {\u0022StartId\u0022:\u002230588\u0022, \u0022L\u0022:\u002248\u0022, \u0022M\u0022:\u00228\u0022, \u0022R\u0022:\u002248\u0022}"
+      },
+      "search": {
+        "countInTarget": 50000,
+        "latencySamples": 200,
+        "p50Ms": 6.8722,
+        "p95Ms": 10.268509999999997,
+        "p99Ms": 11.253286999999991,
+        "qps": {
+          "1": 146.7150502742989,
+          "8": 471.40446898233057
+        },
+        "recall": 0.9975,
+        "errors": 0,
+        "exactQueries": 200,
+        "exactP50Ms": 86.637,
+        "exactP95Ms": 130.53921999999994,
+        "exactRecall": 1
+      },
+      "ram": {
+        "bytes": 4431282176,
+        "text": "4.13 GiB (whole SQL Server process)"
+      },
+      "disk": {
+        "bytes": 424230912,
+        "text": "404.58 MiB (table and its indexes, reserved pages)"
+      },
+      "notes": [
+        "WARNING: load average 8.72 10.19 16.95 (1/5/15 min) on 8 logical CPUs when searching began; the box was busy, so latency and QPS are inflated by other work.",
+        "Benchmark copy gvbbench_adventureworks dropped afterwards."
+      ]
+    }
+  ]
+}

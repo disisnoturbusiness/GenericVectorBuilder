@@ -1,0 +1,212 @@
+:root {
+  --bg: #f6f7f9;
+  --card: #ffffff;
+  --text: #1d232b;
+  --muted: #5f6b7a;
+  --line: #d9dee5;
+  --accent: #1f6feb;
+  --accent-text: #ffffff;
+  --good: #1a7f37;
+  --bad: #cf222e;
+  --warn: #9a6700;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1318;
+    --card: #171c23;
+    --text: #e6edf3;
+    --muted: #9aa7b4;
+    --line: #2d3540;
+    --accent: #4493f8;
+    --accent-text: #0f1318;
+    --good: #3fb950;
+    --bad: #f85149;
+    --warn: #d29922;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+}
+
+.topbar h1 { font-size: 20px; margin: 0; }
+
+.health { font-size: 14px; color: var(--muted); }
+.health .ok { color: var(--good); }
+.health .down { color: var(--bad); }
+
+main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.card h2 { font-size: 18px; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; }
+
+.num {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 15px;
+}
+
+.hidden { display: none !important; }
+.muted { color: var(--muted); }
+
+.drop {
+  border: 2px dashed var(--line);
+  border-radius: 10px;
+  padding: 28px 16px;
+  text-align: center;
+}
+
+.drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.drop-big { font-size: 22px; margin: 0 0 4px; }
+
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
+.row input { flex: 1 1 260px; }
+
+input[type="text"], input[type="password"], select {
+  min-height: 44px;
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  width: 100%;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 18px;
+  font: inherit;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+  cursor: pointer;
+}
+
+.btn:disabled { opacity: 0.5; cursor: default; }
+.btn-go { min-height: 56px; min-width: 160px; font-size: 20px; margin-top: 8px; }
+.btn-quiet { background: transparent; color: var(--text); border-color: var(--line); }
+.drop .btn { margin-top: 12px; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.grid label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--muted); }
+.grid .wide { grid-column: span 2; }
+@media (max-width: 600px) { .grid .wide { grid-column: auto; } }
+
+.sinks { border: 0; padding: 0; margin: 0 0 8px; }
+.sinks legend { font-size: 14px; color: var(--muted); margin-bottom: 4px; }
+.sinks label { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; margin-right: 20px; font-weight: 600; }
+.sinks input { width: 22px; height: 22px; flex: none; }
+
+/* Destination lists (Write to, Search in): one tick box per destination; engines that are not running are greyed out and cannot be ticked. */
+.dest-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 4px 16px; margin-bottom: 8px; }
+.dest-list label { margin-right: 0; }
+.dest .dest-name { overflow-wrap: anywhere; }
+.dest .dest-note { font-weight: 400; font-size: 14px; }
+.dest.off { opacity: 0.55; cursor: not-allowed; }
+.dest-help { margin: 6px 0 0; font-size: 14px; }
+
+.check { display: flex; align-items: center; gap: 8px; min-height: 44px; font-weight: 600; }
+.check input { width: 22px; height: 22px; }
+
+.table-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.table-head { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; }
+.table-head h3 { margin: 0; font-size: 17px; }
+.table-head .key { margin-left: auto; display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.table-head .key select { width: auto; min-width: 200px; }
+
+.preview { overflow-x: auto; margin-top: 10px; max-width: 100%; }
+.preview table { border-collapse: collapse; font-size: 13px; }
+.preview th, .preview td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.preview th { background: var(--bg); }
+
+.bar { height: 14px; border-radius: 7px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
+#bar-fill { height: 100%; width: 0; background: var(--accent); transition: width 0.4s; }
+
+.counters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.counters div { background: var(--bg); border-radius: 8px; padding: 8px 10px; }
+.counters dt { font-size: 13px; color: var(--muted); }
+.counters dd { margin: 0; font-size: 20px; font-weight: 600; }
+
+.errors { color: var(--bad); }
+.status-Completed { color: var(--good); }
+.status-Partial { color: var(--warn); }
+.status-Failed, .status-Cancelled { color: var(--bad); }
+
+.results { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-top: 12px; }
+.results h3 { margin: 0 0 6px; font-size: 16px; }
+.hit { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-size: 14px; }
+.hit .score { float: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.hit pre { margin: 4px 0 0; white-space: pre-wrap; font: inherit; }
+
+.runs-list { list-style: none; padding: 0; margin: 0; }
+.runs-list li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-height: 44px; margin-bottom: 6px; }
+.runs-list .run-name { flex: 1 1 200px; }
+#active-runs-box h3 { font-size: 16px; margin: 16px 0 6px; }
+#pipelines-box h3 { font-size: 16px; margin: 16px 0 6px; }
+.btn-danger { background: transparent; color: var(--bad); border-color: var(--bad); }
+.btn-danger.armed { background: var(--bad); color: var(--accent-text); }
+#reset-status { overflow-wrap: anywhere; }
+
+/* Step 1 switch between a folder, a database and a git repository. Every button is big and always visible. */
+.mode-switch { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.seg { flex: 1 1 180px; min-height: 52px; font-size: 18px; background: transparent; color: var(--text); border-color: var(--line); }
+.seg.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+
+/* Database (ODBC) source: login fields, the table picker and its rows. */
+#source-odbc .grid { margin-top: 4px; }
+#odbc-connect { margin-top: 4px; }
+#odbc-status, #odbc-login-note, #odbc-picked { overflow-wrap: anywhere; }
+.pick-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin: 14px 0 4px; }
+.pick-filter { display: flex; flex-direction: column; gap: 4px; flex: 1 1 240px; font-size: 14px; color: var(--muted); }
+.pick-list { max-height: 360px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
+.pick { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; min-height: 48px; padding: 6px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.pick:last-child { border-bottom: 0; }
+.pick:hover { background: var(--bg); }
+.pick input { width: 22px; height: 22px; flex: none; }
+.pick-name { flex: 1 1 220px; font-weight: 600; overflow-wrap: anywhere; }
+.pill { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
+.pick-empty { padding: 14px 12px; }
+.table-note { margin: 6px 0 0; font-size: 14px; overflow-wrap: anywhere; }
+
+/* Git repo source: the address boxes, the fetch status and the review card. */
+#source-git .grid { margin-top: 4px; }
+#git-status, #git-url-note { overflow-wrap: anywhere; }
+.git-card h3 { overflow-wrap: anywhere; }
+.git-card details { margin-top: 8px; }
+.git-card ul { margin: 6px 0 0; padding-left: 20px; font-size: 14px; overflow-wrap: anywhere; }

@@ -1,0 +1,167 @@
+{
+  "startedUtc": "2026-10-03T18:39:55Z",
+  "command": "run-all",
+  "commandLine": "/home/dan/ForClaude/GenericVectorBuilder/src/GenericVectorBuilder.Bench/bin/Release/net10.0/GenericVectorBuilder.Bench.dll run-all --pipeline eshoponweb --targets sql,qdrant,qdrant-hnsw --queries golden",
+  "machine": {
+    "host": "linus7795",
+    "cpu": "Intel(R) Xeon(R) CPU E5-1620 v3 @ 3.50GHz",
+    "logicalCpus": 8,
+    "ramGiB": 62.7,
+    "gpu": "NVIDIA GeForce RTX 3060, 12288 MiB",
+    "os": "Ubuntu 24.04.5 LTS, kernel 6.8.0-142-generic",
+    "dotNet": ".NET 10.0.12",
+    "loadAverage": "2.50 2.60 2.71"
+  },
+  "pipeline": "eshoponweb",
+  "collection": "gvbbench_eshoponweb",
+  "rows": 524,
+  "dimension": 1024,
+  "source": "Read READ-ONLY from GenericVectorBuilder.dbo.gvb_eshoponweb in ChunkId order, vectors as native SqlVector\u003Cfloat\u003E, 0.2 s.",
+  "queries": "golden: 20 labelled questions from /home/dan/ForClaude/evalkit/questions_golden.json, embedded with qwen3-emb-0.6b (embedded now: 1 probe \u002B 20 query calls to the GPU service)",
+  "queryCount": 20,
+  "top": 10,
+  "concurrency": [
+    1,
+    8
+  ],
+  "secondsPerLevel": 20,
+  "truthSeconds": 0.0552002,
+  "truthNdcg": 0.5181699774768911,
+  "notes": [
+    "Load rows/s counts only time inside each target\u0027s upsert calls: one writer, batches of 1000, rows already in memory, the collection dropped and created fresh first.",
+    "Latency is client-side wall time around each search (network and driver included), one query at a time, after 20 warm-up queries; at least 200 samples (small query sets are repeated).",
+    "QPS: N workers searching back to back for 20 s per level; completed searches divided by elapsed time.",
+    "Recall@10: share of the exact top 10 (brute force in memory) that the engine returned. A hit whose exact similarity ties the 10th best (within 1e-5) also counts, because duplicate rows embed to identical vectors.",
+    "RAM of always-on servers (SQL Server, Qdrant) is the whole process, including every other database or collection it serves; for compose engines it is docker stats of the engine\u0027s containers. Disk is the table\u0027s reserved pages (SQL), the collection folder (Qdrant), or for other engines what the load added to the engine\u0027s data folder (engines that keep data in memory until a snapshot show almost nothing).",
+    "The empty benchmark database GvbBench was dropped at the end."
+  ],
+  "targets": [
+    {
+      "name": "sql",
+      "engine": "Microsoft SQL Server 2025 (RTM-CU9) (KB5122048) - 17.0.5005.3 (X64)",
+      "index": "exact VECTOR_DISTANCE cosine, no vector index (full scan)",
+      "hosting": "always-on",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.9872591,
+        "rowsPerSecond": 530.7623905416522,
+        "countMatchSeconds": 0.0065649
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 5.4349,
+        "p95Ms": 8.902935,
+        "p99Ms": 11.216507999999987,
+        "qps": {
+          "1": 217.6483052627755,
+          "8": 942.4821337631564
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 0
+      },
+      "ram": {
+        "bytes": 4431282176,
+        "text": "4.13 GiB (whole SQL Server process)"
+      },
+      "disk": {
+        "bytes": 5398528,
+        "text": "5.15 MiB (table and its indexes, reserved pages)"
+      },
+      "notes": [
+        "Load average 2.38 2.58 2.70 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "qdrant",
+      "engine": "Qdrant 1.17.0 (systemd, local)",
+      "index": "exact search (the builder\u0027s setting), HNSW m=16 ef_construct=100 built but not used",
+      "hosting": "always-on",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.1826736,
+        "rowsPerSecond": 2868.5042611521317,
+        "countMatchSeconds": 0.0114811,
+        "indexSeconds": 2.0397941,
+        "indexNote": "status Green, 0 of 524 vectors in HNSW segments (4 segments)"
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 2.85945,
+        "p95Ms": 3.6774249999999995,
+        "p99Ms": 3.9238309999999994,
+        "qps": {
+          "1": 408.2382213099692,
+          "8": 3136.614092882715
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 0
+      },
+      "ram": {
+        "bytes": 4518776832,
+        "text": "4.21 GiB (whole Qdrant process, every collection)"
+      },
+      "disk": {
+        "bytes": 344082728,
+        "text": "328.14 MiB (collection folder)"
+      },
+      "notes": [
+        "Load average 3.48 2.81 2.77 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    },
+    {
+      "name": "qdrant-hnsw",
+      "engine": "Qdrant 1.17.0 (systemd, local)",
+      "index": "HNSW m=16 ef_construct=100, hnsw_ef=server default, cosine",
+      "hosting": "always-on",
+      "load": {
+        "rows": 524,
+        "batch": 1000,
+        "upsertSeconds": 0.097252,
+        "rowsPerSecond": 5388.063998683831,
+        "countMatchSeconds": 0.0028139,
+        "indexSeconds": 2.004197,
+        "indexNote": "status Green, 0 of 524 vectors in HNSW segments (4 segments)"
+      },
+      "search": {
+        "countInTarget": 524,
+        "latencySamples": 200,
+        "p50Ms": 2.5131,
+        "p95Ms": 3.1272249999999993,
+        "p99Ms": 3.819029999999998,
+        "qps": {
+          "1": 452.3491627393455,
+          "8": 3077.169715350828
+        },
+        "recall": 1,
+        "ndcg": 0.5181699774768911,
+        "errors": 0,
+        "exactQueries": 20,
+        "exactP50Ms": 0.9984000000000001,
+        "exactP95Ms": 1.3582500000000002,
+        "exactRecall": 1
+      },
+      "ram": {
+        "bytes": 4519485440,
+        "text": "4.21 GiB (whole Qdrant process, every collection)"
+      },
+      "disk": {
+        "bytes": 344082727,
+        "text": "328.14 MiB (collection folder)"
+      },
+      "notes": [
+        "Load average 4.53 3.10 2.87 (1/5/15 min) when searching began.",
+        "Benchmark copy gvbbench_eshoponweb dropped afterwards."
+      ]
+    }
+  ]
+}

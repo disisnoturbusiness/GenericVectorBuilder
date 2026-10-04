@@ -1,0 +1,51 @@
+# Milvus standalone: ONE container, embedded etcd, local-disk object storage (no MinIO).
+# REST API v2 on 127.0.0.1:19530, health/metrics on 127.0.0.1:9091.
+# No password: authorization is off and both ports are bound to loopback only.
+# The embedded etcd config is inlined below so no extra file has to live beside this one.
+# Start:  sudo docker compose -f deploy/engines/milvus.compose.yaml up -d
+# Stop:   sudo docker compose -f deploy/engines/milvus.compose.yaml down   (data is kept)
+name: gvb-milvus
+
+configs:
+  embed_etcd:
+    content: |
+      listen-client-urls: http://127.0.0.1:2379
+      advertise-client-urls: http://127.0.0.1:2379
+      quota-backend-bytes: 4294967296
+      auto-compaction-mode: revision
+      auto-compaction-retention: '1000'
+
+services:
+  milvus:
+    image: milvusdb/milvus:v2.6.25
+    container_name: gvb-milvus
+    restart: "no"
+    stop_grace_period: 60s
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      DEPLOY_MODE: STANDALONE
+      ETCD_USE_EMBED: "true"
+      ETCD_DATA_DIR: /var/lib/milvus/etcd
+      ETCD_CONFIG_PATH: /milvus/configs/embedEtcd.yaml
+      COMMON_STORAGETYPE: local
+      # Milvus exits when its etcd lease lapses (default 30 s). On a busy host the embedded etcd
+      # can stall for seconds, so the lease is made far more forgiving. 2026-10-03: with the host
+      # at load average 30 on 8 cores, a 100,000-vector load killed the default-lease container.
+      COMMON_SESSION_TTL: "300"
+    configs:
+      - source: embed_etcd
+        target: /milvus/configs/embedEtcd.yaml
+    ports:
+      - "127.0.0.1:19530:19530"
+      - "127.0.0.1:9091:9091"
+    volumes:
+      - /home/dan/gvb-data/engines/milvus:/var/lib/milvus
+    mem_limit: 8g
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9091/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 60s

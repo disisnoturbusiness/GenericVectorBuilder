@@ -1,0 +1,192 @@
+using GenericVectorBuilder.Bench.Targets;
+
+namespace GenericVectorBuilder.Bench.Report;
+
+/// <summary>
+/// Everything one benchmark run measured, written as results.json and results.md.
+/// Why the run carries the command line, the machine and the query rules: a number without
+/// them cannot be reproduced or compared with a later run.
+/// </summary>
+public sealed class BenchReport
+{
+   #region Public Methods
+
+   /// <summary>When the run started (UTC, ISO 8601).</summary>
+   public string StartedUtc { get; set; } = string.Empty;
+
+   /// <summary>The command: replicate, bench or run-all.</summary>
+   public string Command { get; set; } = string.Empty;
+
+   /// <summary>The exact command line.</summary>
+   public string CommandLine { get; set; } = string.Empty;
+
+   /// <summary>Hardware and software of the box.</summary>
+   public MachineFacts Machine { get; set; } = new();
+
+   /// <summary>Source pipeline.</summary>
+   public string Pipeline { get; set; } = string.Empty;
+
+   /// <summary>Collection every target was loaded under.</summary>
+   public string Collection { get; set; } = string.Empty;
+
+   /// <summary>Rows used.</summary>
+   public int Rows { get; set; }
+
+   /// <summary>Vector length.</summary>
+   public int Dimension { get; set; }
+
+   /// <summary>How the source was read and how long it took.</summary>
+   public string Source { get; set; } = string.Empty;
+
+   /// <summary>How the queries were made.</summary>
+   public string Queries { get; set; } = string.Empty;
+
+   /// <summary>Number of queries.</summary>
+   public int QueryCount { get; set; }
+
+   /// <summary>Hits per query.</summary>
+   public int Top { get; set; }
+
+   /// <summary>Concurrency levels of the throughput test.</summary>
+   public IReadOnlyList<int> Concurrency { get; set; } = Array.Empty<int>();
+
+   /// <summary>Seconds per concurrency level.</summary>
+   public int SecondsPerLevel { get; set; }
+
+   /// <summary>Seconds the in-memory brute force took for all queries.</summary>
+   public double? TruthSeconds { get; set; }
+
+   /// <summary>nDCG@k of the exact answer itself (golden only): the best any engine can score with this embedder.</summary>
+   public double? TruthNdcg { get; set; }
+
+   /// <summary>Run-level notes (method, caveats, problems).</summary>
+   public List<string> Notes { get; set; } = new();
+
+   /// <summary>One entry per target.</summary>
+   public List<TargetReport> Targets { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>
+/// What was measured for one target.
+/// </summary>
+public sealed class TargetReport
+{
+   #region Public Methods
+
+   /// <summary>Target name.</summary>
+   public string Name { get; set; } = string.Empty;
+
+   /// <summary>Engine name and version.</summary>
+   public string Engine { get; set; } = string.Empty;
+
+   /// <summary>Index used by the default search.</summary>
+   public string Index { get; set; } = string.Empty;
+
+   /// <summary>compose, always-on or embedded.</summary>
+   public string Hosting { get; set; } = string.Empty;
+
+   /// <summary>Load measurements, when this run loaded the target.</summary>
+   public LoadReport? Load { get; set; }
+
+   /// <summary>Search measurements, when this run searched the target.</summary>
+   public SearchReport? Search { get; set; }
+
+   /// <summary>Memory reading after the load.</summary>
+   public Measurement? Ram { get; set; }
+
+   /// <summary>Disk reading after the load.</summary>
+   public Measurement? Disk { get; set; }
+
+   /// <summary>Why the target failed, if it did.</summary>
+   public string? Error { get; set; }
+
+   /// <summary>Notes for this target.</summary>
+   public List<string> Notes { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>
+/// How loading one target went.
+/// </summary>
+public sealed class LoadReport
+{
+   #region Public Methods
+
+   /// <summary>Rows written.</summary>
+   public int Rows { get; set; }
+
+   /// <summary>Rows per upsert call.</summary>
+   public int Batch { get; set; }
+
+   /// <summary>Seconds spent inside upsert calls (one writer, batches in order).</summary>
+   public double UpsertSeconds { get; set; }
+
+   /// <summary>Rows per second of upsert time.</summary>
+   public double RowsPerSecond { get; set; }
+
+   /// <summary>Seconds after the last upsert until the target counted every row (asynchronous engines).</summary>
+   public double? CountMatchSeconds { get; set; }
+
+   /// <summary>Seconds to build or wait for the index after loading, where that is a separate step.</summary>
+   public double? IndexSeconds { get; set; }
+
+   /// <summary>What the index step reported.</summary>
+   public string? IndexNote { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>
+/// How searching one target went.
+/// </summary>
+public sealed class SearchReport
+{
+   #region Public Methods
+
+   /// <summary>Rows the target held when searched.</summary>
+   public long? CountInTarget { get; set; }
+
+   /// <summary>Latency samples taken at concurrency 1.</summary>
+   public int LatencySamples { get; set; }
+
+   /// <summary>Median latency, ms (client side, one query at a time).</summary>
+   public double? P50Ms { get; set; }
+
+   /// <summary>95th percentile latency, ms.</summary>
+   public double? P95Ms { get; set; }
+
+   /// <summary>99th percentile latency, ms.</summary>
+   public double? P99Ms { get; set; }
+
+   /// <summary>Queries per second at each concurrency level.</summary>
+   public Dictionary<int, double> Qps { get; set; } = new();
+
+   /// <summary>Mean recall@k against the exact answer (ties counted).</summary>
+   public double? Recall { get; set; }
+
+   /// <summary>Mean file-level nDCG@k (golden queries only).</summary>
+   public double? Ndcg { get; set; }
+
+   /// <summary>Searches that failed or timed out.</summary>
+   public int Errors { get; set; }
+
+   /// <summary>The first failure message.</summary>
+   public string? FirstError { get; set; }
+
+   /// <summary>Exact-mode queries timed (engines with an exact mode).</summary>
+   public int ExactQueries { get; set; }
+
+   /// <summary>Exact-mode median latency, ms.</summary>
+   public double? ExactP50Ms { get; set; }
+
+   /// <summary>Exact-mode 95th percentile latency, ms.</summary>
+   public double? ExactP95Ms { get; set; }
+
+   /// <summary>Exact-mode recall (should be 1.0; anything else means the engine or the yardstick is wrong).</summary>
+   public double? ExactRecall { get; set; }
+
+   #endregion Public Methods
+}

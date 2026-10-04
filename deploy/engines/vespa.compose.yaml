@@ -1,0 +1,30 @@
+# Vespa 8.754.14 for the vector benchmark: one container running the config server, the query and
+# feed container, and the content node (a single-node application).
+# Host port 8090 is Vespa's query and feed port (8080 inside), 19071 is the config server, where the
+# sink deploys its application package (one schema per collection). Vespa has no login by default;
+# both ports are bound to 127.0.0.1 only.
+# Start: sudo docker compose -f deploy/engines/vespa.compose.yaml up -d
+# Stop (data kept): sudo docker compose -f deploy/engines/vespa.compose.yaml down
+services:
+  vespa:
+    image: vespaengine/vespa:8.754.14
+    container_name: gvb-vespa
+    hostname: gvb-vespa
+    restart: "no"
+    ports:
+      - "127.0.0.1:8090:8080"
+      - "127.0.0.1:19071:19071"
+    volumes:
+      - /home/dan/gvb-data/engines/vespa/var:/opt/vespa/var
+      - /home/dan/gvb-data/engines/vespa/logs:/opt/vespa/logs
+    mem_limit: 6g
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:19071/state/v1/health | grep -q up || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 40
+      start_period: 60s

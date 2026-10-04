@@ -1,0 +1,38 @@
+# Typesense 30.2 for the vector benchmark: single node, API key from secrets.env.
+# Typesense keeps its search index in memory, so the container limit is generous.
+# TYPESENSE_API_KEY comes from /home/dan/gvb-data/engines/secrets.env through env_file; the
+# image reads any TYPESENSE_* variable as the matching command-line option (--api-key).
+# Start: sudo docker compose -f deploy/engines/typesense.compose.yaml up -d
+# Stop (data kept): sudo docker compose -f deploy/engines/typesense.compose.yaml down
+services:
+  typesense:
+    image: typesense/typesense:30.2
+    container_name: gvb-typesense
+    restart: "no"
+    env_file:
+      - /home/dan/gvb-data/engines/secrets.env
+    environment:
+      TYPESENSE_DATA_DIR: /data
+      # Snapshot every 5 minutes instead of hourly. Typesense replays its write log from the last
+      # snapshot on start, so after a 100,000 vector load an hourly snapshot means a restart
+      # re-inserts every vector (minutes of 503 "Not Ready or Lagging") before it answers.
+      TYPESENSE_SNAPSHOT_INTERVAL_SECONDS: "300"
+    ports:
+      - "127.0.0.1:8108:8108"
+    volumes:
+      - /home/dan/gvb-data/engines/typesense:/data
+    mem_limit: 6g
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      # The image has no curl or wget, so the check opens a TCP socket with bash and reads /health.
+      test:
+        - CMD-SHELL
+        - |
+          bash -c 'exec 3<>/dev/tcp/127.0.0.1/8108; printf "GET /health HTTP/1.0\r\n\r\n" >&3; grep -q ok <&3'
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
