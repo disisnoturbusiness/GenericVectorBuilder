@@ -16,6 +16,8 @@ public sealed class BenchTarget
 
    private readonly Func<string, CancellationToken, Task<Measurement>> _ram;
    private readonly Func<string, CancellationToken, Task<Measurement>> _disk;
+   private const string NOT_STATED = "not stated";
+
    private readonly string _fallbackIndex;
 
    #endregion Data Members
@@ -72,6 +74,69 @@ public sealed class BenchTarget
    /// Returns a note for the report. Null when the sink is idle once its writes return.
    /// </summary>
    public Func<string, CancellationToken, Task<string>>? Settle { get; init; }
+
+   /// <summary>
+   /// Optional reader of the engine's index state for a sink that is not an
+   /// <see cref="IIndexFinisher"/> (for example the builder's own Qdrant sink, which the
+   /// benchmark wraps rather than changes). Null when the sink reports its own state or none.
+   /// </summary>
+   public Func<string, CancellationToken, Task<IndexState>>? IndexStateReader { get; init; }
+
+   /// <summary>
+   /// Optional crash-safety statement for a sink that does not describe itself (the builder's
+   /// SQL Server and Qdrant sinks). Used only when the sink's own
+   /// <see cref="IEngineDescription.Durability"/> is missing or says "not stated".
+   /// </summary>
+   public string? DurabilityNote { get; init; }
+
+   /// <summary>
+   /// What a crash can lose with this engine's settings, as the sink states it, else
+   /// <see cref="DurabilityNote"/>, else "not stated". Why it is printed with the numbers: an
+   /// engine that skips fsync writes faster, and the reader must see that it does.
+   /// </summary>
+   public string Durability
+   {
+      get
+      {
+         string? stated = ( Sink as IEngineDescription )?.Durability;
+         return !string.IsNullOrWhiteSpace( stated ) && stated != NOT_STATED ? stated : DurabilityNote ?? NOT_STATED;
+      }
+   }
+
+   /// <summary>True when the sink builds or waits for its index in a separate, timed step after loading.</summary>
+   public bool HasIndexFinisher => Sink is IIndexFinisher;
+
+   /// <summary>
+   /// Reads the engine's own account of its index, within <paramref name="timeout"/>. Never
+   /// throws for an engine problem: a failed or slow read becomes a not-ready state whose
+   /// detail says why, so the report shows the gap instead of the run stopping.
+   /// Why not ready when nothing is reported: a number from an index nobody can prove was
+   /// built must not look like one that was.
+   /// </summary>
+   /// <param name="collection">Collection name.</param>
+   /// <param name="timeout">Longest the engine gets to answer.</param>
+   /// <param name="ct">Cancellation of the whole run.</param>
+   /// <returns>The state.</returns>
+   public async Task<IndexState> ReadIndexStateAsync( string collection, TimeSpan timeout, CancellationToken ct )
+   {
+      Func<string, CancellationToken, Task<IndexState>>? read = Sink is IIndexFinisher finisher ? finisher.GetIndexStateAsync : IndexStateReader;
+      if( read == null )
+      {
+         return new IndexState( false, null, null, "not reported: this target gives no index state" );
+      }
+
+      using var limit = CancellationTokenSource.CreateLinkedTokenSource( ct );
+      limit.CancelAfter( timeout );
+      try
+      {
+         return await read( collection, limit.Token );
+      }
+      catch( Exception ex ) when( !ct.IsCancellationRequested )
+      {
+         string why = ex is OperationCanceledException ? $"no answer within {timeout.TotalSeconds:0} s" : ex.Message;
+         return new IndexState( false, null, null, $"could not read the index state: {why}" );
+      }
+   }
 
    /// <summary>
    /// Reads memory use.

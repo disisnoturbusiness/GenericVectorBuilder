@@ -9,10 +9,13 @@ namespace GenericVectorBuilder.Bench.Running;
 
 /// <summary>
 /// Runs one command end to end: reads the source rows once, builds the queries and the exact
-/// answer once, then goes through the targets one at a time (for run-all: start the engine,
-/// load, search, measure, drop the copy, stop the engine) and rewrites the results after each.
+/// answer once, then goes through the targets one at a time in a seeded random order (for
+/// run-all: start the engine if it is down, load, search, measure, drop the copy, stop the
+/// engine only if this run started it) and rewrites the results after each.
 /// Why one target at a time: engines measured side by side would compete for the same CPU,
 /// memory and disk, and every number would depend on what else happened to be running.
+/// Why a random order: in a fixed order the same query ran faster later in a run, so the order
+/// favoured whichever engine came last. The seed is recorded so the order can be repeated.
 /// </summary>
 public sealed class BenchSession : IDisposable
 {
@@ -26,6 +29,7 @@ public sealed class BenchSession : IDisposable
    private readonly GvbSettings _settings = new();
    private readonly string _repoRoot;
    private readonly TargetFactory _factory;
+   private readonly IEngineHost _host = new ComposeEngineHost();
 
    #endregion Data Members
 
@@ -100,24 +104,27 @@ public sealed class BenchSession : IDisposable
    /// <returns>Exit code.</returns>
    private async Task<int> MeasureAsync( CancellationToken ct )
    {
-      List<string> names = _options.Targets.Count > 0 ? _options.Targets.ToList() : _factory.Names.ToList();
-      BenchReport report = await NewReportAsync( ct );
-      string folder = Path.Combine( _options.OutFolder ?? Path.Combine( _repoRoot, "bench-results" ), $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{_options.Pipeline}" );
-      var reader = new PipelineReader( _settings.BuildSqlConnectionString(), _settings.SqlDatabase );
-      _log( $"Reading dbo.gvb_{_options.Pipeline}{( _options.Limit.HasValue ? $" (first {_options.Limit:N0} rows by ChunkId)" : string.Empty )}..." );
-      PipelineData data = await reader.LoadAsync( _options.Pipeline, _options.Limit, withText: _options.Command != "bench", ct );
-      report.Rows = data.Count;
-      report.Dimension = data.Dimension;
-      report.Source = $"Read READ-ONLY from {_settings.SqlDatabase}.dbo.gvb_{_options.Pipeline} in ChunkId order, vectors as {reader.VectorReadMode}, {reader.LoadSeconds:0.0} s.";
-      _log( $"{data.Count:N0} rows x {data.Dimension} dims in {reader.LoadSeconds:0.0} s ({reader.VectorReadMode})" );
-      SearchRunner? runner = _options.Command == "replicate" ? null : await PrepareSearchAsync( data, report, ct );
-      foreach( string name in names )
+      DateTime started = DateTime.UtcNow;
+      int seed = _options.Seed ?? RunOrder.SeedFromTime( started );
+      IReadOnlyList<string> order = RunOrder.ShuffleTargets( _options.Targets.Count > 0 ? _options.Targets : _factory.Names, seed );
+      _log( $"Seed {seed} ({( _options.Seed.HasValue ? "from --seed" : "from the start time" )}); target order: {string.Join( ", ", order )}" );
+      BenchReport report = await NewReportAsync( started, seed, ct );
+      string folder = Path.Combine( _options.OutFolder ?? Path.Combine( _repoRoot, "bench-results" ), $"{started:yyyyMMdd-HHmmss}-{_options.Pipeline}" );
+      PipelineData data = await ReadDataAsync( report, ct );
+      SearchRunner? runner = _options.Command == "replicate" ? null : await PrepareSearchAsync( data, report, seed, ct );
+      List<(string Name, BenchTarget? Target, string? Error)> targets = order.Select( Create ).ToList();
+      var lifecycle = new EngineLifecycle( _host, _options.Command == "run-all", _log );
+      await lifecycle.SnapshotAsync( targets.Select( t => t.Target?.ComposePath ), ct );
+      var measurer = new TargetRunner( _options, lifecycle, _log );
+      foreach( (string name, BenchTarget? target, string? error) in targets )
       {
          _log( $"== {name}" );
-         report.Targets.Add( await MeasureTargetAsync( name, data, runner, ct ) );
+         report.TargetOrder.Add( name );
+         report.Targets.Add( target == null ? new TargetReport { Name = name, Error = error } : await measurer.MeasureAsync( target, data, runner, ct ) );
          ResultsWriter.Write( report, folder );
       }
 
+      report.Notes.AddRange( RunFlags( report ) );
       await DropEmptyDatabaseAsync( _options.Command == "run-all" && !_options.Keep, report );
       ResultsWriter.Write( report, folder );
       _log( $"Results: {Path.Combine( folder, "results.md" )}" );
@@ -125,13 +132,76 @@ public sealed class BenchSession : IDisposable
    }
 
    /// <summary>
+   /// Reads the source rows once for every target.
+   /// </summary>
+   /// <param name="report">Report to fill (rows, dimension, source).</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The rows.</returns>
+   private async Task<PipelineData> ReadDataAsync( BenchReport report, CancellationToken ct )
+   {
+      var reader = new PipelineReader( _settings.BuildSqlConnectionString(), _settings.SqlDatabase );
+      _log( $"Reading dbo.gvb_{_options.Pipeline}{( _options.Limit.HasValue ? $" (first {_options.Limit:N0} rows by ChunkId)" : string.Empty )}..." );
+      PipelineData data = await reader.LoadAsync( _options.Pipeline, _options.Limit, withText: _options.Command != "bench", ct );
+      report.Rows = data.Count;
+      report.Dimension = data.Dimension;
+      report.Source = $"Read READ-ONLY from {_settings.SqlDatabase}.dbo.gvb_{_options.Pipeline} in ChunkId order, vectors as {reader.VectorReadMode}, {reader.LoadSeconds:0.0} s.";
+      _log( $"{data.Count:N0} rows x {data.Dimension} dims in {reader.LoadSeconds:0.0} s ({reader.VectorReadMode})" );
+      return data;
+   }
+
+   /// <summary>
+   /// Creates a target, turning an unknown name into an error for that target alone.
+   /// </summary>
+   /// <param name="name">Target name.</param>
+   /// <returns>The target, or the reason it could not be created.</returns>
+   private (string Name, BenchTarget? Target, string? Error) Create( string name )
+   {
+      try
+      {
+         return ( name, _factory.Create( name ), null );
+      }
+      catch( ArgumentException ex )
+      {
+         return ( name, null, ex.Message );
+      }
+   }
+
+   /// <summary>
+   /// Run-level warnings gathered from every target, so the problems are listed in one place
+   /// at the end of the report as well as under each target.
+   /// </summary>
+   /// <param name="report">The run.</param>
+   /// <returns>The warnings (none when every target was clean).</returns>
+   private static IEnumerable<string> RunFlags( BenchReport report )
+   {
+      List<string> notReady = report.Targets.Where( t => t.IndexState?.AfterLoad is { Ready: false } ).Select( t => t.Name ).ToList();
+      if( notReady.Count > 0 )
+      {
+         yield return $"WARNING: the engine did not report a ready index after the load for: {string.Join( ", ", notReady )}. They were measured anyway; their numbers may come from a scan or a half-built index (see each target's index state).";
+      }
+
+      List<string> warmupFailures = report.Targets.Where( t => t.WarmupErrors > 0 ).Select( t => $"{t.Name} ({t.WarmupErrors})" ).ToList();
+      if( warmupFailures.Count > 0 )
+      {
+         yield return $"WARNING: warm-up searches failed for: {string.Join( ", ", warmupFailures )}. They are not in the error counts of the timed passes.";
+      }
+
+      List<string> unstated = report.Targets.Where( t => t.Durability is null or "not stated" && t.Error == null ).Select( t => t.Name ).ToList();
+      if( unstated.Count > 0 )
+      {
+         yield return $"Durability not stated for: {string.Join( ", ", unstated )}.";
+      }
+   }
+
+   /// <summary>
    /// Builds the queries and the exact answer, shared by every target.
    /// </summary>
    /// <param name="data">Loaded rows.</param>
    /// <param name="report">Report to fill.</param>
+   /// <param name="seed">The run's seed (fixes each target's pass order).</param>
    /// <param name="ct">Cancellation.</param>
    /// <returns>The search runner.</returns>
-   private async Task<SearchRunner> PrepareSearchAsync( PipelineData data, BenchReport report, CancellationToken ct )
+   private async Task<SearchRunner> PrepareSearchAsync( PipelineData data, BenchReport report, int seed, CancellationToken ct )
    {
       QuerySet queries = _options.IsGolden
          ? await GoldenQueries.LoadAsync( _options.GoldenFile, _options.Pipeline, _settings, GvbSettings.Expand( GOLDEN_CACHE ), ct )
@@ -139,7 +209,7 @@ public sealed class BenchSession : IDisposable
       _log( $"Queries: {queries.Description}" );
       TruthSet truth = BruteForce.Compute( data, queries, _options.Top );
       _log( $"Exact answer of {queries.Count} queries by brute force in {truth.Seconds:0.0} s" );
-      var runner = new SearchRunner( data, queries, truth, _options );
+      var runner = new SearchRunner( data, queries, truth, _options, seed );
       report.Queries = queries.Description;
       report.QueryCount = queries.Count;
       report.TruthSeconds = truth.Seconds;
@@ -148,208 +218,18 @@ public sealed class BenchSession : IDisposable
    }
 
    /// <summary>
-   /// Loads and/or searches one target, never letting its failure stop the others.
+   /// The run-level part of the report: when, how, on what, in what order, and the method notes.
    /// </summary>
-   /// <param name="name">Target name.</param>
-   /// <param name="data">Loaded rows.</param>
-   /// <param name="runner">Search runner, or null for replicate.</param>
-   /// <param name="ct">Cancellation.</param>
-   /// <returns>The target's results.</returns>
-   private async Task<TargetReport> MeasureTargetAsync( string name, PipelineData data, SearchRunner? runner, CancellationToken ct )
-   {
-      var result = new TargetReport { Name = name };
-      BenchTarget target;
-      try
-      {
-         target = _factory.Create( name );
-      }
-      catch( ArgumentException ex )
-      {
-         result.Error = ex.Message;
-         return result;
-      }
-
-      result.Engine = target.Engine;
-      result.Hosting = target.Hosting;
-      bool runAll = _options.Command == "run-all";
-      bool startedHere = false;
-      Measurement? diskBefore = null;
-      try
-      {
-         startedHere = await EnsureRunningAsync( target, runAll, result, ct );
-         if( _options.Command != "bench" )
-         {
-            diskBefore = await DiskBeforeLoadAsync( target, ct );
-            result.Load = await Replicator.RunAsync( target, _options.Collection, data, _options.Batch, _log, ct );
-            _log( $"  {name}: loaded {data.Count:N0} rows at {result.Load.RowsPerSecond:N0} rows/s" );
-         }
-
-         if( runner != null )
-         {
-            NoteLoad( result );
-            result.Search = await runner.RunAsync( target, _options.Collection, _log, ct );
-            NoteCountMismatch( result, data.Count );
-         }
-
-         result.Ram = await target.MeasureRamAsync( _options.Collection, ct );
-         result.Disk = Growth( diskBefore, await target.MeasureDiskAsync( _options.Collection, ct ) );
-      }
-      catch( Exception ex ) when( ex is not OperationCanceledException || !ct.IsCancellationRequested )
-      {
-         result.Error = _options.Command == "bench" ? $"{ex.Message} (bench only searches; if {_options.Collection} is missing, run replicate with the same --limit first)" : ex.Message;
-         _log( $"  {name} FAILED: {result.Error}" );
-      }
-      finally
-      {
-         result.Index = target.Index;
-         await TidyAsync( target, runAll, startedHere, result );
-      }
-
-      return result;
-   }
-
-   /// <summary>
-   /// Makes sure a compose-hosted engine is up. run-all starts it when it is down; the other
-   /// commands refuse with a message, because they promise not to start anything.
-   /// </summary>
-   /// <param name="target">The target.</param>
-   /// <param name="runAll">True for run-all.</param>
-   /// <param name="result">Target results (notes).</param>
-   /// <param name="ct">Cancellation.</param>
-   /// <returns>True when this call started the engine (so it must stop it again).</returns>
-   private async Task<bool> EnsureRunningAsync( BenchTarget target, bool runAll, TargetReport result, CancellationToken ct )
-   {
-      if( target.ComposePath == null || await ComposeRunner.IsRunningAsync( target.ComposePath, ct ) )
-      {
-         return false;
-      }
-
-      if( !runAll )
-      {
-         throw new InvalidOperationException( $"{target.Name} is not running. Start it with: sudo docker compose -f {target.ComposePath} up -d (or use run-all)." );
-      }
-
-      _log( $"  starting {Path.GetFileName( target.ComposePath )}" );
-      await ComposeRunner.UpAsync( target.ComposePath, ct );
-      result.Notes.Add( "Started by run-all for this measurement and stopped afterwards." );
-      return true;
-   }
-
-   /// <summary>
-   /// After a run-all target: drops the benchmark copy (unless --keep) and stops the engine if
-   /// run-all started it. Best effort; problems become notes.
-   /// </summary>
-   /// <param name="target">The target.</param>
-   /// <param name="runAll">True for run-all.</param>
-   /// <param name="startedHere">True when run-all started the engine.</param>
-   /// <param name="result">Target results (notes).</param>
-   private async Task TidyAsync( BenchTarget target, bool runAll, bool startedHere, TargetReport result )
-   {
-      if( runAll && !_options.Keep )
-      {
-         try
-         {
-            await target.Sink.DropCollectionAsync( _options.Collection, CancellationToken.None );
-            result.Notes.Add( $"Benchmark copy {_options.Collection} dropped afterwards." );
-         }
-         catch( Exception ex )
-         {
-            result.Notes.Add( $"Could not drop the benchmark copy: {ex.Message}" );
-         }
-      }
-
-      if( startedHere && await ComposeRunner.DownAsync( target.ComposePath!, CancellationToken.None ) is string problem )
-      {
-         result.Notes.Add( problem );
-      }
-   }
-
-   /// <summary>
-   /// For engines measured by their whole data folder (compose and embedded), drops any old
-   /// benchmark copy and reads the folder size, so the growth after loading is this copy's
-   /// footprint. SQL tables and Qdrant collection folders are measured on their own, so they
-   /// need no "before".
-   /// </summary>
-   /// <param name="target">The target.</param>
-   /// <param name="ct">Cancellation.</param>
-   /// <returns>The size before loading, or null when not needed.</returns>
-   private async Task<Measurement?> DiskBeforeLoadAsync( BenchTarget target, CancellationToken ct )
-   {
-      if( target.Hosting is not ( "compose" or "embedded" ) )
-      {
-         return null;
-      }
-
-      try
-      {
-         await target.Sink.DropCollectionAsync( _options.Collection, ct );
-      }
-      catch( Exception ex ) when( ex is not OperationCanceledException )
-      {
-         return null;
-      }
-
-      return await target.MeasureDiskAsync( _options.Collection, ct );
-   }
-
-   /// <summary>
-   /// Turns a folder size read before and after the load into what the load added. Why: an
-   /// engine's data folder also holds whatever else it stores (other collections, test
-   /// leftovers, logs), so the growth is the fair footprint of this copy. When no "before"
-   /// size exists (a table or collection folder that the load created) the reading is
-   /// already this copy's own size and is kept as is.
-   /// </summary>
-   /// <param name="before">Reading before the load, or null.</param>
-   /// <param name="after">Reading after the load.</param>
-   /// <returns>The reading to report.</returns>
-   private static Measurement Growth( Measurement? before, Measurement after )
-   {
-      if( before?.Bytes is not long start || after.Bytes is not long end )
-      {
-         return after;
-      }
-
-      long grown = Math.Max( 0, end - start );
-      return new Measurement( grown, $"{Measurement.Format( grown )} added by this load ({after.Text}, {Measurement.Format( start )} before)" );
-   }
-
-   /// <summary>
-   /// Records the box's load average as searching starts, with a warning when work was
-   /// queueing for a CPU (latency and QPS then include waiting for other processes).
-   /// </summary>
-   /// <param name="result">Target results.</param>
-   private static void NoteLoad( TargetReport result )
-   {
-      string? load = MachineFacts.ReadLoadAverage();
-      result.Notes.Add( MachineFacts.IsBusy( load )
-         ? $"WARNING: load average {load} (1/5/15 min) on {Environment.ProcessorCount} logical CPUs when searching began; the box was busy, so latency and QPS are inflated by other work."
-         : $"Load average {load ?? "unknown"} (1/5/15 min) when searching began." );
-   }
-
-   /// <summary>
-   /// Flags a target that does not hold exactly the loaded rows: its recall then compares
-   /// different data and must not be read as a quality number.
-   /// </summary>
-   /// <param name="result">Target results.</param>
-   /// <param name="expected">Rows loaded in memory.</param>
-   private static void NoteCountMismatch( TargetReport result, int expected )
-   {
-      if( result.Search?.CountInTarget is long count && count != expected )
-      {
-         result.Notes.Add( $"WARNING: the target holds {count:N0} rows but the benchmark used {expected:N0}; recall compares different data. Replicate with the same --limit first." );
-      }
-   }
-
-   /// <summary>
-   /// The run-level part of the report: when, how, on what, and the method notes.
-   /// </summary>
+   /// <param name="started">When the run started.</param>
+   /// <param name="seed">The run's seed.</param>
    /// <param name="ct">Cancellation.</param>
    /// <returns>The report, without targets.</returns>
-   private async Task<BenchReport> NewReportAsync( CancellationToken ct )
+   private async Task<BenchReport> NewReportAsync( DateTime started, int seed, CancellationToken ct )
    {
       var report = new BenchReport
       {
-         StartedUtc = DateTime.UtcNow.ToString( "yyyy-MM-ddTHH:mm:ssZ" ),
+         StartedUtc = started.ToString( "yyyy-MM-ddTHH:mm:ssZ" ),
+         RunSeed = seed,
          Command = _options.Command,
          CommandLine = Environment.CommandLine,
          Machine = await MachineFacts.ReadAsync( ct ),
@@ -364,7 +244,7 @@ public sealed class BenchSession : IDisposable
          report.Notes.Add( $"WARNING: load average {report.Machine.LoadAverage} on {report.Machine.LogicalCpus} logical CPUs when the run started. Other work was competing for the CPU, so absolute latency and QPS are worse than this box can do; compare engines only within one run, and rerun on a quiet box before quoting numbers." );
       }
 
-      report.Notes.AddRange( MethodNotes() );
+      report.Notes.AddRange( MethodNotes( seed ) );
       report.Notes.AddRange( _factory.Notes );
       return report;
    }
@@ -372,14 +252,22 @@ public sealed class BenchSession : IDisposable
    /// <summary>
    /// How every number was measured, printed with the results.
    /// </summary>
+   /// <param name="seed">The run's seed.</param>
    /// <returns>The notes.</returns>
-   private IEnumerable<string> MethodNotes()
+   private IEnumerable<string> MethodNotes( int seed )
    {
-      yield return $"Load rows/s counts only time inside each target's upsert calls: one writer, batches of {_options.Batch}, rows already in memory, the collection dropped and created fresh first.";
-      yield return $"Latency is client-side wall time around each search (network and driver included), one query at a time, after {_options.Warmup} warm-up queries; at least 200 samples (small query sets are repeated).";
+      yield return $"Order: targets ran one at a time in a random order from seed {seed} (runSeed; --seed {seed} repeats it, targetOrder lists it). Inside each target the timed passes also ran in a random order from the same seed and the target's name (passOrder): default@1 is latency one query at a time (which also gives recall) followed by throughput with one searcher, default@N is throughput with N searchers, exact is the engine's exact mode.";
+      yield return $"Warm-up: every timed pass started with its own untimed warm-up of {_options.Warmup} searches in the same search mode and with the same number of searchers, stopped early after 60 s. Failed warm-up searches are counted per target (warmupErrors) and are not in the timed error counts.";
+      yield return $"Load rows/s counts only time inside each target's upsert calls: one writer, batches of {_options.Batch}, rows already in memory, the collection dropped and created fresh first. Engines that build or finish their index after the writes do it in a separate timed index step (the load's index seconds), and the run waits for it before searching.";
+      yield return "Index proof: each engine's own report of its index (indexState) is read after the load and again after the last pass. A target whose index was not ready after the load was still measured and carries a WARNING; an engine that reports nothing counts as not ready.";
+      yield return "Durability: each target's crash-safety setting as configured here (durability). Engines that do not force writes to disk on every commit load faster for that reason.";
+      yield return "Latency is client-side wall time around each search (network and driver included), one query at a time; at least 200 samples (small query sets are repeated).";
       yield return $"QPS: N workers searching back to back for {_options.Seconds} s per level; completed searches divided by elapsed time.";
       yield return $"Recall@{_options.Top}: share of the exact top {_options.Top} (brute force in memory) that the engine returned. A hit whose exact similarity ties the {_options.Top}th best (within 1e-5) also counts, because duplicate rows embed to identical vectors.";
       yield return "RAM of always-on servers (SQL Server, Qdrant) is the whole process, including every other database or collection it serves; for compose engines it is docker stats of the engine's containers. Disk is the table's reserved pages (SQL), the collection folder (Qdrant), or for other engines what the load added to the engine's data folder (engines that keep data in memory until a snapshot show almost nothing).";
+      yield return _options.Command == "run-all"
+         ? "Engines: run-all starts an engine that is down and stops it afterwards only if it was not running when the run began; an engine that was already running is left running."
+         : "Engines: this command starts and stops nothing; every engine had to be running already.";
    }
 
    /// <summary>

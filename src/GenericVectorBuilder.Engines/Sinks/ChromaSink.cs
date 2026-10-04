@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Text.Json;
@@ -23,11 +24,25 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// Quirk to know when reading benchmark numbers: Chroma indexes the document text and every
 /// metadata field by default (full-text and inverted indexes), which costs write time that the
 /// other engines do not pay.
+/// Readiness (<see cref="IIndexFinisher"/>): this Chroma build (1.4.4, single node, API v2) exposes
+/// no index status. The indexing_status endpoint exists but answers HTTP 500 "Method scout_logs
+/// is not implemented", and the collection object carries no indexed count. So <see cref="GetIndexStateAsync"/> says so in its detail and does the one thing
+/// that can be checked from outside: it compares the count endpoint with the number of vectors a
+/// vector search returns when asked for as many results as there are vectors, and holds the second
+/// to 99 percent of the first (an approximate graph can leave a few nodes unreachable, so asking
+/// for every vector does not always return every vector). Ready here means those two agree, not that
+/// Chroma confirmed a finished index, and IndexedVectors stays null because Chroma cannot say which
+/// vectors sit in the HNSW graph. Chroma's index is updated inside the write call (the search found
+/// every vector straight after each upsert in testing), so <see cref="FinishLoadAsync"/> only
+/// confirms that.
 /// </summary>
-public sealed class ChromaSink : ISink, IEngineDescription, IDisposable
+public sealed class ChromaSink : ISink, IEngineDescription, IIndexFinisher, IDisposable
 {
    #region Data Members
 
+   private const int READY_WAIT_SECONDS = 120;
+   private const double WALK_MIN_FRACTION = 0.99;
+   private const int PROBE_TIMEOUT_SECONDS = 30;
    private const int UPSERT_BATCH = 500;
    private const int DELETE_BATCH = 1000;
    private const int MAX_ATTEMPTS = 3;
@@ -74,6 +89,57 @@ public sealed class ChromaSink : ISink, IEngineDescription, IDisposable
 
    /// <inheritdoc />
    public string ComposeFile => "chroma.compose.yaml";
+
+   /// <inheritdoc />
+   public string Durability =>
+      "SQLite rollback journal with its default synchronous=FULL under the data directory (chroma.compose.yaml sets IS_PERSISTENT=1 and PERSIST_DIRECTORY=/data and no sync setting): "
+      + "every write is committed to chroma.sqlite3 with fsync of the journal, the directory and the database file before the call returns (strace: 15 database fsyncs and 38 journal fsyncs "
+      + "for one create, four 500-vector upserts and one delete), and the HNSW files are written every sync_threshold=1000 vectors and rebuilt from the SQLite log after a crash; "
+      + "measured with kill -9 and a restart: all 50, 300 and 2,000 vectors were still stored and searchable";
+
+   /// <inheritdoc />
+   public async Task<string> FinishLoadAsync( string collection, CancellationToken ct )
+   {
+      var clock = Stopwatch.StartNew();
+      int pauseMs = 500;
+      while( true )
+      {
+         IndexState state = await GetIndexStateAsync( collection, ct );
+         if( state.Ready )
+         {
+            return $"Chroma has no index build to wait for and exposes no index status; checked in {clock.Elapsed.TotalSeconds:F1} s: {state.Detail}";
+         }
+
+         if( clock.Elapsed.TotalSeconds > READY_WAIT_SECONDS )
+         {
+            throw new InvalidOperationException( $"The Chroma index for {collection} was not ready after {READY_WAIT_SECONDS} seconds: {state.Detail}" );
+         }
+
+         await Task.Delay( pauseMs, ct );
+         pauseMs = Math.Min( pauseMs * 2, 5000 );
+      }
+   }
+
+   /// <inheritdoc />
+   public async Task<IndexState> GetIndexStateAsync( string collection, CancellationToken ct )
+   {
+      string name = CollectionName( collection );
+      using( JsonDocument? existing = await GetCollectionAsync( name, ct ) )
+      {
+         if( existing == null )
+         {
+            return new IndexState( false, null, null, $"not ready: Chroma has no collection {name}" );
+         }
+      }
+
+      long total = await CountAsync( collection, ct );
+      string status = await IndexingStatusAsync( collection, ct );
+      long returned = await CountSearchResultsAsync( collection, total, ct );
+      string facts = $"Chroma exposes no index status (indexing_status endpoint: {status}), so indexed vectors are not reported and ready only means the two counts agree to within 1 percent: "
+         + $"count endpoint {total}, a vector search asking for {total} results returned {returned}";
+      bool ready = returned >= Math.Ceiling( total * WALK_MIN_FRACTION );
+      return new IndexState( ready, null, total, ready ? facts : $"not ready: a vector search returned only {returned} of the {total} counted vectors ({facts})" );
+   }
 
    /// <inheritdoc />
    public async Task<bool> EnsureCollectionAsync( string collection, int dimension, CancellationToken ct )
@@ -184,6 +250,77 @@ public sealed class ChromaSink : ISink, IEngineDescription, IDisposable
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// Asks the indexing_status endpoint and returns what it said, word for word (cut short). A
+   /// single request with its own timeout and no retry: the answer on this build is an error, and
+   /// retrying a "not implemented" only wastes time.
+   /// </summary>
+   /// <param name="collection">Collection name.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>"HTTP status and body", for the report.</returns>
+   private async Task<string> IndexingStatusAsync( string collection, CancellationToken ct )
+   {
+      string id = await CollectionIdAsync( collection, ct );
+      using var limit = CancellationTokenSource.CreateLinkedTokenSource( ct );
+      limit.CancelAfter( TimeSpan.FromSeconds( PROBE_TIMEOUT_SECONDS ) );
+      try
+      {
+         using HttpResponseMessage response = await _http.GetAsync( $"{CollectionsPath()}/{id}/indexing_status", limit.Token );
+         string text = await response.Content.ReadAsStringAsync( limit.Token );
+         return $"HTTP {(int)response.StatusCode} {Shorten( text )}";
+      }
+      catch( OperationCanceledException ) when( !ct.IsCancellationRequested )
+      {
+         throw new TimeoutException( $"Chroma did not answer the indexing_status request within {PROBE_TIMEOUT_SECONDS} seconds." );
+      }
+   }
+
+   /// <summary>
+   /// Asks Chroma for as many nearest neighbours as there are vectors and counts what comes back.
+   /// The query vector is the embedding of one stored record. Chroma answers from the vector
+   /// index, so a vector the index has not taken up yet would be missing from the answer.
+   /// </summary>
+   /// <param name="collection">Collection name.</param>
+   /// <param name="total">Vectors counted by the count endpoint.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>How many ids the search returned.</returns>
+   private async Task<long> CountSearchResultsAsync( string collection, long total, CancellationToken ct )
+   {
+      if( total == 0 )
+      {
+         return 0;
+      }
+
+      string id = await CollectionIdAsync( collection, ct );
+      byte[] sampleBody = JsonSerializer.SerializeToUtf8Bytes( new { limit = 1, offset = 0, include = new[] { "embeddings" } } );
+      ( _, string sampleText ) = await SendAsync( HttpMethod.Post, $"{CollectionsPath()}/{id}/get", sampleBody, ct );
+      using JsonDocument sample = JsonDocument.Parse( sampleText );
+      JsonElement embeddings = sample.RootElement.GetProperty( "embeddings" );
+      if( embeddings.GetArrayLength() == 0 )
+      {
+         return 0;
+      }
+
+      float[] vector = embeddings[0].EnumerateArray().Select( v => v.GetSingle() ).ToArray();
+      using var stream = new MemoryStream();
+      using( var writer = new Utf8JsonWriter( stream ) )
+      {
+         writer.WriteStartObject();
+         writer.WriteStartArray( "query_embeddings" );
+         WriteVector( writer, vector );
+         writer.WriteEndArray();
+         writer.WriteNumber( "n_results", total );
+         writer.WriteStartArray( "include" );
+         writer.WriteStringValue( "distances" );
+         writer.WriteEndArray();
+         writer.WriteEndObject();
+      }
+
+      ( _, string text ) = await SendAsync( HttpMethod.Post, $"{CollectionsPath()}/{id}/query", stream.ToArray(), ct );
+      using JsonDocument result = JsonDocument.Parse( text );
+      return result.RootElement.GetProperty( "ids" )[0].GetArrayLength();
+   }
 
    /// <summary>
    /// Builds the JSON body of one upsert call: ids, embeddings, documents (chunk text) and metadata.

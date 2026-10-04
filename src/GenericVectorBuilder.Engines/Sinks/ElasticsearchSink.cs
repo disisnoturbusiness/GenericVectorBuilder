@@ -23,8 +23,13 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// Exact search (<see cref="IExactSearchSink"/>): a script_score query that computes
 /// cosineSimilarity against every document, so it scans the whole index.
 /// Counting refreshes first, because Elasticsearch makes new documents searchable only after a refresh.
+/// Index step (<see cref="IIndexFinisher"/>): after the writes return, <see cref="FinishLoadAsync"/> refreshes,
+/// force merges to one segment and waits until the engine's statistics show that segment's HNSW graph
+/// covering every vector. Why: Lucene builds one graph per segment and none at all for a segment under
+/// 1,043 vectors (at 1,024 dimensions, measured), so without the merge a bulk load is mostly scanned, not graph-searched. The full
+/// reasoning, and what each state means, is in <see cref="ElasticsearchIndexReadiness"/>.
 /// </summary>
-public sealed class ElasticsearchSink : ISink, IExactSearchSink, IEngineDescription, IDisposable
+public sealed class ElasticsearchSink : ISink, IExactSearchSink, IEngineDescription, IIndexFinisher, IDisposable
 {
    #region Data Members
 
@@ -38,6 +43,7 @@ public sealed class ElasticsearchSink : ISink, IExactSearchSink, IEngineDescript
 
    private readonly ElasticsearchSinkOptions _options;
    private readonly ElasticsearchRest _rest;
+   private readonly ElasticsearchIndexReadiness _readiness;
 
    #endregion Data Members
 
@@ -59,6 +65,7 @@ public sealed class ElasticsearchSink : ISink, IExactSearchSink, IEngineDescript
    {
       _options = options;
       _rest = new ElasticsearchRest( options.BaseUrl, options.EffectiveTimeout );
+      _readiness = new ElasticsearchIndexReadiness( _rest, options );
    }
 
    #endregion Constructor
@@ -73,10 +80,15 @@ public sealed class ElasticsearchSink : ISink, IExactSearchSink, IEngineDescript
 
    /// <inheritdoc />
    public string IndexDescription =>
-      $"HNSW float32, no quantization, m={HNSW_M}, ef_construction={HNSW_EF_CONSTRUCTION}, cosine; search k=top, num_candidates={_options.NumCandidates}; 1 shard, 0 replicas";
+      $"HNSW float32, no quantization, m={HNSW_M}, ef_construction={HNSW_EF_CONSTRUCTION}, cosine; search k=top, num_candidates={_options.NumCandidates}; 1 shard, 0 replicas; force-merged to one segment after the load (at 1,024 dimensions a segment under 1,043 vectors gets no graph)";
 
    /// <inheritdoc />
    public string ComposeFile => "elasticsearch.compose.yaml";
+
+   /// <inheritdoc />
+   public string Durability =>
+      "Every acknowledged bulk request is fsynced to the translog before the answer: index.translog.durability=request, the Elasticsearch default, which neither this sink nor elasticsearch.compose.yaml overrides "
+      + "(ElasticsearchReadinessTests reads it back from the live index). By that setting a process crash or power loss loses no acknowledged write; this is read from the setting, not shown by pulling power. One node and no replicas, so a lost disk loses the data.";
 
    /// <inheritdoc />
    public async Task<bool> EnsureCollectionAsync( string collection, int dimension, CancellationToken ct )
@@ -170,6 +182,18 @@ public sealed class ElasticsearchSink : ISink, IExactSearchSink, IEngineDescript
    public async Task DropCollectionAsync( string collection, CancellationToken ct )
    {
       using JsonDocument? answer = await _rest.SendJsonAsync( HttpMethod.Delete, IndexName( collection ), null, true, ct );
+   }
+
+   /// <inheritdoc />
+   public Task<string> FinishLoadAsync( string collection, CancellationToken ct )
+   {
+      return _readiness.FinishAsync( IndexName( collection ), ct );
+   }
+
+   /// <inheritdoc />
+   public Task<IndexState> GetIndexStateAsync( string collection, CancellationToken ct )
+   {
+      return _readiness.ReadStateAsync( IndexName( collection ), ct );
    }
 
    #endregion Public Methods

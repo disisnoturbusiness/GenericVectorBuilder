@@ -14,11 +14,21 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// <param name="FeedConcurrency">How many documents are in flight at once while writing. Vespa takes one
 /// document per request, so speed comes from many requests sharing a few HTTP/2 connections.</param>
 /// <param name="Timeout">Time limit for one HTTP call.</param>
+/// <param name="FinishTimeout">Time limit for the whole index step after a load (waiting until every fed
+/// document is searchable and the HNSW index returns all of them). Why a limit of its own: it must end with
+/// a plain failure message instead of waiting forever.</param>
+/// <param name="Progress">Receives a line about every ten seconds while the index step runs; when null
+/// the lines go to standard error. Why: a silent wait of minutes looks like a hang.</param>
 public sealed record VespaSinkOptions( string QueryUrl = "http://127.0.0.1:8090", string ConfigUrl = "http://127.0.0.1:19071", int EfSearch = 100,
-   int FeedConcurrency = 64, TimeSpan? Timeout = null )
+   int FeedConcurrency = 64, TimeSpan? Timeout = null, TimeSpan? FinishTimeout = null, Action<string>? Progress = null )
 {
    /// <summary>
    /// The time limit to use: the given one, or five minutes.
    /// </summary>
    public TimeSpan EffectiveTimeout => Timeout ?? TimeSpan.FromMinutes( 5 );
+
+   /// <summary>
+   /// The index step time limit to use: the given one, or ten minutes.
+   /// </summary>
+   public TimeSpan EffectiveFinishTimeout => FinishTimeout ?? TimeSpan.FromMinutes( 10 );
 }

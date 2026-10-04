@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -39,11 +40,20 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// benchmark should not run two Oracle writers at once.
 /// Why <see cref="RefreshIndexAsync"/> exists: Oracle merges new rows into the HNSW graph in the
 /// background and in steps, and searches scan the not yet merged rows exactly, so a fresh bulk load
-/// searches slowly until the graph is rebuilt.
+/// searches slowly until the graph is rebuilt. Measured 2026-10-04 on this box: 2,000 vectors loaded
+/// into a table whose HNSW index was created empty left the graph at 0 vectors
+/// (V$VECTOR_INDEX.NUM_VECTORS 0, V$VECTOR_CHANGE_LOG_PARTITION.NUM_INSERTS 2,000) and the plan of
+/// the default search still said VECTOR INDEX HNSW SCAN, so the plan alone proves nothing. A rebuild
+/// took 5 s and left the graph at 2,000 with an empty change log.
+/// Why <see cref="FinishLoadAsync"/> rebuilds and then reads those views: "Ready" needs four things
+/// from Oracle itself. The graph holds every row (V$VECTOR_INDEX.NUM_VECTORS equals the table's
+/// COUNT(*)), no inserts or deletes wait in the change log, the index is VALID in USER_INDEXES, and
+/// EXPLAIN PLAN of the default search shows VECTOR INDEX HNSW SCAN. The V$ views need a login the
+/// application user does not have, see <see cref="OracleSinkOptions.EvidenceUser"/>.
 /// Quirk: Oracle stores an empty string as NULL, so an empty origin or chunk text comes back as
 /// an empty string only because this sink maps NULL back to "".
 /// </summary>
-public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription
+public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription, IIndexFinisher
 {
    #region Data Members
 
@@ -53,14 +63,19 @@ public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription
    private const int MAX_INLINE_TEXT_BYTES = 32000;
    private const int MAX_KEY_BYTES = 4000;
    private const int NO_SUCH_TABLE = 942;
+   private const int COMMAND_SECONDS = 300;
+   private const int STEADY_READS = 2;
    private const string TABLE_PREFIX = "gvb_";
    private static readonly string[] LOCK_CONFLICT_CODES = { "ORA-00054", "ORA-00060" };
    private static readonly Regex SAFE_NAME = new( "^[a-z0-9_]+$", RegexOptions.Compiled );
    private static readonly Regex DIMENSION_PATTERN = new( @"^VECTOR\(\s*(\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase );
    private static readonly SemaphoreSlim WRITE_GATE = new( 1, 1 );
+   private static readonly TimeSpan POLL_INTERVAL = TimeSpan.FromSeconds( 1 );
+   private static readonly TimeSpan PROGRESS_INTERVAL = TimeSpan.FromSeconds( 15 );
 
    private readonly OracleSinkOptions _options;
    private readonly string _connectionString;
+   private readonly string _evidenceConnectionString;
 
    #endregion Data Members
 
@@ -88,6 +103,15 @@ public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription
          DataSource = $"{options.Host}:{options.Port}/{options.ServiceName}",
          ConnectionTimeout = 30,
       }.ConnectionString;
+      _evidenceConnectionString = string.IsNullOrEmpty( options.EvidenceUser )
+         ? _connectionString
+         : new OracleConnectionStringBuilder
+         {
+            UserID = options.EvidenceUser,
+            Password = options.EvidencePassword ?? string.Empty,
+            DataSource = $"{options.Host}:{options.Port}/{options.ServiceName}",
+            ConnectionTimeout = 30,
+         }.ConnectionString;
    }
 
    #endregion Constructor
@@ -106,6 +130,20 @@ public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription
 
    /// <inheritdoc />
    public string ComposeFile => "oracle.compose.yaml";
+
+   /// <inheritdoc />
+   public string Durability =>
+      "Committed rows survive a crash or power loss. The sink uses a plain COMMIT and commit_logging, commit_wait and commit_write are unset in the database, so every commit "
+      + "waits for its redo to be written. Measured 2026-10-04: 50 separate client commits raised V$SYSSTAT 'redo synch writes' by 55 (the 50 commits plus the CREATE and DROP "
+      + "of the probe table), and the log writer and the datafile writer hold their files open with O_DSYNC (open flags 02110002, filesystemio_options none). The database "
+      + "runs NOARCHIVELOG (V$DATABASE.LOG_MODE), so redo serves crash recovery only and there is no point-in-time restore. The HNSW graph lives in the 768 MB vector memory "
+      + "pool (oracle-init/01-vector-memory.sh) and is not the durable copy; the table is.";
+
+   /// <summary>
+   /// Optional receiver for progress lines while <see cref="FinishLoadAsync"/> works (one line
+   /// every 15 seconds). Why: the graph rebuild can take minutes and must show it is moving.
+   /// </summary>
+   public Action<string>? Progress { get; set; }
 
    /// <inheritdoc />
    public async Task<bool> EnsureCollectionAsync( string collection, int dimension, CancellationToken ct )
@@ -155,7 +193,7 @@ public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription
    public async Task<long> CountAsync( string collection, CancellationToken ct )
    {
       await using OracleConnection connection = await OpenAsync( ct );
-      await using OracleCommand command = connection.CreateCommand();
+      await using OracleCommand command = NewCommand( connection );
       command.CommandText = $"SELECT COUNT(*) FROM {TableName( collection )}";
       return Convert.ToInt64( await command.ExecuteScalarAsync( ct ) );
    }
@@ -189,8 +227,66 @@ public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription
       await WithRetryAsync( () => GatedAsync( async () =>
       {
          await using OracleConnection connection = await OpenAsync( ct );
-         await ExecuteAsync( connection, $"BEGIN DBMS_VECTOR.REBUILD_INDEX( '{index}' ); END;", ct );
+         await ExecuteAsync( connection, $"BEGIN DBMS_VECTOR.REBUILD_INDEX( '{index}' ); END;", ct, _options.IndexWaitMinutes * 60 );
       }, ct ), ct );
+   }
+
+   /// <summary>
+   /// Rebuilds the HNSW graph so it holds every committed row, then reads Oracle's own views until
+   /// they agree (see the class remarks for the four readings). Skips the rebuild when the views
+   /// already say the graph is current. Throws a plain message when the views cannot be read (at
+   /// once, before any rebuild) or when the state is not ready within
+   /// <see cref="OracleSinkOptions.IndexWaitMinutes"/>.
+   /// </summary>
+   /// <param name="collection">Collection name as passed to the sink.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The engine's own evidence, plus how long the rebuild took.</returns>
+   public async Task<string> FinishLoadAsync( string collection, CancellationToken ct )
+   {
+      var clock = Stopwatch.StartNew();
+      string table = TableName( collection );
+      Readout readout = await ReadStateAsync( collection, ct );
+      if( readout.EvidenceMissing )
+      {
+         throw new InvalidOperationException( readout.State.Detail );
+      }
+
+      string action = "graph already current, no rebuild needed";
+      if( !readout.State.Ready )
+      {
+         using var limit = CancellationTokenSource.CreateLinkedTokenSource( ct );
+         limit.CancelAfter( TimeSpan.FromMinutes( _options.IndexWaitMinutes ) );
+         try
+         {
+            await RebuildWithHeartbeatAsync( collection, limit.Token );
+         }
+         catch( OperationCanceledException ) when( !ct.IsCancellationRequested )
+         {
+            throw new InvalidOperationException( $"Oracle did not finish rebuilding the HNSW graph of {table} within {_options.IndexWaitMinutes} minutes. Last reading before the rebuild: {readout.State.Detail}" );
+         }
+
+         action = $"graph rebuilt in {clock.Elapsed.TotalSeconds:F1} s";
+         readout = await WaitUntilReadyAsync( collection, limit.Token, ct );
+      }
+
+      return readout.State.Ready
+         ? $"{readout.State.Detail}; {action}"
+         : throw new InvalidOperationException( $"Oracle did not finish indexing {table} within {_options.IndexWaitMinutes} minutes, or its views still say the graph is not ready after the rebuild. Last reading: {readout.State.Detail}" );
+   }
+
+   /// <summary>
+   /// Reads the index state once from Oracle's own views and plan, without changing anything.
+   /// IndexedVectors is V$VECTOR_INDEX.NUM_VECTORS (what the in-memory graph holds) and
+   /// TotalVectors is the table's COUNT(*). When the views cannot be read, Ready is false and
+   /// Detail says why.
+   /// </summary>
+   /// <param name="collection">Collection name as passed to the sink.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The engine's account of its index.</returns>
+   public async Task<IndexState> GetIndexStateAsync( string collection, CancellationToken ct )
+   {
+      Readout readout = await ReadStateAsync( collection, ct );
+      return readout.State;
    }
 
    /// <inheritdoc />
@@ -216,6 +312,245 @@ public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription
    #region Private Methods
 
    /// <summary>
+   /// What one reading found.
+   /// </summary>
+   /// <param name="State">The engine's account of its index.</param>
+   /// <param name="EvidenceMissing">True when the V$ views could not be read, which waiting cannot fix.</param>
+   private sealed record Readout( IndexState State, bool EvidenceMissing );
+
+   /// <summary>
+   /// The index's row in V$VECTOR_INDEX plus the changes still waiting in its change log.
+   /// </summary>
+   /// <param name="Found">False when Oracle lists no such vector index.</param>
+   /// <param name="Vectors">Vectors in the in-memory HNSW graph.</param>
+   /// <param name="UsedCount">How many queries have used the index.</param>
+   /// <param name="PendingInserts">Inserted rows not yet merged into the graph.</param>
+   /// <param name="PendingDeletes">Deleted rows not yet removed from the graph.</param>
+   private sealed record IndexViews( bool Found, long Vectors, long UsedCount, long PendingInserts, long PendingDeletes );
+
+   /// <summary>
+   /// Runs the graph rebuild while a heartbeat reports "still working" every fifteen seconds, so a
+   /// long blocking call shows it is moving.
+   /// </summary>
+   /// <param name="collection">Collection name.</param>
+   /// <param name="ct">Cancellation.</param>
+   private async Task RebuildWithHeartbeatAsync( string collection, CancellationToken ct )
+   {
+      using var heartbeat = CancellationTokenSource.CreateLinkedTokenSource( ct );
+      Task beat = HeartbeatAsync( $"Oracle {TableName( collection )}: rebuilding the HNSW graph", heartbeat.Token );
+      try
+      {
+         await RefreshIndexAsync( collection, ct );
+      }
+      finally
+      {
+         await heartbeat.CancelAsync();
+         await beat;
+      }
+   }
+
+   /// <summary>
+   /// Reports progress every fifteen seconds until stopped.
+   /// </summary>
+   /// <param name="what">What is being waited for.</param>
+   /// <param name="stop">Cancelled by the caller when the work ends.</param>
+   private async Task HeartbeatAsync( string what, CancellationToken stop )
+   {
+      var clock = Stopwatch.StartNew();
+      try
+      {
+         while( true )
+         {
+            await Task.Delay( PROGRESS_INTERVAL, stop );
+            Progress?.Invoke( $"{what}, {clock.Elapsed.TotalSeconds:F0} s so far" );
+         }
+      }
+      catch( OperationCanceledException )
+      {
+         // Cancellation is how the caller ends the heartbeat; nothing failed.
+      }
+   }
+
+   /// <summary>
+   /// Polls the state until it is ready on <see cref="STEADY_READS"/> reads in a row or the
+   /// deadline passes.
+   /// </summary>
+   /// <param name="collection">Collection name.</param>
+   /// <param name="deadline">Token that is cancelled when the wait runs out of time.</param>
+   /// <param name="ct">The caller's own cancellation, to tell a deadline from a cancel.</param>
+   /// <returns>The last reading; the caller checks its Ready flag. Throws at once when the views cannot be read.</returns>
+   private async Task<Readout> WaitUntilReadyAsync( string collection, CancellationToken deadline, CancellationToken ct )
+   {
+      Readout last = new( new IndexState( false, null, null, "no reading taken yet" ), EvidenceMissing: false );
+      int steady = 0;
+      DateTime nextProgress = DateTime.UtcNow + PROGRESS_INTERVAL;
+      try
+      {
+         while( true )
+         {
+            last = await ReadStateAsync( collection, deadline );
+            if( last.EvidenceMissing )
+            {
+               throw new InvalidOperationException( last.State.Detail );
+            }
+
+            steady = last.State.Ready ? steady + 1 : 0;
+            if( steady >= STEADY_READS )
+            {
+               return last;
+            }
+
+            if( DateTime.UtcNow >= nextProgress )
+            {
+               Progress?.Invoke( $"Oracle {TableName( collection )}: waiting for the index to settle. {last.State.Detail}" );
+               nextProgress = DateTime.UtcNow + PROGRESS_INTERVAL;
+            }
+
+            await Task.Delay( POLL_INTERVAL, deadline );
+         }
+      }
+      catch( OperationCanceledException ) when( !ct.IsCancellationRequested )
+      {
+         return last with { State = last.State with { Ready = false } };
+      }
+   }
+
+   /// <summary>
+   /// Reads the four kinds of evidence (graph and change log views, catalog status, row count,
+   /// query plan) and decides whether the default search now uses a finished graph.
+   /// </summary>
+   /// <param name="collection">Collection name.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The reading.</returns>
+   private async Task<Readout> ReadStateAsync( string collection, CancellationToken ct )
+   {
+      string table = TableName( collection );
+      string index = IndexName( table ).ToUpperInvariant();
+      long stored = await CountAsync( collection, ct );
+      IndexViews views;
+      try
+      {
+         views = await ReadViewsAsync( _options.User.ToUpperInvariant(), index, ct );
+      }
+      catch( OracleException ex )
+      {
+         string login = string.IsNullOrEmpty( _options.EvidenceUser ) ? _options.User : _options.EvidenceUser;
+         return new Readout( new IndexState( false, null, stored,
+            $"cannot read the V$VECTOR_* views as {login}: {ex.Message.Split( '\n' )[0]}. Set OracleSinkOptions.EvidenceUser and EvidencePassword, or grant SELECT on V_$VECTOR_INDEX and V_$VECTOR_CHANGE_LOG_PARTITION to the application login" ), EvidenceMissing: true );
+      }
+
+      if( !views.Found )
+      {
+         return new Readout( new IndexState( false, null, stored, $"Oracle lists no vector index {index} in V$VECTOR_INDEX (not created, or its graph is not in memory)" ), EvidenceMissing: false );
+      }
+
+      string status = await CatalogStatusAsync( table, index, ct );
+      string plan = await PlanAsync( table, ct );
+      bool ready = views.Vectors == stored && views.PendingInserts == 0 && views.PendingDeletes == 0 && status == "VALID" && plan.Contains( "HNSW", StringComparison.Ordinal );
+      string detail = $"HNSW graph holds {views.Vectors} of {stored} rows, change log waiting: {views.PendingInserts} inserts and {views.PendingDeletes} deletes, "
+         + $"USER_INDEXES status {status}, plan of the default search: {plan}, index used by {views.UsedCount} queries so far";
+      return new Readout( new IndexState( ready, views.Vectors, stored, detail ), EvidenceMissing: false );
+   }
+
+   /// <summary>
+   /// Reads V$VECTOR_INDEX and V$VECTOR_CHANGE_LOG_PARTITION for one index with the evidence login.
+   /// </summary>
+   /// <param name="owner">Index owner, upper case.</param>
+   /// <param name="index">Index name, upper case.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The index's counts.</returns>
+   private async Task<IndexViews> ReadViewsAsync( string owner, string index, CancellationToken ct )
+   {
+      await using var connection = new OracleConnection( _evidenceConnectionString );
+      await connection.OpenAsync( ct );
+      long objn;
+      long vectors;
+      long used;
+      await using( OracleCommand command = NewCommand( connection ) )
+      {
+         command.BindByName = true;
+         command.CommandText = "SELECT index_objn, NVL( num_vectors, 0 ), NVL( index_used_count, 0 ) FROM v$vector_index WHERE owner = :owner AND index_name = :index_name";
+         command.Parameters.Add( new OracleParameter( "owner", OracleDbType.Varchar2 ) { Value = owner } );
+         command.Parameters.Add( new OracleParameter( "index_name", OracleDbType.Varchar2 ) { Value = index } );
+         await using OracleDataReader reader = await command.ExecuteReaderAsync( ct );
+         if( !await reader.ReadAsync( ct ) )
+         {
+            return new IndexViews( false, 0, 0, 0, 0 );
+         }
+
+         objn = Convert.ToInt64( reader.GetValue( 0 ) );
+         vectors = Convert.ToInt64( reader.GetValue( 1 ) );
+         used = Convert.ToInt64( reader.GetValue( 2 ) );
+      }
+
+      await using OracleCommand changes = NewCommand( connection );
+      changes.BindByName = true;
+      changes.CommandText = "SELECT NVL( SUM( NVL( num_inserts, 0 ) ), 0 ), NVL( SUM( NVL( num_deletes, 0 ) ), 0 ) FROM v$vector_change_log_partition WHERE index_objn = :objn";
+      changes.Parameters.Add( new OracleParameter( "objn", OracleDbType.Int64 ) { Value = objn } );
+      await using OracleDataReader changeReader = await changes.ExecuteReaderAsync( ct );
+      await changeReader.ReadAsync( ct );
+      return new IndexViews( true, vectors, used, Convert.ToInt64( changeReader.GetValue( 0 ) ), Convert.ToInt64( changeReader.GetValue( 1 ) ) );
+   }
+
+   /// <summary>
+   /// Reads the catalog status of the vector index with the application login (USER_INDEXES).
+   /// </summary>
+   /// <param name="table">Table name.</param>
+   /// <param name="index">Index name, upper case.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The status, e.g. VALID, or MISSING when the catalog has no such index.</returns>
+   private async Task<string> CatalogStatusAsync( string table, string index, CancellationToken ct )
+   {
+      await using OracleConnection connection = await OpenAsync( ct );
+      await using OracleCommand command = NewCommand( connection );
+      command.BindByName = true;
+      command.CommandText = "SELECT status FROM user_indexes WHERE table_name = :table_name AND index_name = :index_name";
+      command.Parameters.Add( new OracleParameter( "table_name", OracleDbType.Varchar2 ) { Value = table.ToUpperInvariant() } );
+      command.Parameters.Add( new OracleParameter( "index_name", OracleDbType.Varchar2 ) { Value = index } );
+      object? status = await command.ExecuteScalarAsync( ct );
+      return status is null or DBNull ? "MISSING" : Convert.ToString( status ) ?? "MISSING";
+   }
+
+   /// <summary>
+   /// Asks Oracle how it would run the default search (EXPLAIN PLAN, nothing is executed) and
+   /// returns the plan's scan and table access operations on one line, e.g. "VECTOR INDEX HNSW SCAN
+   /// > TABLE ACCESS BY INDEX ROWID" (a full scan reads "TABLE ACCESS FULL").
+   /// </summary>
+   /// <param name="table">Table name.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The operations, innermost first, separated by " > ".</returns>
+   private async Task<string> PlanAsync( string table, CancellationToken ct )
+   {
+      await using OracleConnection connection = await OpenAsync( ct );
+      int dimension = await ExistingDimensionAsync( connection, table, ct ) ?? throw new InvalidOperationException( $"Oracle table {table} does not exist." );
+      string statement = "gvbr" + Guid.NewGuid().ToString( "N" )[..16];
+      await using( OracleCommand explain = NewCommand( connection ) )
+      {
+         explain.BindByName = true;
+         explain.CommandText = $"EXPLAIN PLAN SET STATEMENT_ID = '{statement}' FOR SELECT chunk_id, VECTOR_DISTANCE( embedding, :query, COSINE ) AS distance FROM {table} "
+            + $"ORDER BY distance FETCH APPROX FIRST 10 ROWS ONLY WITH TARGET ACCURACY PARAMETERS ( EFSEARCH {Math.Max( _options.HnswEfSearch, 10 )} )";
+         explain.Parameters.Add( new OracleParameter( "query", OracleDbType.Vector ) { Value = new float[dimension] } );
+         await explain.ExecuteNonQueryAsync( ct );
+      }
+
+      var operations = new List<string>();
+      await using( OracleCommand read = NewCommand( connection ) )
+      {
+         read.BindByName = true;
+         read.CommandText = "SELECT operation || CASE WHEN options IS NULL THEN '' ELSE ' ' || options END FROM plan_table WHERE statement_id = :statement_id ORDER BY id DESC";
+         read.Parameters.Add( new OracleParameter( "statement_id", OracleDbType.Varchar2 ) { Value = statement } );
+         await using OracleDataReader reader = await read.ExecuteReaderAsync( ct );
+         while( await reader.ReadAsync( ct ) )
+         {
+            operations.Add( reader.GetString( 0 ) );
+         }
+      }
+
+      await ExecuteAsync( connection, $"DELETE FROM plan_table WHERE statement_id = '{statement}'", ct );
+      return string.Join( " > ", operations.Where( o => o.Contains( "SCAN", StringComparison.Ordinal ) || o.Contains( "TABLE ACCESS", StringComparison.Ordinal ) ) );
+   }
+
+   /// <summary>
    /// Opens a connection from the driver's pool. Failing to connect throws here, on the first
    /// call that needs the database.
    /// </summary>
@@ -234,11 +569,26 @@ public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription
    /// <param name="connection">Open connection.</param>
    /// <param name="sql">The statement.</param>
    /// <param name="ct">Cancellation.</param>
-   private static async Task ExecuteAsync( OracleConnection connection, string sql, CancellationToken ct )
+   /// <param name="timeoutSeconds">Longest the statement may run.</param>
+   private static async Task ExecuteAsync( OracleConnection connection, string sql, CancellationToken ct, int timeoutSeconds = COMMAND_SECONDS )
    {
-      await using OracleCommand command = connection.CreateCommand();
+      await using OracleCommand command = NewCommand( connection, timeoutSeconds );
       command.CommandText = sql;
       await command.ExecuteNonQueryAsync( ct );
+   }
+
+   /// <summary>
+   /// Creates a command with a time limit. Why: the driver's default is no limit at all, and a
+   /// hung statement would otherwise hold the run for ever.
+   /// </summary>
+   /// <param name="connection">Open connection.</param>
+   /// <param name="timeoutSeconds">Longest the command may run.</param>
+   /// <returns>The command; the caller disposes it.</returns>
+   private static OracleCommand NewCommand( OracleConnection connection, int timeoutSeconds = COMMAND_SECONDS )
+   {
+      OracleCommand command = connection.CreateCommand();
+      command.CommandTimeout = timeoutSeconds;
+      return command;
    }
 
    /// <summary>
@@ -255,7 +605,7 @@ public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription
    private async Task<IReadOnlyList<SearchHit>> QueryAsync( string collection, float[] vector, int top, string fetchClause, CancellationToken ct )
    {
       await using OracleConnection connection = await OpenAsync( ct );
-      await using OracleCommand command = connection.CreateCommand();
+      await using OracleCommand command = NewCommand( connection );
       command.BindByName = true;
       command.InitialLOBFetchSize = -1;
       command.CommandText =
@@ -286,7 +636,7 @@ public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription
       await using OracleConnection connection = await OpenAsync( ct );
       await using OracleTransaction transaction = connection.BeginTransaction();
       await DeleteRowsAsync( connection, table, batch.Select( r => r.Chunk.ChunkId ).ToArray(), ct );
-      await using OracleCommand insert = connection.CreateCommand();
+      await using OracleCommand insert = NewCommand( connection );
       insert.BindByName = true;
       insert.ArrayBindCount = batch.Length;
       insert.CommandText =
@@ -379,7 +729,7 @@ public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription
    /// <param name="ct">Cancellation.</param>
    private static async Task DeleteRowsAsync( OracleConnection connection, string table, Guid[] ids, CancellationToken ct )
    {
-      await using OracleCommand delete = connection.CreateCommand();
+      await using OracleCommand delete = NewCommand( connection );
       delete.BindByName = true;
       delete.ArrayBindCount = ids.Length;
       delete.CommandText = $"DELETE FROM {table} WHERE chunk_id = :id";
@@ -397,7 +747,7 @@ public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription
    /// <returns>The dimension, or null.</returns>
    private static async Task<int?> ExistingDimensionAsync( OracleConnection connection, string table, CancellationToken ct )
    {
-      await using OracleCommand command = connection.CreateCommand();
+      await using OracleCommand command = NewCommand( connection );
       command.BindByName = true;
       command.CommandText = "SELECT column_name, vector_info FROM user_tab_columns WHERE table_name = :table_name";
       command.Parameters.Add( new OracleParameter( "table_name", OracleDbType.Varchar2 ) { Value = table.ToUpperInvariant() } );
@@ -428,7 +778,7 @@ public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription
    private async Task EnsureIndexAsync( OracleConnection connection, string table, CancellationToken ct )
    {
       string index = IndexName( table );
-      await using( OracleCommand check = connection.CreateCommand() )
+      await using( OracleCommand check = NewCommand( connection ) )
       {
          check.BindByName = true;
          check.CommandText = "SELECT COUNT(*) FROM user_indexes WHERE index_name = :index_name";

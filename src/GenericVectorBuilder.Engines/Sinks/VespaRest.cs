@@ -81,6 +81,18 @@ internal sealed class VespaRest : IDisposable
    }
 
    /// <summary>
+   /// Reads one schema file of the active application from the config server.
+   /// </summary>
+   /// <param name="schemaName">Schema (document type) name.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The schema text, or null when no such schema is deployed.</returns>
+   public async Task<string?> ReadSchemaAsync( string schemaName, CancellationToken ct )
+   {
+      byte[]? text = await SendAsync( _config, HttpMethod.Get, $"{CONVERGE_PATH}/content/schemas/{Uri.EscapeDataString( schemaName )}.sd", null, "application/json", true, ct );
+      return text == null ? null : System.Text.Encoding.UTF8.GetString( text );
+   }
+
+   /// <summary>
    /// Deploys an application package and waits until the node runs it.
    /// </summary>
    /// <param name="package">Zip file bytes.</param>

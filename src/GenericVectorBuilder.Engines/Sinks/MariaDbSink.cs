@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -64,11 +65,31 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// Why the server needs a big mhnsw_max_cache_size (4G in the compose file): the graph is read
 /// into a cache, and the 16M default holds only a few thousand 1024-dimension vectors, so a
 /// larger index is re-read from disk on every query.
+/// Readiness: the vector index is updated inside each INSERT's own transaction, so nothing is
+/// built after the writes return and <see cref="FinishLoadAsync"/> only confirms that
+/// (<see cref="GetIndexStateAsync"/>). The proof is the engine's own account: information_schema
+/// lists the VECTOR index, EXPLAIN of the default search names it as the key, and a search that
+/// asks for 1,000 rows must get nearly all of them back through the graph. Why that search: on a
+/// freshly loaded 2,000-vector table the first search for 1,000 rows returned 481 to 519 rows on
+/// all 13 loads measured, and for 600 to 1,001 rows 489 to 514 (2 loads per size); the same
+/// search run again returned every row, a pause of 5 seconds before the first search changed
+/// nothing, and searches for 10, 100, 300 or 2,000 rows (first on a load) did not show it. So the
+/// first poll of the readiness check fails and the second passes, and finishing takes about
+/// 0.6 s, almost all of it the pause between the two polls. A check that only asked for the
+/// default top 10 would never see this. Why there is no exact indexed count: MariaDB keeps the
+/// graph in a hidden InnoDB table (name#i#01) that information_schema does not list and that
+/// SELECT refuses ("doesn't exist"), so the engine offers no per-index row count to read. Why the
+/// walk is held to 90 percent and not 100: it asks an approximate graph search for rows, which is
+/// allowed to stop short of a perfect answer.
 /// </summary>
-public sealed class MariaDbSink : ISink, IExactSearchSink, IEngineDescription, IDisposable
+public sealed class MariaDbSink : ISink, IExactSearchSink, IEngineDescription, IIndexFinisher, IDisposable
 {
    #region Data Members
 
+   private const int READY_WAIT_SECONDS = 120;
+   private const int PROBE_TIMEOUT_SECONDS = 120;
+   private const int WALK_ROWS = 1000;
+   private const double WALK_MIN_FRACTION = 0.9;
    private const int DELETE_BATCH = 1000;
    private const int MAX_ATTEMPTS = 3;
    private const string INDEX_NAME = "vec_idx";
@@ -130,6 +151,62 @@ public sealed class MariaDbSink : ISink, IExactSearchSink, IEngineDescription, I
 
    /// <inheritdoc />
    public string ComposeFile => "mariadb.compose.yaml";
+
+   /// <inheritdoc />
+   public string Durability =>
+      "innodb_flush_log_at_trx_commit=2 (mariadb.compose.yaml): the InnoDB redo log is written to the operating system at every commit but fsynced about once a second, "
+      + "so a crash of the mariadbd process loses nothing, while an operating-system crash or power cut can lose the last second of commits; innodb_doublewrite is on (default), "
+      + "the binary log is off, and the vector graph is an InnoDB table under the same log (settings read from the running server with SHOW VARIABLES; the crash behaviour is "
+      + "InnoDB's documented behaviour for this setting and was not tested, because gvb-mariadb is shared and stays up)";
+
+   /// <inheritdoc />
+   public async Task<string> FinishLoadAsync( string collection, CancellationToken ct )
+   {
+      var clock = Stopwatch.StartNew();
+      ( IndexState state, int polls, string firstProblem ) = await WaitUntilReadyAsync( collection, ct );
+      string earlier = polls > 1 ? $" (poll 1 of {polls} said: {firstProblem})" : string.Empty;
+      return $"VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after {polls} poll(s) in {clock.Elapsed.TotalSeconds:F1} s{earlier}: {state.Detail}";
+   }
+
+   /// <inheritdoc />
+   public async Task<IndexState> GetIndexStateAsync( string collection, CancellationToken ct )
+   {
+      await using MySqlConnection connection = await _dataSource.OpenConnectionAsync( ct );
+      long total = Convert.ToInt64( await ProbeScalarAsync( connection, $"SELECT COUNT(*) FROM {Table( collection )}", ct ), CultureInfo.InvariantCulture );
+      object? type = await ProbeScalarAsync( connection,
+         "SELECT INDEX_TYPE FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = @tbl AND INDEX_NAME = @idx", ct,
+         ( "@db", _options.Database ), ( "@tbl", TableName( collection ) ), ( "@idx", INDEX_NAME ) );
+      if( type is not string indexType || !string.Equals( indexType, "VECTOR", StringComparison.OrdinalIgnoreCase ) )
+      {
+         return new IndexState( false, null, total, $"not ready: information_schema.STATISTICS has no VECTOR index {INDEX_NAME} on {TableName( collection )}" );
+      }
+
+      if( total == 0 )
+      {
+         return new IndexState( true, 0, 0, $"information_schema lists VECTOR index {INDEX_NAME}; no vectors stored yet" );
+      }
+
+      byte[] probe = (byte[])( await ProbeScalarAsync( connection, $"SELECT embedding FROM {Table( collection )} LIMIT 1", ct ) )!;
+      string defaultKey = await ExplainKeyAsync( connection, $"SET STATEMENT mhnsw_ef_search = {_options.HnswEfSearch} FOR EXPLAIN " + SearchSql( collection, 10, string.Empty ), probe, ct );
+      int wanted = (int)Math.Min( total, WALK_ROWS );
+      string walkSql = $"SELECT chunk_id FROM {Table( collection )} ORDER BY VEC_DISTANCE_COSINE( embedding, @q ) LIMIT {wanted}";
+      string walkKey = await ExplainKeyAsync( connection, $"SET STATEMENT mhnsw_ef_search = {_options.HnswEfSearch} FOR EXPLAIN " + walkSql, probe, ct );
+      int walked = defaultKey == INDEX_NAME && walkKey == INDEX_NAME ? await WalkAsync( connection, walkSql, probe, ct ) : 0;
+      var problems = new List<string>();
+      if( defaultKey != INDEX_NAME )
+      {
+         problems.Add( $"EXPLAIN of the default search names key '{defaultKey}', not {INDEX_NAME}" );
+      }
+
+      if( walked < Math.Ceiling( wanted * WALK_MIN_FRACTION ) )
+      {
+         problems.Add( $"a search at mhnsw_ef_search {_options.HnswEfSearch} returned only {walked} of {wanted} requested rows through the index (EXPLAIN key '{walkKey}')" );
+      }
+
+      string facts = $"information_schema lists {INDEX_NAME} as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key {defaultKey}, a search at mhnsw_ef_search {_options.HnswEfSearch} "
+         + $"returned {walked} of {wanted} requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported";
+      return new IndexState( problems.Count == 0, null, total, problems.Count == 0 ? facts : $"not ready: {string.Join( "; ", problems )} ({facts})" );
+   }
 
    /// <inheritdoc />
    public async Task<bool> EnsureCollectionAsync( string collection, int dimension, CancellationToken ct )
@@ -205,6 +282,112 @@ public sealed class MariaDbSink : ISink, IExactSearchSink, IEngineDescription, I
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// Polls <see cref="GetIndexStateAsync"/> until the engine says the index is ready, with a
+   /// deadline. A synchronous index is ready at once, so the loop only matters if something
+   /// else (an ALTER TABLE, a rebuild) is still running.
+   /// </summary>
+   /// <param name="collection">Collection name.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The ready state, how many polls it took, and what the first poll said when it was not ready (empty otherwise).</returns>
+   /// <exception cref="InvalidOperationException">The index was not ready before the deadline.</exception>
+   private async Task<( IndexState State, int Polls, string FirstProblem )> WaitUntilReadyAsync( string collection, CancellationToken ct )
+   {
+      var clock = Stopwatch.StartNew();
+      int pauseMs = 500;
+      int polls = 0;
+      string firstProblem = string.Empty;
+      while( true )
+      {
+         IndexState state = await GetIndexStateAsync( collection, ct );
+         polls++;
+         if( state.Ready )
+         {
+            return ( state, polls, firstProblem );
+         }
+
+         if( polls == 1 )
+         {
+            firstProblem = state.Detail;
+         }
+
+         if( clock.Elapsed.TotalSeconds > READY_WAIT_SECONDS )
+         {
+            throw new InvalidOperationException( $"The MariaDB vector index for {collection} was not ready after {READY_WAIT_SECONDS} seconds: {state.Detail}" );
+         }
+
+         await Task.Delay( pauseMs, ct );
+         pauseMs = Math.Min( pauseMs * 2, 5000 );
+      }
+   }
+
+   /// <summary>
+   /// Runs one readiness query with its own short timeout (the connection default is an hour, which
+   /// suits a bulk load but not a status check) and returns its first value.
+   /// </summary>
+   /// <param name="connection">Open connection.</param>
+   /// <param name="sql">The statement.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <param name="parameters">Named parameters.</param>
+   /// <returns>The first column of the first row, or null when there is none.</returns>
+   private static async Task<object?> ProbeScalarAsync( MySqlConnection connection, string sql, CancellationToken ct, params (string Name, object Value)[] parameters )
+   {
+      await using MySqlCommand command = new( sql, connection ) { CommandTimeout = PROBE_TIMEOUT_SECONDS };
+      foreach( ( string name, object value ) in parameters )
+      {
+         command.Parameters.AddWithValue( name, value );
+      }
+
+      return await command.ExecuteScalarAsync( ct );
+   }
+
+   /// <summary>
+   /// Runs EXPLAIN for a nearest-neighbour statement and returns the index the optimizer chose.
+   /// </summary>
+   /// <param name="connection">Open connection.</param>
+   /// <param name="explainSql">The EXPLAIN statement (possibly inside SET STATEMENT), with parameter @q.</param>
+   /// <param name="probe">Query vector bytes.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The key column of the plan row, or "none" when no index is used.</returns>
+   private static async Task<string> ExplainKeyAsync( MySqlConnection connection, string explainSql, byte[] probe, CancellationToken ct )
+   {
+      await using MySqlCommand command = new( explainSql, connection ) { CommandTimeout = PROBE_TIMEOUT_SECONDS };
+      command.Parameters.AddWithValue( "@q", probe );
+      await using MySqlDataReader reader = await command.ExecuteReaderAsync( ct );
+      int key = reader.GetOrdinal( "key" );
+      while( await reader.ReadAsync( ct ) )
+      {
+         if( !reader.IsDBNull( key ) )
+         {
+            return reader.GetString( key );
+         }
+      }
+
+      return "none";
+   }
+
+   /// <summary>
+   /// Runs the index-driven search and counts the rows that come back.
+   /// </summary>
+   /// <param name="connection">Open connection.</param>
+   /// <param name="sql">The nearest-neighbour SELECT.</param>
+   /// <param name="probe">Query vector bytes.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>How many rows the search returned.</returns>
+   private async Task<int> WalkAsync( MySqlConnection connection, string sql, byte[] probe, CancellationToken ct )
+   {
+      await using MySqlCommand command = new( $"SET STATEMENT mhnsw_ef_search = {_options.HnswEfSearch} FOR {sql}", connection ) { CommandTimeout = PROBE_TIMEOUT_SECONDS };
+      command.Parameters.AddWithValue( "@q", probe );
+      await using MySqlDataReader reader = await command.ExecuteReaderAsync( ct );
+      int rows = 0;
+      while( await reader.ReadAsync( ct ) )
+      {
+         rows++;
+      }
+
+      return rows;
+   }
 
    /// <summary>
    /// Builds the nearest-neighbour SELECT. The ORDER BY repeats the distance expression instead

@@ -24,8 +24,14 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// Exact search (<see cref="IExactSearchSink"/>): a script_score query using the knn_score script,
 /// which compares the query with every document's vector instead of walking the graph.
 /// Counting refreshes first, because OpenSearch makes new documents searchable only after a refresh.
+/// Graph size cut: index.knn.advanced.approximate_threshold is written as 0, so the plugin builds a graph
+/// for a segment of any size. Why it is pinned: it is 0 by default in 3.9.0 (read from the live index), but
+/// an older or newer default of 15,000 would silently turn a small collection into a scan.
+/// Index step (<see cref="IIndexFinisher"/>): after the writes return, <see cref="FinishLoadAsync"/> refreshes,
+/// force merges to one segment and waits until a profiled probe search shows every segment answered from its
+/// graph. The full reasoning, and what each state means, is in <see cref="OpenSearchIndexReadiness"/>.
 /// </summary>
-public sealed class OpenSearchSink : ISink, IExactSearchSink, IEngineDescription, IDisposable
+public sealed class OpenSearchSink : ISink, IExactSearchSink, IEngineDescription, IIndexFinisher, IDisposable
 {
    #region Data Members
 
@@ -38,6 +44,7 @@ public sealed class OpenSearchSink : ISink, IExactSearchSink, IEngineDescription
 
    private readonly OpenSearchSinkOptions _options;
    private readonly OpenSearchRest _rest;
+   private readonly OpenSearchIndexReadiness _readiness;
 
    #endregion Data Members
 
@@ -59,6 +66,7 @@ public sealed class OpenSearchSink : ISink, IExactSearchSink, IEngineDescription
    {
       _options = options;
       _rest = new OpenSearchRest( options.BaseUrl, options.EffectiveTimeout );
+      _readiness = new OpenSearchIndexReadiness( _rest, options );
    }
 
    #endregion Constructor
@@ -73,10 +81,15 @@ public sealed class OpenSearchSink : ISink, IExactSearchSink, IEngineDescription
 
    /// <inheritdoc />
    public string IndexDescription =>
-      $"faiss HNSW float32, no compression, m={HNSW_M}, ef_construction={HNSW_EF_CONSTRUCTION}, cosinesimil; search k=top, ef_search={_options.EfSearch}; 1 shard, 0 replicas";
+      $"faiss HNSW float32, no compression, m={HNSW_M}, ef_construction={HNSW_EF_CONSTRUCTION}, cosinesimil; search k=top, ef_search={_options.EfSearch}; 1 shard, 0 replicas; graph built at any segment size (approximate_threshold=0); force-merged to one segment after the load";
 
    /// <inheritdoc />
    public string ComposeFile => "opensearch.compose.yaml";
+
+   /// <inheritdoc />
+   public string Durability =>
+      "Every acknowledged bulk request is fsynced to the translog before the answer: index.translog.durability=request, the OpenSearch default, which neither this sink nor opensearch.compose.yaml overrides "
+      + "(OpenSearchReadinessTests reads it back from the live index). By that setting a process crash or power loss loses no acknowledged write; this is read from the setting, not shown by pulling power. One node and no replicas, so a lost disk loses the data.";
 
    /// <inheritdoc />
    public async Task<bool> EnsureCollectionAsync( string collection, int dimension, CancellationToken ct )
@@ -177,6 +190,18 @@ public sealed class OpenSearchSink : ISink, IExactSearchSink, IEngineDescription
       using JsonDocument? answer = await _rest.SendJsonAsync( HttpMethod.Delete, IndexName( collection ), null, true, ct );
    }
 
+   /// <inheritdoc />
+   public Task<string> FinishLoadAsync( string collection, CancellationToken ct )
+   {
+      return _readiness.FinishAsync( IndexName( collection ), ct );
+   }
+
+   /// <inheritdoc />
+   public Task<IndexState> GetIndexStateAsync( string collection, CancellationToken ct )
+   {
+      return _readiness.ReadStateAsync( IndexName( collection ), ct );
+   }
+
    #endregion Public Methods
 
    #region Private Methods
@@ -202,7 +227,7 @@ public sealed class OpenSearchSink : ISink, IExactSearchSink, IEngineDescription
    {
       return new
       {
-         settings = new Dictionary<string, object> { ["index.knn"] = true, ["number_of_shards"] = 1, ["number_of_replicas"] = 0 },
+         settings = new Dictionary<string, object> { ["index.knn"] = true, ["index.knn.advanced.approximate_threshold"] = 0, ["number_of_shards"] = 1, ["number_of_replicas"] = 0 },
          mappings = new
          {
             _source = new { excludes = new[] { "vector" } },

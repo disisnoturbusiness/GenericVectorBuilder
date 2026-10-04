@@ -1,4 +1,5 @@
 using GenericVectorBuilder.Bench.Targets;
+using GenericVectorBuilder.Engines.Common;
 
 namespace GenericVectorBuilder.Bench.Report;
 
@@ -59,6 +60,12 @@ public sealed class BenchReport
    /// <summary>nDCG@k of the exact answer itself (golden only): the best any engine can score with this embedder.</summary>
    public double? TruthNdcg { get; set; }
 
+   /// <summary>Seed that shuffled the target order and every target's pass order (--seed repeats it).</summary>
+   public int RunSeed { get; set; }
+
+   /// <summary>Targets in the order they actually ran.</summary>
+   public List<string> TargetOrder { get; set; } = new();
+
    /// <summary>Run-level notes (method, caveats, problems).</summary>
    public List<string> Notes { get; set; } = new();
 
@@ -99,11 +106,41 @@ public sealed class TargetReport
    /// <summary>Disk reading after the load.</summary>
    public Measurement? Disk { get; set; }
 
+   /// <summary>Timed passes in the order they actually ran, e.g. "default@1", "exact", "default@8"; null when the target was not searched.</summary>
+   public List<string>? PassOrder { get; set; }
+
+   /// <summary>Warm-up searches that failed, over every warm-up of this target; null when the target was not searched.</summary>
+   public int? WarmupErrors { get; set; }
+
+   /// <summary>The engine's own account of its index after the load and after the searches.</summary>
+   public TargetIndexState? IndexState { get; set; }
+
+   /// <summary>What a crash can lose with this engine's settings, or "not stated".</summary>
+   public string? Durability { get; set; }
+
    /// <summary>Why the target failed, if it did.</summary>
    public string? Error { get; set; }
 
    /// <summary>Notes for this target.</summary>
    public List<string> Notes { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>
+/// The index proof of one target: read from the engine once the load (and its index step) is
+/// done, and again after the last timed pass. Why twice: an engine that kept building while it
+/// was searched gave numbers from more than one index, and the two readings show it.
+/// </summary>
+public sealed class TargetIndexState
+{
+   #region Public Methods
+
+   /// <summary>State read after the load and its index step (for bench, read before searching).</summary>
+   public IndexState? AfterLoad { get; set; }
+
+   /// <summary>State read after the last timed pass; null when the target was not searched.</summary>
+   public IndexState? AfterSearch { get; set; }
 
    #endregion Public Methods
 }

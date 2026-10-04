@@ -24,8 +24,12 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// length is refused instead of silently corrupting the ranking.
 /// Why metadata is one JSON string field: schema fields are fixed at deploy time, so arbitrary meta_*
 /// keys cannot become fields of their own.
+/// Index step (<see cref="IIndexFinisher"/>): Vespa inserts each vector into the HNSW graph while the write is
+/// applied, so there is nothing to build afterwards. <see cref="FinishLoadAsync"/> waits until the engine
+/// reports every fed document searchable and its own query trace says the HNSW search returns all of them.
+/// The evidence is in <see cref="VespaIndexReadiness"/>.
 /// </summary>
-public sealed class VespaSink : ISink, IExactSearchSink, IEngineDescription, IDisposable
+public sealed class VespaSink : ISink, IExactSearchSink, IEngineDescription, IIndexFinisher, IDisposable
 {
    #region Data Members
 
@@ -37,6 +41,7 @@ public sealed class VespaSink : ISink, IExactSearchSink, IEngineDescription, IDi
 
    private readonly VespaSinkOptions _options;
    private readonly VespaRest _rest;
+   private readonly VespaIndexReadiness _readiness;
 
    #endregion Data Members
 
@@ -58,6 +63,7 @@ public sealed class VespaSink : ISink, IExactSearchSink, IEngineDescription, IDi
    {
       _options = options;
       _rest = new VespaRest( options );
+      _readiness = new VespaIndexReadiness( _rest, options );
    }
 
    #endregion Constructor
@@ -76,6 +82,12 @@ public sealed class VespaSink : ISink, IExactSearchSink, IEngineDescription, IDi
 
    /// <inheritdoc />
    public string ComposeFile => "vespa.compose.yaml";
+
+   /// <inheritdoc />
+   public string Durability =>
+      "Vespa's transaction log server fsyncs after each commit: searchlib.translogserver usefsync=true, and an operation is searchable when it is acknowledged: proton documentdb visibilitydelay=0. "
+      + "Neither is overridden by this sink or by the services.xml it deploys; VespaReadinessTests reads both from the live config server. After a crash the node replays the transaction log over its last flushed data "
+      + "and rebuilds the in-memory HNSW graph. By those settings an acknowledged write survives a crash; this is read from the settings, not shown by pulling power. One node and min-redundancy 1, so a lost disk loses the data.";
 
    /// <inheritdoc />
    public async Task<bool> EnsureCollectionAsync( string collection, int dimension, CancellationToken ct )
@@ -147,6 +159,18 @@ public sealed class VespaSink : ISink, IExactSearchSink, IEngineDescription, IDi
    public Task<IReadOnlyList<SearchHit>> SearchExactAsync( string collection, float[] vector, int top, CancellationToken ct )
    {
       return QueryAsync( collection, vector, top, $"targetHits:{top},approximate:false", ct );
+   }
+
+   /// <inheritdoc />
+   public Task<string> FinishLoadAsync( string collection, CancellationToken ct )
+   {
+      return _readiness.FinishAsync( TypeName( collection ), ct );
+   }
+
+   /// <inheritdoc />
+   public Task<IndexState> GetIndexStateAsync( string collection, CancellationToken ct )
+   {
+      return _readiness.ReadStateAsync( TypeName( collection ), ct );
    }
 
    /// <inheritdoc />

@@ -1,4 +1,5 @@
 using GenericVectorBuilder.Bench.Cli;
+using GenericVectorBuilder.Bench.Report;
 using GenericVectorBuilder.Bench.Running;
 
 namespace GenericVectorBuilder.Bench;
@@ -16,9 +17,14 @@ internal static class Program
    /// Runs the command.
    /// </summary>
    /// <param name="args">Command-line arguments; see <see cref="BenchOptions.Usage"/>.</param>
-   /// <returns>0 on success, 1 when a target failed, 2 for a bad command line.</returns>
+   /// <returns>0 on success, 1 when a target failed, 2 for a bad command line. "consolidate" only reads result folders (see <see cref="ConsolidateCommand"/>).</returns>
    private static async Task<int> Main( string[] args )
    {
+      if( args.Length > 0 && args[0] == ConsolidateCommand.NAME )
+      {
+         return ConsolidateCommand.Run( args[1..], Console.WriteLine, CancellationToken.None );
+      }
+
       BenchOptions options;
       try
       {

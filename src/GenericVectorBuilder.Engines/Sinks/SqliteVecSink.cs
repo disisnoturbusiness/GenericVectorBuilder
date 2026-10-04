@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -26,8 +27,12 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// other.
 /// Why the connection is kept open: the extension must be loaded into every connection, and the
 /// benchmark should time the search, not the connection setup.
+/// Readiness (<see cref="IIndexFinisher"/>): there is no index to finish, so
+/// <see cref="GetIndexStateAsync"/> reports ready with the detail "no index, exact scan by design",
+/// plus what can be read from the engine to back that up: the table really is a vec0 virtual
+/// table, the exact row count, and the plan SQLite gives the search.
 /// </summary>
-public sealed class SqliteVecSink : ISink, IExactSearchSink, IEngineDescription, IDisposable
+public sealed class SqliteVecSink : ISink, IExactSearchSink, IEngineDescription, IIndexFinisher, IDisposable
 {
    #region Data Members
 
@@ -79,6 +84,40 @@ public sealed class SqliteVecSink : ISink, IExactSearchSink, IEngineDescription,
 
    /// <inheritdoc />
    public string ComposeFile => "embedded";
+
+   /// <inheritdoc />
+   public string Durability =>
+      "PRAGMA journal_mode=WAL and PRAGMA synchronous=NORMAL (set by this sink when it opens the file): each commit is appended to the -wal file and handed to the operating system, "
+      + "but the WAL is fsynced only when SQLite checkpoints it (measured with strace: 40 single-record commits caused 3 WAL fsyncs), so a crash of the process loses nothing "
+      + "(measured with kill -9 and a reopen: all 50, 300 and 2,000 rows were there), while an operating-system crash or power cut can lose the newest commits since the last checkpoint and leaves the database consistent";
+
+   /// <inheritdoc />
+   public async Task<string> FinishLoadAsync( string collection, CancellationToken ct )
+   {
+      var clock = Stopwatch.StartNew();
+      IndexState state = await GetIndexStateAsync( collection, ct );
+      if( !state.Ready )
+      {
+         throw new InvalidOperationException( $"The sqlitevec collection '{collection}' is not usable: {state.Detail}" );
+      }
+
+      return $"nothing to build, every search scans all vectors; checked in {clock.Elapsed.TotalSeconds:F2} s: {state.Detail}";
+   }
+
+   /// <inheritdoc />
+   public async Task<IndexState> GetIndexStateAsync( string collection, CancellationToken ct )
+   {
+      SqliteVecStore store = RequireStore( collection );
+      await store.Gate.WaitAsync( ct );
+      try
+      {
+         return await Task.Run( () => ReadIndexState( store, collection ), ct );
+      }
+      finally
+      {
+         store.Gate.Release();
+      }
+   }
 
    /// <inheritdoc />
    public async Task<bool> EnsureCollectionAsync( string collection, int dimension, CancellationToken ct )
@@ -234,6 +273,40 @@ public sealed class SqliteVecSink : ISink, IExactSearchSink, IEngineDescription,
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// Reads what SQLite says about the collection's table: that it is a vec0 virtual table, how
+   /// many rows it holds, and the plan of the search query. Runs under the collection's gate.
+   /// </summary>
+   /// <param name="store">The collection's open store.</param>
+   /// <param name="collection">Collection name.</param>
+   /// <returns>Ready when the table is a vec0 table, with the evidence in the detail.</returns>
+   private static IndexState ReadIndexState( SqliteVecStore store, string collection )
+   {
+      long total = CountRows( store, collection );
+      using SqliteCommand definition = store.Connection.CreateCommand();
+      definition.CommandText = "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = $name;";
+      definition.Parameters.AddWithValue( "$name", TableName( collection ) );
+      if( definition.ExecuteScalar() is not string ddl || !ddl.Contains( "vec0", StringComparison.OrdinalIgnoreCase ) )
+      {
+         return new IndexState( false, null, total, $"not ready: {TableName( collection )} is not a vec0 virtual table in sqlite_master" );
+      }
+
+      using SqliteCommand plan = store.Connection.CreateCommand();
+      plan.CommandText = $"EXPLAIN QUERY PLAN SELECT chunk_id, distance FROM {Quote( collection )} WHERE embedding MATCH $query AND k = $k ORDER BY distance;";
+      plan.Parameters.AddWithValue( "$query", ToBlob( new float[store.Dimension] ) );
+      plan.Parameters.AddWithValue( "$k", 10 );
+      var steps = new List<string>();
+      using( SqliteDataReader reader = plan.ExecuteReader() )
+      {
+         while( reader.Read() )
+         {
+            steps.Add( reader.GetString( 3 ) );
+         }
+      }
+
+      return new IndexState( true, null, total, $"no index, exact scan by design: {TableName( collection )} is a vec0 virtual table holding {total} vectors and every search compares all of them (EXPLAIN QUERY PLAN: {string.Join( " | ", steps )})" );
+   }
 
    /// <summary>
    /// Runs the one KNN query that serves both the default and the exact search.

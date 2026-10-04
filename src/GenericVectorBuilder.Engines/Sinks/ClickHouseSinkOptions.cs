@@ -65,6 +65,21 @@ public sealed class ClickHouseSinkOptions
    public int UpsertBatch { get; set; } = 10000;
 
    /// <summary>
+   /// Longest <see cref="ClickHouseSink.FinishLoadAsync"/> waits for every data part to carry the
+   /// vector index and for background merges to settle before it fails with a plain message.
+   /// </summary>
+   public int IndexWaitSeconds { get; set; } = 1800;
+
+   /// <summary>
+   /// How long the set of data parts must stay unchanged, with no merge running, before
+   /// <see cref="ClickHouseSink.FinishLoadAsync"/> calls the table settled. Why: every merge
+   /// rebuilds the vector index of the merged part, and a merge that starts during a timed search
+   /// run changes what is being timed. Measured 2026-10-04: after 30 small inserts the merges
+   /// were over within 2 seconds of the last insert, so 5 seconds covers the scheduler's next look.
+   /// </summary>
+   public int MergeSettleSeconds { get; set; } = 5;
+
+   /// <summary>
    /// Options for the local container, with the password read from the shared secrets file
    /// (/home/dan/gvb-data/engines/secrets.env, or the file named by GVB_ENGINE_SECRETS).
    /// </summary>

@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -52,14 +54,28 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// Why the extension is created in a separate connection first: Npgsql learns the vector type
 /// when a connection opens. A pooled connection opened before CREATE EXTENSION would never
 /// know it, so the extension is created once before the pooled data source exists.
+/// Readiness: the HNSW index is updated inside each insert's own transaction, so nothing is
+/// built after the writes return and <see cref="FinishLoadAsync"/> only confirms that. The proof
+/// is the engine's own account (<see cref="GetIndexStateAsync"/>): pg_indexes lists the index,
+/// pg_index says it is valid, ready and live, EXPLAIN of the default search shows an Index Scan on
+/// it, and that search, run for real, returns its rows. Why indexed vectors are not reported:
+/// PostgreSQL keeps no entry count for an HNSW index. pg_class.reltuples of the index is the
+/// table's sampled estimate (19,000 for a 20,000-row table in testing), and a walk of the graph
+/// is no count either: an iterative scan (hnsw.iterative_scan = relaxed_order) over a 20,000-row
+/// table returned 19,999 rows at ef_search 100, 19,995 at 40 and 18,771 at 1,000, because an
+/// approximate graph can leave nodes without an inbound link and the scan's stopping rule moves
+/// with ef_search. A check that demanded every row from the walk failed a healthy index.
 /// Limits: HNSW on the vector type holds at most 2000 dimensions, so a larger embedder is
 /// refused with a clear message instead of failing on index creation. NUL characters are
 /// removed from text because PostgreSQL cannot store them.
 /// </summary>
-public sealed class PgVectorSink : ISink, IExactSearchSink, IEngineDescription, IDisposable
+public sealed class PgVectorSink : ISink, IExactSearchSink, IEngineDescription, IIndexFinisher, IDisposable
 {
    #region Data Members
 
+   private const int READY_WAIT_SECONDS = 120;
+   private const int PROBE_TIMEOUT_SECONDS = 120;
+   private const int PROBE_TOP = 10;
    private const int MAX_HNSW_DIMENSION = 2000;
    private const int MAX_EF_SEARCH = 1000;
    private const int MAX_IDENTIFIER_BYTES = 63;
@@ -111,6 +127,61 @@ public sealed class PgVectorSink : ISink, IExactSearchSink, IEngineDescription, 
 
    /// <inheritdoc />
    public string ComposeFile => "pgvector.compose.yaml";
+
+   /// <inheritdoc />
+   public string Durability =>
+      "fsync on, synchronous_commit on, full_page_writes on, wal_sync_method fdatasync (PostgreSQL defaults; pgvector.compose.yaml sets only shared_buffers, "
+      + "maintenance_work_mem and max_wal_size): every commit is flushed to the write-ahead log before it returns and HNSW index changes are WAL-logged, "
+      + "so a crash loses no committed row (max_wal_size 4GB only spaces out checkpoints; measured with docker kill, which is SIGKILL, right after a 2,000-vector load and a restart: "
+      + "all 2,000 rows were there and the HNSW index was valid and used by the default search)";
+
+   /// <inheritdoc />
+   public async Task<string> FinishLoadAsync( string collection, CancellationToken ct )
+   {
+      var clock = Stopwatch.StartNew();
+      IndexState state = await WaitUntilReadyAsync( collection, ct );
+      return $"HNSW is maintained inside every insert, nothing to build; confirmed in {clock.Elapsed.TotalSeconds:F1} s: {state.Detail}";
+   }
+
+   /// <inheritdoc />
+   public async Task<IndexState> GetIndexStateAsync( string collection, CancellationToken ct )
+   {
+      string table = TableName( collection );
+      string index = IndexName( collection );
+      await using NpgsqlConnection connection = await OpenAsync( ct );
+      long total = await CountRowsAsync( connection, table, ct );
+      ( bool listed, bool usable, string definition ) = await ReadIndexCatalogAsync( connection, table, index, ct );
+      if( !listed )
+      {
+         return new IndexState( false, null, total, $"not ready: pg_indexes has no index {index} on {table}" );
+      }
+
+      int efSearch = Math.Min( Math.Max( _options.HnswEfSearch, 10 ), MAX_EF_SEARCH );
+      string settings = SEARCH_SETTINGS + efSearch;
+      string select = $"SELECT id FROM {Quote( table )} ORDER BY embedding <=> ( SELECT embedding FROM {Quote( table )} LIMIT 1 ) LIMIT {PROBE_TOP}";
+      bool defaultUsesIndex = await PlanUsesIndexAsync( connection, settings, select, index, ct );
+      long wanted = Math.Min( PROBE_TOP, total );
+      long returned = defaultUsesIndex ? await CountRowsOfSearchAsync( connection, settings, select, ct ) : 0;
+      var problems = new List<string>();
+      if( !usable )
+      {
+         problems.Add( "pg_index says the index is not valid and ready" );
+      }
+
+      if( !defaultUsesIndex )
+      {
+         problems.Add( "EXPLAIN of the default search does not show an Index Scan on the hnsw index" );
+      }
+
+      if( returned < wanted )
+      {
+         problems.Add( $"the default search returned {returned} of {wanted} rows" );
+      }
+
+      string facts = $"pg_indexes lists {index} ({definition}), pg_index valid and ready = {usable}, EXPLAIN of the default search uses Index Scan on it = {defaultUsesIndex}, "
+         + $"that search returned {returned} of {wanted} rows; PostgreSQL keeps no entry count for an HNSW index, so indexed vectors are not reported";
+      return new IndexState( problems.Count == 0, null, total, problems.Count == 0 ? facts : $"not ready: {string.Join( "; ", problems )} ({facts})" );
+   }
 
    /// <inheritdoc />
    public async Task<bool> EnsureCollectionAsync( string collection, int dimension, CancellationToken ct )
@@ -208,6 +279,147 @@ public sealed class PgVectorSink : ISink, IExactSearchSink, IEngineDescription, 
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// Polls <see cref="GetIndexStateAsync"/> until the engine says the index is ready, with a
+   /// deadline. A synchronous index is ready at once, so the loop only matters if something
+   /// else (a concurrent REINDEX, a CREATE INDEX CONCURRENTLY) is still running.
+   /// </summary>
+   /// <param name="collection">Collection name.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The ready state.</returns>
+   /// <exception cref="InvalidOperationException">The index was not ready before the deadline.</exception>
+   private async Task<IndexState> WaitUntilReadyAsync( string collection, CancellationToken ct )
+   {
+      var clock = Stopwatch.StartNew();
+      int pauseMs = 500;
+      while( true )
+      {
+         IndexState state = await GetIndexStateAsync( collection, ct );
+         if( state.Ready )
+         {
+            return state;
+         }
+
+         if( clock.Elapsed.TotalSeconds > READY_WAIT_SECONDS )
+         {
+            throw new InvalidOperationException( $"The pgvector index for {collection} was not ready after {READY_WAIT_SECONDS} seconds: {state.Detail}" );
+         }
+
+         await Task.Delay( pauseMs, ct );
+         pauseMs = Math.Min( pauseMs * 2, 5000 );
+      }
+   }
+
+   /// <summary>
+   /// Counts the rows of a table exactly.
+   /// </summary>
+   /// <param name="connection">Open connection.</param>
+   /// <param name="table">Table name.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The row count.</returns>
+   private static async Task<long> CountRowsAsync( NpgsqlConnection connection, string table, CancellationToken ct )
+   {
+      await using var command = new NpgsqlCommand( $"SELECT count(*) FROM {Quote( table )}", connection ) { CommandTimeout = PROBE_TIMEOUT_SECONDS };
+      return (long)( await command.ExecuteScalarAsync( ct ) ?? 0L );
+   }
+
+   /// <summary>
+   /// Reads the index from the catalogs: its definition from pg_indexes and its validity flags
+   /// from pg_index (indisvalid false means a failed or running build, indisready false means
+   /// inserts are not being applied to it yet).
+   /// </summary>
+   /// <param name="connection">Open connection.</param>
+   /// <param name="table">Table name.</param>
+   /// <param name="index">Index name.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>Whether pg_indexes lists it, whether it is valid and ready, and its definition from USING onwards.</returns>
+   private static async Task<( bool Listed, bool Usable, string Definition )> ReadIndexCatalogAsync( NpgsqlConnection connection, string table, string index, CancellationToken ct )
+   {
+      const string SQL = "SELECT x.indexdef, i.indisvalid AND i.indisready AND i.indislive FROM pg_indexes x "
+         + "JOIN pg_index i ON i.indexrelid = ( quote_ident( x.schemaname ) || '.' || quote_ident( x.indexname ) )::regclass "
+         + "WHERE x.schemaname = current_schema() AND x.tablename = @table AND x.indexname = @index";
+      await using var command = new NpgsqlCommand( SQL, connection ) { CommandTimeout = PROBE_TIMEOUT_SECONDS };
+      command.Parameters.AddWithValue( "table", table );
+      command.Parameters.AddWithValue( "index", index );
+      await using NpgsqlDataReader reader = await command.ExecuteReaderAsync( ct );
+      if( !await reader.ReadAsync( ct ) )
+      {
+         return ( false, false, string.Empty );
+      }
+
+      string definition = reader.GetString( 0 );
+      int usingAt = definition.IndexOf( "USING", StringComparison.Ordinal );
+      return ( true, reader.GetBoolean( 1 ), usingAt >= 0 ? definition[usingAt..] : definition );
+   }
+
+   /// <summary>
+   /// Asks the planner how it would run a statement under the given settings and reports whether
+   /// the plan has an Index Scan on the named index. Why EXPLAIN and not just trusting the
+   /// settings: a plan that fell back to a sequential scan would make the "approximate" search
+   /// silently exact.
+   /// </summary>
+   /// <param name="connection">Open connection.</param>
+   /// <param name="settings">SET LOCAL statements the search would run under.</param>
+   /// <param name="select">The SELECT to explain.</param>
+   /// <param name="index">Index name to look for.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>True when the plan scans that index.</returns>
+   private static async Task<bool> PlanUsesIndexAsync( NpgsqlConnection connection, string settings, string select, string index, CancellationToken ct )
+   {
+      await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync( ct );
+      await ExecuteAsync( connection, transaction, settings, ct );
+      await using var command = new NpgsqlCommand( "EXPLAIN ( FORMAT JSON ) " + select, connection, transaction ) { CommandTimeout = PROBE_TIMEOUT_SECONDS };
+      string plan = Convert.ToString( await command.ExecuteScalarAsync( ct ), CultureInfo.InvariantCulture ) ?? string.Empty;
+      await transaction.CommitAsync( ct );
+      using JsonDocument document = JsonDocument.Parse( plan );
+      return document.RootElement.EnumerateArray().Any( entry => ScansIndex( entry.GetProperty( "Plan" ), index ) );
+   }
+
+   /// <summary>
+   /// Walks an EXPLAIN plan tree looking for an Index Scan node on the named index.
+   /// </summary>
+   /// <param name="node">A plan node.</param>
+   /// <param name="index">Index name.</param>
+   /// <returns>True when this node or any child scans that index.</returns>
+   private static bool ScansIndex( JsonElement node, string index )
+   {
+      if( node.TryGetProperty( "Index Name", out JsonElement name ) && name.GetString() == index
+         && node.TryGetProperty( "Node Type", out JsonElement type ) && type.GetString()!.Contains( "Index", StringComparison.Ordinal ) )
+      {
+         return true;
+      }
+
+      return node.TryGetProperty( "Plans", out JsonElement children ) && children.EnumerateArray().Any( child => ScansIndex( child, index ) );
+   }
+
+   /// <summary>
+   /// Runs a search statement under the given settings, inside a transaction so SET LOCAL applies,
+   /// and counts the rows it returns. The caller has already had the statement explained, so a
+   /// plan that bypassed the index cannot pass this check by returning every row from a scan.
+   /// </summary>
+   /// <param name="connection">Open connection.</param>
+   /// <param name="settings">SET LOCAL statements the search runs under.</param>
+   /// <param name="select">The SELECT to run.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>How many rows the statement returned.</returns>
+   private static async Task<long> CountRowsOfSearchAsync( NpgsqlConnection connection, string settings, string select, CancellationToken ct )
+   {
+      await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync( ct );
+      await ExecuteAsync( connection, transaction, settings, ct );
+      await using var command = new NpgsqlCommand( select, connection, transaction ) { CommandTimeout = PROBE_TIMEOUT_SECONDS };
+      long rows = 0;
+      await using( NpgsqlDataReader reader = await command.ExecuteReaderAsync( ct ) )
+      {
+         while( await reader.ReadAsync( ct ) )
+         {
+            rows++;
+         }
+      }
+
+      await transaction.CommitAsync( ct );
+      return rows;
+   }
 
    /// <summary>
    /// Opens a pooled connection, creating the data source on first use.

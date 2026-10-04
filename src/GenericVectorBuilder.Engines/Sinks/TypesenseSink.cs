@@ -24,8 +24,12 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// A cutoff without a filter does nothing: measured, recall stayed at the graph's level.
 /// Why the vector field keeps store=true: Typesense rebuilds its in-memory HNSW graph from the stored
 /// documents on every start, so the stored vector is the only copy it can rebuild from.
+/// Index step (<see cref="IIndexFinisher"/>): Typesense inserts each vector into its in-memory HNSW graph while
+/// the document is written, so there is nothing to build afterwards. <see cref="FinishLoadAsync"/> waits until
+/// the engine reports its write queue empty and an unfiltered vector query returns every stored vector. The
+/// evidence, and what the engine does not say, is in <see cref="TypesenseIndexReadiness"/>.
 /// </summary>
-public sealed class TypesenseSink : ISink, IExactSearchSink, IEngineDescription, IDisposable
+public sealed class TypesenseSink : ISink, IExactSearchSink, IEngineDescription, IIndexFinisher, IDisposable
 {
    #region Data Members
 
@@ -39,6 +43,7 @@ public sealed class TypesenseSink : ISink, IExactSearchSink, IEngineDescription,
 
    private readonly TypesenseSinkOptions _options;
    private readonly TypesenseRest _rest;
+   private readonly TypesenseIndexReadiness _readiness;
 
    #endregion Data Members
 
@@ -61,6 +66,7 @@ public sealed class TypesenseSink : ISink, IExactSearchSink, IEngineDescription,
    {
       _options = options;
       _rest = new TypesenseRest( options );
+      _readiness = new TypesenseIndexReadiness( _rest, options );
    }
 
    #endregion Constructor
@@ -79,6 +85,12 @@ public sealed class TypesenseSink : ISink, IExactSearchSink, IEngineDescription,
 
    /// <inheritdoc />
    public string ComposeFile => "typesense.compose.yaml";
+
+   /// <inheritdoc />
+   public string Durability =>
+      "Every acknowledged write is appended to Typesense's raft log and fsynced before the answer: braft raft_sync=true with raft_sync_policy=0 (sync immediately), read from the running container's brpc /flags page on 2026-10-04. "
+      + "A restart replays the log from the last snapshot (typesense.compose.yaml sets TYPESENSE_SNAPSHOT_INTERVAL_SECONDS=300) and rebuilds the in-memory HNSW graph, so by those settings a crash loses no acknowledged write, but the restart is slow after a big load. This is read from the settings, not shown by pulling power. "
+      + "One node and no replicas, so a lost disk loses the data.";
 
    /// <inheritdoc />
    public async Task<bool> EnsureCollectionAsync( string collection, int dimension, CancellationToken ct )
@@ -148,6 +160,18 @@ public sealed class TypesenseSink : ISink, IExactSearchSink, IEngineDescription,
    public async Task DropCollectionAsync( string collection, CancellationToken ct )
    {
       await _rest.SendAsync( HttpMethod.Delete, $"collections/{CollectionName( collection )}", null, "application/json", true, ct );
+   }
+
+   /// <inheritdoc />
+   public Task<string> FinishLoadAsync( string collection, CancellationToken ct )
+   {
+      return _readiness.FinishAsync( CollectionName( collection ), ct );
+   }
+
+   /// <inheritdoc />
+   public Task<IndexState> GetIndexStateAsync( string collection, CancellationToken ct )
+   {
+      return _readiness.ReadStateAsync( CollectionName( collection ), ct );
    }
 
    #endregion Public Methods

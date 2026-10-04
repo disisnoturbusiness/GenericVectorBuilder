@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Text;
@@ -29,11 +30,31 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// first object, so an empty class cannot say what it was created for.
 /// Why batch results are checked one by one: Weaviate answers 200 to a batch even when some
 /// objects failed, and the failures are only visible inside the response.
+/// Readiness (<see cref="IIndexFinisher"/>): Weaviate indexes synchronously (the compose file does
+/// not turn on async indexing), so nothing is built after the batch returns and
+/// <see cref="FinishLoadAsync"/> only confirms that. The proof is the engine's own account
+/// (<see cref="GetIndexStateAsync"/>): the schema shard status and the node's vector indexing
+/// status are READY with an empty vector queue, and the vectors are counted twice from different
+/// places: the GraphQL Aggregate count says how many objects are stored, and an Aggregate with
+/// nearVector and objectLimit equal to that count says how many of them a search through the HNSW
+/// index returns. Why that second number is held to 99 percent and is not reported as the indexed
+/// count: an approximate graph can leave a few nodes with no inbound link (pgvector, the same
+/// algorithm, left 5 of 20,000 unreachable), so the number says searches reach nearly everything,
+/// not how many vectors the index holds, and Weaviate reports no such count. A restarted node
+/// that lost the tail of its HNSW commit log answers fewer, see
+/// <see cref="Durability"/>). Why the node status objectCount does not decide readiness: it is only
+/// refreshed when a memtable is flushed, which Weaviate does 60 seconds after the last write, so it
+/// reads 0 for about a minute after a load while the index is already complete (measured: 0 straight
+/// after the last batch of a 2,000-object load, 2,000 at the 62 s poll, which polled every 2 s).
+/// Waiting for it would add a minute of nothing to the load time the report prints. It is printed
+/// in the detail for comparison.
 /// </summary>
-public sealed class WeaviateSink : ISink, IEngineDescription, IDisposable
+public sealed class WeaviateSink : ISink, IEngineDescription, IIndexFinisher, IDisposable
 {
    #region Data Members
 
+   private const int READY_WAIT_SECONDS = 300;
+   private const double WALK_MIN_FRACTION = 0.99;
    private const int UPSERT_BATCH = 200;
    private const int DELETE_BATCH = 1000;
    private const int MAX_ATTEMPTS = 3;
@@ -81,6 +102,62 @@ public sealed class WeaviateSink : ISink, IEngineDescription, IDisposable
 
    /// <inheritdoc />
    public string ComposeFile => "weaviate.compose.yaml";
+
+   /// <inheritdoc />
+   public string Durability =>
+      "Weaviate 1.39.8 defaults, weaviate.compose.yaml sets no persistence variable: every object is appended to the LSM write-ahead log with a plain write "
+      + "and no fsync, and the log is fsynced only when its memtable is flushed, 60 seconds after the last write (PERSISTENCE_MEMTABLES_FLUSH_IDLE_AFTER_SECONDS default; "
+      + "measured with strace: 2,080 writes into the objects log during a 2,000-object load, the first fsync 60 s after the last write), so a power cut can lose the last "
+      + "minute of writes; the HNSW commit log is buffered inside the process (77 writes for 2,000 vectors), so a killed process loses the newest vectors from the vector "
+      + "index while their objects survive (measured with docker kill, which is SIGKILL, one second after the load and a restart, two runs each: 0 to 1 of 50, 264 to 267 of 300 and 1,992 to 1,997 of 2,000 stored objects were still reachable through a vector search)";
+
+   /// <inheritdoc />
+   public async Task<string> FinishLoadAsync( string collection, CancellationToken ct )
+   {
+      var clock = Stopwatch.StartNew();
+      int pauseMs = 250;
+      while( true )
+      {
+         IndexState state = await GetIndexStateAsync( collection, ct );
+         if( state.Ready )
+         {
+            return $"HNSW is updated inside every batch, nothing to build; confirmed in {clock.Elapsed.TotalSeconds:F1} s: {state.Detail}";
+         }
+
+         if( clock.Elapsed.TotalSeconds > READY_WAIT_SECONDS )
+         {
+            throw new InvalidOperationException( $"The Weaviate index for {collection} was not ready after {READY_WAIT_SECONDS} seconds: {state.Detail}" );
+         }
+
+         await Task.Delay( pauseMs, ct );
+         pauseMs = Math.Min( pauseMs * 2, 4000 );
+      }
+   }
+
+   /// <inheritdoc />
+   public async Task<IndexState> GetIndexStateAsync( string collection, CancellationToken ct )
+   {
+      string name = ClassName( collection );
+      using( JsonDocument? existing = await GetClassAsync( name, ct ) )
+      {
+         if( existing == null )
+         {
+            return new IndexState( false, null, null, $"not ready: Weaviate has no class {name}" );
+         }
+      }
+
+      long total = await CountAsync( collection, ct );
+      var problems = new List<string>();
+      var facts = new List<string>();
+      await ReadShardStatusAsync( name, problems, facts, ct );
+      long reached = total == 0 ? 0 : await CountThroughIndexAsync( name, total, ct );
+      AddIf( problems, reached < Math.Ceiling( total * WALK_MIN_FRACTION ), $"a vector search with objectLimit {total} returned only {reached} of the {total} stored objects" );
+      facts.Add( $"Aggregate count {total}" );
+      facts.Add( $"Aggregate nearVector with objectLimit {total} reached {reached}" );
+      facts.Add( "Weaviate reports no count of vectors in the HNSW index, so indexed vectors are not reported" );
+      string text = string.Join( ", ", facts );
+      return new IndexState( problems.Count == 0, null, total, problems.Count == 0 ? text : $"not ready: {string.Join( "; ", problems )} ({text})" );
+   }
 
    /// <inheritdoc />
    public async Task<bool> EnsureCollectionAsync( string collection, int dimension, CancellationToken ct )
@@ -184,6 +261,128 @@ public sealed class WeaviateSink : ISink, IEngineDescription, IDisposable
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// Reads the status of every shard of the class from the two places Weaviate reports it:
+   /// GET /v1/schema/{class}/shards (shard status) and GET /v1/nodes/{class} (vector indexing
+   /// status, vector queue length, and the node's object count, which is only printed).
+   /// </summary>
+   /// <param name="name">Weaviate class name.</param>
+   /// <param name="problems">Receives what is wrong, in plain words.</param>
+   /// <param name="facts">Receives what was read, for the detail text.</param>
+   /// <param name="ct">Cancellation.</param>
+   private async Task ReadShardStatusAsync( string name, List<string> problems, List<string> facts, CancellationToken ct )
+   {
+      ( _, string nodesText ) = await SendAsync( HttpMethod.Get, $"v1/nodes/{name}?output=verbose", null, ct );
+      ( _, string shardsText ) = await SendAsync( HttpMethod.Get, $"v1/schema/{name}/shards", null, ct );
+      int shardCount = 0;
+      using( JsonDocument nodes = JsonDocument.Parse( nodesText ) )
+      {
+         foreach( JsonElement shard in NodeShards( nodes.RootElement, name ) )
+         {
+            shardCount++;
+            string indexing = Text( shard, "vectorIndexingStatus" );
+            long queue = Count( shard, "vectorQueueLength" );
+            facts.Add( $"shard {Text( shard, "name" )} vectorIndexingStatus {indexing}, vectorQueueLength {queue}, node status objectCount {Count( shard, "objectCount" )} (refreshed only when the memtable is flushed, so it lags a minute and does not decide readiness)" );
+            AddIf( problems, indexing != "READY", $"vector indexing status of shard {Text( shard, "name" )} is {indexing}, not READY" );
+            AddIf( problems, queue != 0, $"{queue} vectors are queued for indexing in shard {Text( shard, "name" )}" );
+         }
+      }
+
+      using( JsonDocument shards = JsonDocument.Parse( shardsText ) )
+      {
+         foreach( JsonElement shard in shards.RootElement.EnumerateArray() )
+         {
+            facts.Add( $"schema shard {Text( shard, "name" )} status {Text( shard, "status" )}" );
+            AddIf( problems, Text( shard, "status" ) != "READY", $"shard {Text( shard, "name" )} status is {Text( shard, "status" )}, not READY" );
+         }
+      }
+
+      AddIf( problems, shardCount == 0, "Weaviate's node status lists no shard for the class" );
+   }
+
+   /// <summary>
+   /// Counts how many stored objects a vector search through the HNSW index can return: the
+   /// Aggregate count of a nearVector query whose objectLimit equals the stored count. The query
+   /// vector is the vector of one stored object.
+   /// </summary>
+   /// <param name="name">Weaviate class name.</param>
+   /// <param name="total">Objects stored (the Aggregate count).</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>Objects the index search returned.</returns>
+   private async Task<long> CountThroughIndexAsync( string name, long total, CancellationToken ct )
+   {
+      using JsonDocument sample = await GraphQlAsync( $"{{ Get {{ {name}( limit: 1 ) {{ _additional {{ vector }} }} }} }}", ct );
+      JsonElement rows = sample.RootElement.GetProperty( "data" ).GetProperty( "Get" ).GetProperty( name );
+      if( rows.GetArrayLength() == 0 )
+      {
+         return 0;
+      }
+
+      var query = new StringBuilder();
+      query.Append( "{ Aggregate { " ).Append( name ).Append( "( nearVector: { vector: [" );
+      bool first = true;
+      foreach( JsonElement value in rows[0].GetProperty( "_additional" ).GetProperty( "vector" ).EnumerateArray() )
+      {
+         query.Append( first ? "" : "," ).Append( value.GetSingle().ToString( "R", CultureInfo.InvariantCulture ) );
+         first = false;
+      }
+
+      query.Append( "] }, objectLimit: " ).Append( total.ToString( CultureInfo.InvariantCulture ) ).Append( " ) { meta { count } } } }" );
+      using JsonDocument result = await GraphQlAsync( query.ToString(), ct );
+      return result.RootElement.GetProperty( "data" ).GetProperty( "Aggregate" ).GetProperty( name )[0].GetProperty( "meta" ).GetProperty( "count" ).GetInt64();
+   }
+
+   /// <summary>
+   /// Lists the shards of one class across every node in a GET /v1/nodes response.
+   /// </summary>
+   /// <param name="root">The response body.</param>
+   /// <param name="className">Weaviate class name.</param>
+   /// <returns>The shard objects.</returns>
+   private static IEnumerable<JsonElement> NodeShards( JsonElement root, string className )
+   {
+      foreach( JsonElement node in root.GetProperty( "nodes" ).EnumerateArray() )
+      {
+         if( node.TryGetProperty( "shards", out JsonElement shards ) && shards.ValueKind == JsonValueKind.Array )
+         {
+            foreach( JsonElement shard in shards.EnumerateArray().Where( s => Text( s, "class" ) == className ) )
+            {
+               yield return shard;
+            }
+         }
+      }
+   }
+
+   /// <summary>
+   /// Reads a number from a shard's status object, failing in plain words when the field is absent
+   /// (a different Weaviate version) instead of with a bare key error.
+   /// </summary>
+   /// <param name="shard">One shard object from GET /v1/nodes.</param>
+   /// <param name="key">Field name.</param>
+   /// <returns>The value.</returns>
+   private static long Count( JsonElement shard, string key )
+   {
+      if( !shard.TryGetProperty( key, out JsonElement value ) || value.ValueKind != JsonValueKind.Number )
+      {
+         throw new InvalidOperationException( $"Weaviate's node status for shard {Text( shard, "name" )} has no number named {key}, so readiness cannot be checked on this version." );
+      }
+
+      return value.GetInt64();
+   }
+
+   /// <summary>
+   /// Adds a message to a list when a condition holds.
+   /// </summary>
+   /// <param name="problems">The list.</param>
+   /// <param name="condition">Whether something is wrong.</param>
+   /// <param name="message">What is wrong.</param>
+   private static void AddIf( List<string> problems, bool condition, string message )
+   {
+      if( condition )
+      {
+         problems.Add( message );
+      }
+   }
 
    /// <summary>
    /// Builds the class definition: HNSW settings, cosine distance, no vectorizer, and payload

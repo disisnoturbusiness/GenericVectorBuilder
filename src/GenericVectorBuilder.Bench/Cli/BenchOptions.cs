@@ -23,7 +23,7 @@ public sealed class BenchOptions
    private static readonly HashSet<string> VALUED = new( StringComparer.Ordinal )
    {
       "pipeline", "targets", "limit", "batch", "queries", "top", "concurrency", "seconds", "warmup", "hnsw-ef",
-      "golden-file", "out", "repo", "exact-seconds", "search-timeout",
+      "golden-file", "out", "repo", "exact-seconds", "search-timeout", "seed",
    };
 
    #endregion Data Members
@@ -57,8 +57,22 @@ public sealed class BenchOptions
    /// <summary>Seconds per concurrency level.</summary>
    public int Seconds { get; private set; } = 20;
 
-   /// <summary>Warm-up queries before anything is timed.</summary>
+   /// <summary>
+   /// Warm-up searches run immediately before EVERY timed pass, with that pass's own search
+   /// mode and concurrency. Why every pass and not only the first: a pass that follows another
+   /// pass inherits a warm cache and warm connections, and one that comes first does not, so
+   /// order alone would change the numbers.
+   /// </summary>
    public int Warmup { get; private set; } = 20;
+
+   /// <summary>
+   /// Seed for the random target order and the random pass order inside each target, or null
+   /// to derive one from the run start time. Why random at all: in a fixed order the same
+   /// query ran faster when timed later in a run, so a fixed order biases every comparison the
+   /// same way. The seed actually used is always written to the results, so any run's order can
+   /// be repeated with --seed.
+   /// </summary>
+   public int? Seed { get; private set; }
 
    /// <summary>Search beam for qdrant-hnsw, or null for the server default.</summary>
    public int? HnswEf { get; private set; }
@@ -128,8 +142,11 @@ public sealed class BenchOptions
   run-all   --pipeline P [--targets a,b] [same options as replicate and bench] [--keep]
   clean     --pipeline P --targets a,b
 
-Other options: --warmup 20, --hnsw-ef N, --golden-file F, --exact-seconds 60, --search-timeout 120, --out DIR, --repo DIR.
-Every target is loaded under the collection 'gvbbench_' + P, never the live name.";
+Other options: --warmup 20, --seed N, --hnsw-ef N, --golden-file F, --exact-seconds 60, --search-timeout 120, --out DIR, --repo DIR.
+Every target is loaded under the collection 'gvbbench_' + P, never the live name.
+Targets run in a random order, and each target's timed passes (default search at each concurrency
+level, exact mode) run in a random order, each after its own warm-up. --seed N repeats an order;
+without it the seed comes from the start time and is written to results.json as runSeed.";
    }
 
    #endregion Public Methods
@@ -188,6 +205,7 @@ Every target is loaded under the collection 'gvbbench_' + P, never the live name
          case "repo": RepoRoot = value; break;
          case "exact-seconds": ExactSeconds = NonNegative( name, value ); break;
          case "search-timeout": SearchTimeoutSeconds = Positive( name, value ); break;
+         case "seed": Seed = WholeNumber( name, value ); break;
          case "keep": Keep = true; break;
       }
    }
@@ -229,6 +247,18 @@ Every target is loaded under the collection 'gvbbench_' + P, never the live name
    {
       return int.TryParse( value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number ) && number > 0
          ? number : throw new ArgumentException( $"--{name} must be a whole number above 0, not '{value}'." );
+   }
+
+   /// <summary>
+   /// Parses any whole number that fits an int (a seed may be zero or negative).
+   /// </summary>
+   /// <param name="name">Option name, for the message.</param>
+   /// <param name="value">Text.</param>
+   /// <returns>The number.</returns>
+   private static int WholeNumber( string name, string value )
+   {
+      return int.TryParse( value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number )
+         ? number : throw new ArgumentException( $"--{name} must be a whole number between {int.MinValue} and {int.MaxValue}, not '{value}'." );
    }
 
    /// <summary>

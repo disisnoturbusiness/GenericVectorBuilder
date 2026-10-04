@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -21,13 +22,25 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// consistency a count can lag five seconds behind writes and deletes. The count itself is a
 /// count(*) query, which respects deletes.
 /// Why searches use Strong consistency by default: see <see cref="MilvusSinkOptions"/>.
-/// Why <see cref="WaitForIndexAsync"/> exists: Milvus builds the HNSW index in the background
-/// after a segment is sealed, and searches over a segment without its index fall back to a
-/// slower scan. A benchmark must wait for the index before it times searches.
+/// Why <see cref="FinishLoadAsync"/> and <see cref="GetIndexStateAsync"/> exist: Milvus builds the
+/// HNSW index in the background after a segment is sealed, and searches over a segment without its
+/// index scan it instead. Measured 2026-10-04 on this box, 2,000 random 1024-dimension vectors:
+/// the index description said Finished 3.7 s after the flush, the query node listed the sealed,
+/// indexed segment 2 s after that, and for about 9 s more it still listed the raw growing segment
+/// beside it and answered every search from the growing segment (query node counter
+/// milvus_querynode_sq_segment_latency_count: 20 of 20 searches Growing, 0 Sealed). Only once the
+/// growing segment was gone did the same counter show the searches on the sealed segment. So "Ready"
+/// needs four readings from Milvus itself: the index description (state Finished, pendingRows 0,
+/// indexedRows equal to every sealed row), the stored row count (a Strong count(*)), the collection
+/// load state (LoadStateLoaded), and the query node's own segment list from the management port
+/// (/api/v1/_qn/segments), where every segment holding rows must be Sealed with its index is_loaded
+/// and no growing segment may hold rows. The state must hold on two reads one second apart.
+/// A bare "indexedRows >= totalRows and pendingRows == 0" check is true on an unflushed collection
+/// (all three are 0 until the first flush seals a segment), so it proves nothing by itself.
 /// Why errors are read from the body: Milvus answers HTTP 200 and reports failure in a "code"
 /// field, so a successful status alone proves nothing.
 /// </summary>
-public sealed class MilvusSink : ISink, IEngineDescription, IDisposable
+public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDisposable
 {
    #region Data Members
 
@@ -42,7 +55,11 @@ public sealed class MilvusSink : ISink, IEngineDescription, IDisposable
    private const string INDEX_NAME = "vector_hnsw";
    private const int NOT_LOADED_CODE = 106;
    private const int RATE_LIMITED_CODE = 1807;
+   private const int STEADY_READS = 2;
    private static readonly TimeSpan FLUSH_INTERVAL = TimeSpan.FromSeconds( 10 );
+   private static readonly TimeSpan POLL_INTERVAL = TimeSpan.FromSeconds( 1 );
+   private static readonly TimeSpan PROGRESS_INTERVAL = TimeSpan.FromSeconds( 15 );
+   private static readonly TimeSpan CALL_LIMIT = TimeSpan.FromSeconds( 30 );
 
    private readonly MilvusSinkOptions _options;
    private readonly HttpClient _http;
@@ -85,6 +102,19 @@ public sealed class MilvusSink : ISink, IEngineDescription, IDisposable
 
    /// <inheritdoc />
    public string ComposeFile => "milvus.compose.yaml";
+
+   /// <inheritdoc />
+   public string Durability =>
+      "Writes are not fsynced. Standalone uses the default message queue rocksmq (RocksDB, /var/lib/milvus/rdb_data, mq.type default) and flushed segments go to local-disk "
+      + "object storage (COMMON_STORAGETYPE=local in milvus.compose.yaml). Measured 2026-10-04 with strace over 30 acknowledged single-row upserts and one flush: fdatasync "
+      + "ran only on the embedded etcd files (member/wal, member/snap/db), never on rdb_data or the segment files. A host power loss or kernel crash can lose acknowledged "
+      + "rows that are still in the OS page cache; a Milvus process crash alone should not (inferred, not tested). Metadata in embedded etcd is fdatasynced on every commit.";
+
+   /// <summary>
+   /// Optional receiver for progress lines while <see cref="FinishLoadAsync"/> waits (one line
+   /// every 15 seconds). Why: a wait that can last many minutes must show it is moving.
+   /// </summary>
+   public Action<string>? Progress { get; set; }
 
    /// <inheritdoc />
    public async Task<bool> EnsureCollectionAsync( string collection, int dimension, CancellationToken ct )
@@ -135,12 +165,10 @@ public sealed class MilvusSink : ISink, IEngineDescription, IDisposable
       string name = CollectionName( collection );
       if( _unflushed.ContainsKey( name ) )
       {
-         await FlushAsync( name, waitForTurn: false, ct );
+         await FlushAsync( name, ct );
       }
 
-      byte[] body = JsonSerializer.SerializeToUtf8Bytes( new { collectionName = name, filter = "", outputFields = new[] { "count(*)" }, consistencyLevel = "Strong" } );
-      using JsonDocument result = await PostAsync( "v2/vectordb/entities/query", body, ct );
-      return result.RootElement.GetProperty( "data" )[0].GetProperty( "count(*)" ).GetInt64();
+      return await CountRowsAsync( name, ct );
    }
 
    /// <inheritdoc />
@@ -183,40 +211,316 @@ public sealed class MilvusSink : ISink, IEngineDescription, IDisposable
    }
 
    /// <summary>
-   /// Waits until Milvus has built the HNSW index over every row, so timed searches measure the
-   /// index and not a scan of segments that have none yet. Not part of <see cref="ISink"/>:
-   /// only a benchmark needs it. Flushes first so that the last rows are sealed and indexed too.
+   /// Flushes the collection, then waits until Milvus reports the HNSW index complete for every
+   /// stored vector and the query node serves it (see the class remarks for the four readings).
+   /// Throws a plain message when that does not happen within
+   /// <see cref="MilvusSinkOptions.IndexWaitMinutes"/>, or at once when the management port
+   /// cannot be read, because waiting longer cannot fix that.
+   /// </summary>
+   /// <param name="collection">Collection name as passed to the sink.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The engine's own evidence, plus how long the wait took.</returns>
+   public async Task<string> FinishLoadAsync( string collection, CancellationToken ct )
+   {
+      string name = CollectionName( collection );
+      var clock = Stopwatch.StartNew();
+      IndexState state = await WaitUntilReadyAsync( name, TimeSpan.FromMinutes( _options.IndexWaitMinutes ), ct );
+      if( !state.Ready )
+      {
+         throw new InvalidOperationException( $"Milvus did not finish indexing {name} within {_options.IndexWaitMinutes} minutes. Last reading: {state.Detail}" );
+      }
+
+      return $"{state.Detail}; flush, index build and load took {clock.Elapsed.TotalSeconds:F1} s";
+   }
+
+   /// <summary>
+   /// Reads the index state once, from Milvus itself, without flushing or waiting. IndexedVectors
+   /// is the smaller of what the index description says is indexed and what the query node serves
+   /// from loaded indexes; TotalVectors is the Strong count(*). When the management port cannot be
+   /// read, Ready is false and Detail says why.
+   /// </summary>
+   /// <param name="collection">Collection name as passed to the sink.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The engine's account of its index.</returns>
+   public async Task<IndexState> GetIndexStateAsync( string collection, CancellationToken ct )
+   {
+      Readout readout = await ReadStateAsync( CollectionName( collection ), ct );
+      return readout.State;
+   }
+
+   /// <summary>
+   /// Waits until the index is complete and served. Kept for callers that want a yes or no instead
+   /// of an exception. Flushes first so that the last rows are sealed and indexed too.
    /// </summary>
    /// <param name="collection">Collection name.</param>
    /// <param name="timeout">How long to wait before giving up.</param>
    /// <param name="ct">Cancellation.</param>
-   /// <returns>True when the index covers every row, false on timeout.</returns>
+   /// <returns>True when the index covers every row and the query node serves it, false on timeout.</returns>
    public async Task<bool> WaitForIndexAsync( string collection, TimeSpan timeout, CancellationToken ct )
    {
-      string name = CollectionName( collection );
-      DateTime deadline = DateTime.UtcNow + timeout;
-      await FlushAsync( name, waitForTurn: true, ct );
-      while( DateTime.UtcNow < deadline )
-      {
-         using JsonDocument result = await PostAsync( "v2/vectordb/indexes/describe", JsonSerializer.SerializeToUtf8Bytes( new { collectionName = name, indexName = INDEX_NAME } ), ct );
-         JsonElement index = result.RootElement.GetProperty( "data" )[0];
-         long total = index.TryGetProperty( "totalRows", out JsonElement t ) ? t.GetInt64() : -1;
-         long indexed = index.TryGetProperty( "indexedRows", out JsonElement i ) ? i.GetInt64() : -1;
-         long pending = index.TryGetProperty( "pendingRows", out JsonElement p ) ? p.GetInt64() : -1;
-         if( total >= 0 && indexed >= total && pending == 0 )
-         {
-            return true;
-         }
-
-         await Task.Delay( 1000, ct );
-      }
-
-      return false;
+      IndexState state = await WaitUntilReadyAsync( CollectionName( collection ), timeout, ct );
+      return state.Ready;
    }
 
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// What one reading of the engine found, with the fact the wait loop acts on.
+   /// </summary>
+   /// <param name="State">The engine's account of its index.</param>
+   /// <param name="Unsealed">True when stored rows are still in growing segments, so another flush is needed.</param>
+   /// <param name="EvidenceMissing">True when a source of evidence could not be read, which waiting cannot fix.</param>
+   private sealed record Readout( IndexState State, bool Unsealed, bool EvidenceMissing );
+
+   /// <summary>
+   /// What the query node serves for one collection.
+   /// </summary>
+   /// <param name="IndexedRows">Rows in sealed segments whose index is loaded.</param>
+   /// <param name="GrowingRows">Rows still served from growing segments (searches scan these).</param>
+   /// <param name="SealedWithIndex">Sealed segments with their index loaded.</param>
+   /// <param name="SealedWithoutIndex">Sealed segments without a loaded index.</param>
+   private sealed record NodeView( long IndexedRows, long GrowingRows, int SealedWithIndex, int SealedWithoutIndex );
+
+   /// <summary>
+   /// Flushes, then polls until the state is ready on <see cref="STEADY_READS"/> reads in a row or
+   /// the deadline passes. Re-flushes every ten seconds while rows are still unsealed (Milvus
+   /// allows one flush per collection per ten seconds, and an early flush can be refused). The
+   /// deadline also ends a call that hangs, so the wait can never outlive it.
+   /// </summary>
+   /// <param name="name">Milvus collection name.</param>
+   /// <param name="timeout">Longest wait.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The last state read; the caller checks its Ready flag. Throws at once when the evidence cannot be read.</returns>
+   private async Task<IndexState> WaitUntilReadyAsync( string name, TimeSpan timeout, CancellationToken ct )
+   {
+      DateTime start = DateTime.UtcNow;
+      using var limit = CancellationTokenSource.CreateLinkedTokenSource( ct );
+      limit.CancelAfter( timeout );
+      IndexState last = new( false, null, null, "no reading taken yet" );
+      try
+      {
+         await FlushAsync( name, limit.Token );
+         DateTime nextFlush = start + FLUSH_INTERVAL;
+         DateTime nextProgress = start + PROGRESS_INTERVAL;
+         int steady = 0;
+         while( true )
+         {
+            Readout readout = await ReadStateAsync( name, limit.Token );
+            last = readout.State;
+            if( readout.EvidenceMissing )
+            {
+               throw new InvalidOperationException( last.Detail );
+            }
+
+            steady = last.Ready ? steady + 1 : 0;
+            if( steady >= STEADY_READS )
+            {
+               return last;
+            }
+
+            DateTime now = DateTime.UtcNow;
+            if( now >= nextProgress )
+            {
+               Progress?.Invoke( $"Milvus {name}: waiting for the index, {( now - start ).TotalSeconds:F0} s so far. {last.Detail}" );
+               nextProgress = now + PROGRESS_INTERVAL;
+            }
+
+            if( readout.Unsealed && now >= nextFlush )
+            {
+               await FlushAsync( name, limit.Token );
+               nextFlush = now + FLUSH_INTERVAL;
+            }
+
+            await Task.Delay( POLL_INTERVAL, limit.Token );
+         }
+      }
+      catch( OperationCanceledException ) when( !ct.IsCancellationRequested )
+      {
+         return last with { Ready = false };
+      }
+   }
+
+   /// <summary>
+   /// Reads the four pieces of evidence (see the class remarks) and decides whether searches now
+   /// use the finished index.
+   /// </summary>
+   /// <param name="name">Milvus collection name.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The reading.</returns>
+   private async Task<Readout> ReadStateAsync( string name, CancellationToken ct )
+   {
+      long stored = await CountRowsAsync( name, ct );
+      using JsonDocument described = await PostAsync( "v2/vectordb/indexes/describe", JsonSerializer.SerializeToUtf8Bytes( new { collectionName = name, indexName = INDEX_NAME } ), ct, CALL_LIMIT );
+      JsonElement indexes = described.RootElement.GetProperty( "data" );
+      if( indexes.GetArrayLength() == 0 )
+      {
+         return new Readout( new IndexState( false, null, stored, $"Milvus reports no index named {INDEX_NAME} on {name}" ), Unsealed: false, EvidenceMissing: false );
+      }
+
+      JsonElement index = indexes[0];
+      string indexState = index.TryGetProperty( "indexState", out JsonElement st ) ? st.GetString() ?? "unknown" : "unknown";
+      long sealedRows = Number( index, "totalRows" );
+      long indexedRows = Number( index, "indexedRows" );
+      long pendingRows = Number( index, "pendingRows" );
+      string loadState = await LoadStateAsync( name, ct );
+      ( NodeView? node, string nodeDetail ) = await QueryNodeAsync( await CollectionIdAsync( name, ct ), ct );
+      string detail = $"index {indexState}, indexedRows {indexedRows} of {sealedRows} sealed rows, pendingRows {pendingRows}; stored rows {stored}; {loadState}; query node: {nodeDetail}";
+      if( node is null )
+      {
+         return new Readout( new IndexState( false, indexedRows, stored, detail ), Unsealed: false, EvidenceMissing: true );
+      }
+
+      bool ready = indexState == "Finished" && pendingRows == 0 && indexedRows == sealedRows && sealedRows >= stored && loadState == "LoadStateLoaded"
+         && node.GrowingRows == 0 && node.SealedWithoutIndex == 0 && node.IndexedRows >= stored;
+      return new Readout( new IndexState( ready, Math.Min( indexedRows, node.IndexedRows ), stored, detail ), Unsealed: sealedRows < stored || node.GrowingRows > 0, EvidenceMissing: false );
+   }
+
+   /// <summary>
+   /// Counts stored rows with Strong consistency (the count respects deletes). Does not flush.
+   /// </summary>
+   /// <param name="name">Milvus collection name.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The row count.</returns>
+   private async Task<long> CountRowsAsync( string name, CancellationToken ct )
+   {
+      byte[] body = JsonSerializer.SerializeToUtf8Bytes( new { collectionName = name, filter = "", outputFields = new[] { "count(*)" }, consistencyLevel = "Strong" } );
+      using JsonDocument result = await PostAsync( "v2/vectordb/entities/query", body, ct, CALL_LIMIT );
+      return result.RootElement.GetProperty( "data" )[0].GetProperty( "count(*)" ).GetInt64();
+   }
+
+   /// <summary>
+   /// Reads the collection's load state, e.g. LoadStateLoaded.
+   /// </summary>
+   /// <param name="name">Milvus collection name.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The state name.</returns>
+   private async Task<string> LoadStateAsync( string name, CancellationToken ct )
+   {
+      using JsonDocument state = await PostAsync( "v2/vectordb/collections/get_load_state", JsonSerializer.SerializeToUtf8Bytes( new { collectionName = name } ), ct, CALL_LIMIT );
+      return state.RootElement.GetProperty( "data" ).GetProperty( "loadState" ).GetString() ?? "unknown";
+   }
+
+   /// <summary>
+   /// Reads Milvus's internal id for a collection, which the management port uses.
+   /// </summary>
+   /// <param name="name">Milvus collection name.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The collection id.</returns>
+   private async Task<long> CollectionIdAsync( string name, CancellationToken ct )
+   {
+      using JsonDocument result = await PostAsync( "v2/vectordb/collections/describe", JsonSerializer.SerializeToUtf8Bytes( new { collectionName = name } ), ct, CALL_LIMIT );
+      return result.RootElement.GetProperty( "data" ).GetProperty( "collectionID" ).GetInt64();
+   }
+
+   /// <summary>
+   /// Asks the query node (through the management port) which segments of the collection it
+   /// serves. Rows of growing segments are counted apart from rows of sealed segments whose index
+   /// is loaded, because searches scan growing segments and use the index only on sealed ones.
+   /// </summary>
+   /// <param name="collectionId">Milvus collection id.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>What the node serves (null when the port did not answer) and a short description.</returns>
+   private async Task<( NodeView? Node, string Detail )> QueryNodeAsync( long collectionId, CancellationToken ct )
+   {
+      string url = $"{_options.ManagementUrl.TrimEnd( '/' )}/api/v1/_qn/segments?collection_id={collectionId}&in=qn";
+      string text;
+      try
+      {
+         text = await GetTextAsync( url, ct );
+      }
+      catch( Exception ex ) when( ex is HttpRequestException or TimeoutException )
+      {
+         return ( null, $"unreadable ({url} did not answer: {ex.Message}). Milvus's management port must be reachable; set MilvusSinkOptions.ManagementUrl" );
+      }
+
+      long indexedRows = 0;
+      long growingRows = 0;
+      int withIndex = 0;
+      int withoutIndex = 0;
+      using JsonDocument segments = JsonDocument.Parse( text );
+      if( segments.RootElement.ValueKind == JsonValueKind.Array )
+      {
+         foreach( JsonElement segment in segments.RootElement.EnumerateArray() )
+         {
+            long rows = long.Parse( segment.GetProperty( "loaded_insert_row_count" ).GetString() ?? "0", CultureInfo.InvariantCulture );
+            if( segment.GetProperty( "state" ).GetString() != "Sealed" )
+            {
+               growingRows += rows;
+            }
+            else if( HasLoadedIndex( segment ) )
+            {
+               withIndex++;
+               indexedRows += rows;
+            }
+            else
+            {
+               withoutIndex++;
+            }
+         }
+      }
+
+      return ( new NodeView( indexedRows, growingRows, withIndex, withoutIndex ),
+         $"{withIndex} sealed segment(s) with the index loaded covering {indexedRows} rows, {withoutIndex} sealed without it, {growingRows} rows in growing segments" );
+   }
+
+   /// <summary>
+   /// True when a query node segment lists at least one index and every listed index is loaded.
+   /// </summary>
+   /// <param name="segment">One entry of the management port's segment list.</param>
+   /// <returns>Whether searches over this segment use its index.</returns>
+   private static bool HasLoadedIndex( JsonElement segment )
+   {
+      if( !segment.TryGetProperty( "index_fields", out JsonElement fields ) || fields.ValueKind != JsonValueKind.Array || fields.GetArrayLength() == 0 )
+      {
+         return false;
+      }
+
+      return fields.EnumerateArray().All( f => f.TryGetProperty( "is_loaded", out JsonElement loaded ) && loaded.GetString() == "true" );
+   }
+
+   /// <summary>
+   /// Reads a number field that Milvus may omit when it is zero.
+   /// </summary>
+   /// <param name="element">The JSON object.</param>
+   /// <param name="key">Field name.</param>
+   /// <returns>The value, or 0 when missing.</returns>
+   private static long Number( JsonElement element, string key )
+   {
+      return element.TryGetProperty( key, out JsonElement value ) && value.ValueKind == JsonValueKind.Number ? value.GetInt64() : 0;
+   }
+
+   /// <summary>
+   /// GETs a URL with a thirty-second limit per attempt and a short bounded retry on connection
+   /// failures and timeouts.
+   /// </summary>
+   /// <param name="url">Absolute address.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The response body.</returns>
+   private async Task<string> GetTextAsync( string url, CancellationToken ct )
+   {
+      for( int attempt = 1; ; attempt++ )
+      {
+         using var limit = CancellationTokenSource.CreateLinkedTokenSource( ct );
+         limit.CancelAfter( CALL_LIMIT );
+         try
+         {
+            using HttpResponseMessage response = await _http.GetAsync( url, limit.Token );
+            string text = await response.Content.ReadAsStringAsync( limit.Token );
+            return response.IsSuccessStatusCode ? text : throw new HttpRequestException( $"HTTP {(int)response.StatusCode}: {Shorten( text )}" );
+         }
+         catch( Exception ex ) when( ex is HttpRequestException or OperationCanceledException && !ct.IsCancellationRequested )
+         {
+            if( attempt >= MAX_ATTEMPTS )
+            {
+               throw ex is OperationCanceledException ? new TimeoutException( $"no answer from {url} within {CALL_LIMIT.TotalSeconds:0} s" ) : ex;
+            }
+
+            await Task.Delay( TimeSpan.FromSeconds( attempt ), ct );
+         }
+      }
+   }
 
    /// <summary>
    /// Builds the collection definition: schema, HNSW index on the vector field, cosine metric.
@@ -379,36 +683,26 @@ public sealed class MilvusSink : ISink, IEngineDescription, IDisposable
    /// <summary>
    /// Seals the collection's growing segments so they are final and get indexed. Milvus allows
    /// one flush per collection every ten seconds and answers "rate limit exceeded" to more.
-   /// Why that is tolerated for a count: a Strong count(*) already includes unsealed rows, so a
-   /// refused flush costs nothing. Why <paramref name="waitForTurn"/> exists: waiting for the
-   /// index only makes sense once the last rows are sealed, so that caller waits its turn.
+   /// Why a refused flush is tolerated: a Strong count(*) already includes unsealed rows, so a
+   /// refused flush costs a count nothing, and the index wait loop asks again every ten seconds
+   /// until the rows are sealed.
    /// </summary>
    /// <param name="name">Milvus collection name.</param>
-   /// <param name="waitForTurn">True to retry until the flush is accepted, false to give up quietly when refused.</param>
    /// <param name="ct">Cancellation.</param>
-   private async Task FlushAsync( string name, bool waitForTurn, CancellationToken ct )
+   private async Task FlushAsync( string name, CancellationToken ct )
    {
       byte[] body = JsonSerializer.SerializeToUtf8Bytes( new { collectionName = name } );
-      for( int attempt = 1; ; attempt++ )
+      try
       {
-         try
+         using( await PostAsync( "v2/vectordb/collections/flush", body, ct, CALL_LIMIT ) )
          {
-            using( await PostAsync( "v2/vectordb/collections/flush", body, ct ) )
-            {
-            }
-
-            _unflushed.TryRemove( name, out _ );
-            return;
          }
-         catch( MilvusException ex ) when( ex.Code == RATE_LIMITED_CODE )
-         {
-            if( !waitForTurn || attempt >= MAX_ATTEMPTS * 2 )
-            {
-               return;
-            }
 
-            await Task.Delay( FLUSH_INTERVAL, ct );
-         }
+         _unflushed.TryRemove( name, out _ );
+      }
+      catch( MilvusException ex ) when( ex.Code == RATE_LIMITED_CODE )
+      {
+         // Refused because another flush ran in the last ten seconds; the caller asks again later.
       }
    }
 
@@ -480,23 +774,30 @@ public sealed class MilvusSink : ISink, IEngineDescription, IDisposable
 
    /// <summary>
    /// Posts a JSON body and checks Milvus's own result code, with a short retry on connection
-   /// failures and 5xx answers. Every call this sink makes is safe to repeat (upsert by id,
-   /// delete by filter, queries, load).
+   /// failures, timeouts and 5xx answers. Every call this sink makes is safe to repeat (upsert by
+   /// id, delete by filter, queries, load).
    /// </summary>
    /// <param name="path">Path below the base address.</param>
    /// <param name="body">UTF-8 JSON body.</param>
    /// <param name="ct">Cancellation.</param>
+   /// <param name="limit">Longest one attempt may take, or null for the HTTP client's own five-minute limit.</param>
    /// <returns>The parsed response; the caller disposes it.</returns>
-   private async Task<JsonDocument> PostAsync( string path, byte[] body, CancellationToken ct )
+   private async Task<JsonDocument> PostAsync( string path, byte[] body, CancellationToken ct, TimeSpan? limit = null )
    {
       for( int attempt = 1; ; attempt++ )
       {
+         using var attemptLimit = CancellationTokenSource.CreateLinkedTokenSource( ct );
+         if( limit.HasValue )
+         {
+            attemptLimit.CancelAfter( limit.Value );
+         }
+
          try
          {
             using var request = new HttpRequestMessage( HttpMethod.Post, path ) { Content = new ByteArrayContent( body ) };
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue( "application/json" );
-            using HttpResponseMessage response = await _http.SendAsync( request, ct );
-            string text = await response.Content.ReadAsStringAsync( ct );
+            using HttpResponseMessage response = await _http.SendAsync( request, attemptLimit.Token );
+            string text = await response.Content.ReadAsStringAsync( attemptLimit.Token );
             if( (int)response.StatusCode >= 500 && attempt < MAX_ATTEMPTS )
             {
                await Task.Delay( TimeSpan.FromSeconds( attempt ), ct );
@@ -519,8 +820,13 @@ public sealed class MilvusSink : ISink, IEngineDescription, IDisposable
 
             return doc;
          }
-         catch( HttpRequestException ) when( attempt < MAX_ATTEMPTS )
+         catch( Exception ex ) when( ex is HttpRequestException or OperationCanceledException && !ct.IsCancellationRequested )
          {
+            if( attempt >= MAX_ATTEMPTS )
+            {
+               throw ex is OperationCanceledException ? new TimeoutException( $"Milvus did not answer POST {path} within {limit?.TotalSeconds:0} s" ) : ex;
+            }
+
             await Task.Delay( TimeSpan.FromSeconds( attempt ), ct );
          }
       }

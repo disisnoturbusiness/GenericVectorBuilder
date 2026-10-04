@@ -17,6 +17,10 @@ namespace GenericVectorBuilder.Bench.Targets;
 /// Engines assembly (found through <see cref="EngineCatalog"/>).
 /// Why the SQL targets write to their own databases: the benchmark copies up to 760k rows,
 /// several gigabytes, and none of that should grow or lock the builder's real database.
+/// What each built-in target proves about its index: "sql-diskann" and "qdrant-hnsw" are
+/// <see cref="IIndexFinisher"/>s that wait for and prove a real index; "sql" and "qdrant" (the
+/// builder's own sinks, which this benchmark wraps rather than changes) get an index-state
+/// reader that proves from the server that no index is used, plus their durability text.
 /// </summary>
 public sealed class TargetFactory : IDisposable
 {
@@ -27,18 +31,24 @@ public sealed class TargetFactory : IDisposable
 
    private const string ENGINE_DATA_ROOT = "~/gvb-data/engines";
    private const string QDRANT_COLLECTIONS = "~/qdrant/storage/collections";
+   private const string NOT_READ = "not read: see the run's notes";
+   private const string QDRANT_CONFIG = "~/qdrant/config/config.yaml";
    private const int QDRANT_HTTP_PORT = 6333;
+   private static readonly TimeSpan QDRANT_CALL_DEADLINE = TimeSpan.FromSeconds( 60 );
    private static readonly string[] BUILT_IN = { "sql", "sql-diskann", "qdrant", "qdrant-hnsw" };
 
    private readonly GvbSettings _settings;
    private readonly string _sqlConnection;
    private readonly QdrantClient _qdrant;
+   private readonly QdrantServer _qdrantServer;
    private readonly string _repoRoot;
    private readonly int? _hnswEf;
    private readonly Dictionary<string, ISink> _engines;
    private readonly List<string> _notes = new();
    private string _sqlVersion = "SQL Server";
    private string _qdrantVersion = "unknown version";
+   private string? _sqlDurability;
+   private string? _qdrantDurability;
 
    #endregion Data Members
 
@@ -51,11 +61,13 @@ public sealed class TargetFactory : IDisposable
    /// <param name="settings">Builder settings (SQL login, Qdrant address).</param>
    /// <param name="repoRoot">Repository root, where deploy/engines lives.</param>
    /// <param name="hnswEf">Search beam for qdrant-hnsw, or null for the server default.</param>
-   public TargetFactory( GvbSettings settings, string repoRoot, int? hnswEf )
+   /// <param name="log">Progress output for the long waits inside targets, or null for the console.</param>
+   public TargetFactory( GvbSettings settings, string repoRoot, int? hnswEf, Action<string>? log = null )
    {
       _settings = settings;
       _sqlConnection = settings.BuildSqlConnectionString();
-      _qdrant = new QdrantClient( settings.QdrantHost, settings.QdrantGrpcPort );
+      _qdrant = new QdrantClient( settings.QdrantHost, settings.QdrantGrpcPort, false, null, QDRANT_CALL_DEADLINE );
+      _qdrantServer = new QdrantServer( _qdrant, settings.QdrantHost, QDRANT_HTTP_PORT, log );
       _repoRoot = repoRoot;
       _hnswEf = hnswEf;
       _engines = LoadEngines( _notes );
@@ -99,6 +111,8 @@ public sealed class TargetFactory : IDisposable
       {
          _notes.Add( $"Could not read the Qdrant version: {ex.Message}" );
       }
+
+      await ReadDurabilityAsync( ct );
    }
 
    /// <summary>
@@ -112,14 +126,13 @@ public sealed class TargetFactory : IDisposable
       switch( name.ToLowerInvariant() )
       {
          case "sql":
-            return SqlTarget( new SqlVectorSink( _sqlConnection, SQL_BENCH_DATABASE ), SQL_BENCH_DATABASE, c => $"gvb_{c}", "exact VECTOR_DISTANCE cosine, no vector index (full scan)" );
+            return SqlTarget( new SqlVectorSink( _sqlConnection, SQL_BENCH_DATABASE ), SQL_BENCH_DATABASE, c => $"gvb_{c}", "exact VECTOR_DISTANCE cosine, no vector index (full scan)", true );
          case "sql-diskann":
-            return SqlTarget( new SqlDiskAnnSink( _sqlConnection, _sqlVersion ), SqlDiskAnnSink.DATABASE, SqlDiskAnnSink.AnnTable, "DiskANN (preview) via VECTOR_SEARCH" );
+            return SqlTarget( new SqlDiskAnnSink( _sqlConnection, _sqlVersion, _sqlDurability ?? NOT_READ ), SqlDiskAnnSink.DATABASE, SqlDiskAnnSink.AnnTable, "DiskANN (preview) via VECTOR_SEARCH", false );
          case "qdrant":
-            return QdrantTarget( new QdrantSink( _qdrant ), c => $"gvb_{c}", "exact search (the builder's setting), HNSW m=16 ef_construct=100 built but not used",
-               ( c, ct ) => QdrantHnswSink.WaitForGreenAsync( _qdrant, $"gvb_{c}", ct ) );
+            return QdrantTarget( new QdrantSink( _qdrant ), c => $"gvb_{c}", "exact scan: the builder's sink sends exact=true on every search, so no HNSW graph is used whether or not Qdrant has built one (see the index state)", true );
          case "qdrant-hnsw":
-            return QdrantTarget( new QdrantHnswSink( _qdrant, _hnswEf, _qdrantVersion ), QdrantHnswSink.CollectionName, "HNSW", null );
+            return QdrantTarget( new QdrantHnswSink( _qdrant, _qdrantServer, _hnswEf, _qdrantVersion, _qdrantDurability ?? NOT_READ ), QdrantHnswSink.CollectionName, "HNSW", false );
       }
 
       if( _engines.TryGetValue( name, out ISink? sink ) )
@@ -170,12 +183,18 @@ public sealed class TargetFactory : IDisposable
    /// <param name="database">Database it writes to.</param>
    /// <param name="searchedTable">Maps a benchmark collection to the table searches read.</param>
    /// <param name="index">Index description.</param>
+   /// <param name="builderSink">True for the builder's own SQL sink, which this benchmark wraps: it gets an index-state reader that
+   /// proves from the plan of a real search that no vector index is used, and the durability text. False for a sink that does both itself.</param>
    /// <returns>The target.</returns>
-   private BenchTarget SqlTarget( ISink sink, string database, Func<string, string> searchedTable, string index )
+   private BenchTarget SqlTarget( ISink sink, string database, Func<string, string> searchedTable, string index, bool builderSink )
    {
       return new BenchTarget( sink, _sqlVersion, index, "always-on", null,
          ( _, ct ) => ResourceProbe.SqlServerRamAsync( _sqlConnection, ct ),
-         ( c, ct ) => ResourceProbe.SqlTableSizeAsync( _sqlConnection, database, searchedTable( c ), ct ) );
+         ( c, ct ) => ResourceProbe.SqlTableSizeAsync( _sqlConnection, database, searchedTable( c ), ct ) )
+      {
+         IndexStateReader = builderSink ? ( c, ct ) => SqlProbe.ExactStateAsync( _sqlConnection, database, searchedTable( c ), ct ) : null,
+         DurabilityNote = builderSink ? _sqlDurability ?? NOT_READ : null,
+      };
    }
 
    /// <summary>
@@ -184,17 +203,46 @@ public sealed class TargetFactory : IDisposable
    /// <param name="sink">The sink.</param>
    /// <param name="collectionName">Maps a benchmark collection to the Qdrant collection name.</param>
    /// <param name="index">Index description.</param>
-   /// <param name="settle">Wait for background optimisation after loading, or null.</param>
+   /// <param name="builderSink">True for the builder's own sink, which this benchmark wraps: it gets a settle wait, an
+   /// index-state reader that proves every search scans, and the durability text. False for a sink that does those itself.</param>
    /// <returns>The target.</returns>
-   private BenchTarget QdrantTarget( ISink sink, Func<string, string> collectionName, string index, Func<string, CancellationToken, Task<string>>? settle )
+   private BenchTarget QdrantTarget( ISink sink, Func<string, string> collectionName, string index, bool builderSink )
    {
       string engine = sink is IEngineDescription description ? description.Engine : $"Qdrant {_qdrantVersion} (systemd, local)";
       return new BenchTarget( sink, engine, index, "always-on", null,
          ( _, ct ) => ResourceProbe.ProcessRssAsync( "qdrant", "whole Qdrant process, every collection", ct ),
          ( c, ct ) => ResourceProbe.FolderSizeAsync( Path.Combine( GvbSettings.Expand( QDRANT_COLLECTIONS ), collectionName( c ) ), "collection folder", ct ) )
       {
-         Settle = settle,
+         Settle = builderSink ? ( c, ct ) => _qdrantServer.WaitUntilSettledAsync( sink.Name, collectionName( c ), false, ct ) : null,
+         IndexStateReader = builderSink ? ( c, ct ) => _qdrantServer.StateAsync( collectionName( c ), SearchExpectation.ScanEveryVector, ct ) : null,
+         DurabilityNote = builderSink ? _qdrantDurability ?? NOT_READ : null,
       };
+   }
+
+   /// <summary>
+   /// Reads the SQL Server and Qdrant durability settings once, so every target of a run reports
+   /// the same text. A failure becomes a note and a placeholder, never a stopped run.
+   /// </summary>
+   /// <param name="ct">Cancellation.</param>
+   private async Task ReadDurabilityAsync( CancellationToken ct )
+   {
+      try
+      {
+         _sqlDurability = await SqlDurability.ReadAsync( _sqlConnection, new[] { SQL_BENCH_DATABASE, SqlDiskAnnSink.DATABASE }, ct );
+      }
+      catch( Exception ex ) when( ex is not OperationCanceledException || !ct.IsCancellationRequested )
+      {
+         _notes.Add( $"Could not read the SQL Server durability settings: {ex.Message}" );
+      }
+
+      try
+      {
+         _qdrantDurability = await QdrantServer.ReadDurabilityAsync( GvbSettings.Expand( QDRANT_CONFIG ), _qdrantVersion, ct );
+      }
+      catch( Exception ex ) when( ex is not OperationCanceledException || !ct.IsCancellationRequested )
+      {
+         _notes.Add( $"Could not read the Qdrant durability settings: {ex.Message}" );
+      }
    }
 
    /// <summary>
@@ -274,6 +322,7 @@ public sealed class TargetFactory : IDisposable
    /// </summary>
    public void Dispose()
    {
+      _qdrantServer.Dispose();
       _qdrant.Dispose();
       foreach( ISink sink in _engines.Values )
       {

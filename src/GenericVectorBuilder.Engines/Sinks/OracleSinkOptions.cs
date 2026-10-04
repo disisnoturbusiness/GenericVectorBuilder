@@ -15,6 +15,8 @@ public sealed class OracleSinkOptions
    private const string SECRETS_ENV = "GVB_ENGINE_SECRETS";
    private const string USER_KEY = "APP_USER";
    private const string PASSWORD_KEY = "APP_USER_PASSWORD";
+   private const string ADMIN_PASSWORD_KEY = "ORACLE_PASSWORD";
+   private const string ADMIN_USER = "system";
 
    #endregion Data Members
 
@@ -49,6 +51,26 @@ public sealed class OracleSinkOptions
    /// </summary>
    public int HnswEfSearch { get; set; } = 100;
 
+   /// <summary>
+   /// Login that may read the V$VECTOR_* views, used only for those reads (and the statistics the
+   /// durability test reads), never for data. Why a second login: the application login has no
+   /// access to them, and they are the only place where Oracle says how many vectors the HNSW graph
+   /// holds and how many changes are still waiting to be merged into it. Null or empty means the
+   /// application login is used, which works when SELECT on V_$VECTOR_INDEX and
+   /// V_$VECTOR_CHANGE_LOG_PARTITION has been granted to it.
+   /// </summary>
+   public string? EvidenceUser { get; set; }
+
+   /// <summary>Password of <see cref="EvidenceUser"/>.</summary>
+   public string? EvidencePassword { get; set; }
+
+   /// <summary>
+   /// Longest <see cref="OracleSink.FinishLoadAsync"/> waits for the HNSW graph rebuild and the
+   /// state check before it fails. Measured 2026-10-03: rebuilding 100,000 1024-dimension vectors
+   /// took 284 s on Oracle Free's two CPU threads.
+   /// </summary>
+   public int IndexWaitMinutes { get; set; } = 30;
+
    /// <summary>How many rows go into one array-bound round trip.</summary>
    public int UpsertBatch { get; set; } = 500;
 
@@ -59,7 +81,8 @@ public sealed class OracleSinkOptions
    /// <returns>Options with the user and password filled in when the file has them.</returns>
    public static OracleSinkOptions LocalDefaults()
    {
-      var options = new OracleSinkOptions { Password = ReadSecret( PASSWORD_KEY ) };
+      string? admin = ReadSecret( ADMIN_PASSWORD_KEY );
+      var options = new OracleSinkOptions { Password = ReadSecret( PASSWORD_KEY ), EvidenceUser = string.IsNullOrEmpty( admin ) ? null : ADMIN_USER, EvidencePassword = admin };
       string? user = ReadSecret( USER_KEY );
       if( !string.IsNullOrWhiteSpace( user ) )
       {

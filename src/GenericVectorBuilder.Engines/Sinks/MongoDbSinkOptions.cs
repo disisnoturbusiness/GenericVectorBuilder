@@ -48,6 +48,12 @@ public sealed class MongoDbSinkOptions
    /// <summary>Smallest numCandidates ever sent, so a search for 1 hit still looks wide.</summary>
    public int MinNumCandidates { get; set; } = 100;
 
+   /// <summary>
+   /// Longest <see cref="MongoDbSink.FinishLoadAsync"/> waits for mongot to index every stored
+   /// vector before it fails with a plain message.
+   /// </summary>
+   public int IndexWaitSeconds { get; set; } = 1800;
+
    /// <summary>How many documents go into one bulk write.</summary>
    public int UpsertBatch { get; set; } = 500;
 
