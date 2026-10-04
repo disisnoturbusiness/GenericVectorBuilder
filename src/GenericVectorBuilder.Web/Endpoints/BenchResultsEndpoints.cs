@@ -2,13 +2,15 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using GenericVectorBuilder.Web.BenchPages;
 
 namespace GenericVectorBuilder.Web.Endpoints;
 
 /// <summary>
-/// Read-only pages for the benchmark results the Bench tool writes to disk: a list of runs at
-/// /bench-results, each run's results.md rendered as HTML at /bench-results/{run}, and the raw
-/// .md and .json files under /bench-results/{run}/{file}.
+/// Read-only pages for the benchmark results the Bench tool writes to disk: a summary at
+/// /bench-results (headline, chart, compact table, known problems, then every run), each run at
+/// /bench-results/{run} (the same summary for that run, then its full report with per-engine
+/// detail folded), and the raw .md and .json files under /bench-results/{run}/{file}.
 /// Why here: the numbers lived only as files on linus, so nobody could look at them from a
 /// browser. Serving them from the app that produced the data keeps one place to look.
 /// Only folder and file names made of letters, digits, dot, dash and underscore are accepted,
@@ -19,13 +21,20 @@ public static class BenchResultsEndpoints
 {
    #region Data Members
 
+   /// <summary>The folder whose consolidated.json the summary page is built from.</summary>
+   public const string PUBLISHED_FOLDER = "published-2026-10-04";
+
    private const string DEFAULT_ROOT = "/home/dan/ForClaude/GenericVectorBuilder/bench-results";
    private const string CONFIG_KEY = "Gvb:BenchResultsPath";
-   private const int MAX_FILE_BYTES = 5 * 1024 * 1024;
+   private const string HTML = "text/html; charset=utf-8";
+   private const string RESULTS_JSON = "results.json";
+   private const string CONSOLIDATED_JSON = "consolidated.json";
+   private const int MAX_RUNS_LISTED = 500;
+   private const string SUMMARY_NOTE = "Method problems are listed below the table.";
+   private const string RUN_NOTE = "Known method problems are listed on <a href=\"/bench-results\">the summary page</a>.";
    private static readonly Regex SAFE_NAME = new( "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$", RegexOptions.Compiled );
-   private static readonly Regex INLINE_CODE = new( "`([^`]+)`", RegexOptions.Compiled );
-   private static readonly Regex BOLD = new( "\\*\\*([^*]+)\\*\\*", RegexOptions.Compiled );
    private static readonly HashSet<string> RAW_EXTENSIONS = new( StringComparer.OrdinalIgnoreCase ) { ".md", ".json" };
+   private static readonly string[] REPORTS = { "results.md", "consolidated.md" };
 
    #endregion Data Members
 
@@ -38,8 +47,8 @@ public static class BenchResultsEndpoints
    public static void Map( WebApplication app )
    {
       string root = Path.GetFullPath( app.Configuration[CONFIG_KEY] ?? DEFAULT_ROOT );
-      app.MapGet( "/bench-results", () => Results.Content( ListPage( root ), "text/html; charset=utf-8" ) );
-      app.MapGet( "/bench-results/{run}", ( string run ) => RunPage( root, run ) );
+      app.MapGet( "/bench-results", () => Results.Content( ListPageHtml( root ), HTML ) );
+      app.MapGet( "/bench-results/{run}", ( string run ) => RunPageHtml( root, run ) is string page ? Results.Content( page, HTML ) : Results.NotFound( new { error = "No such benchmark run." } ) );
       app.MapGet( "/bench-results/{run}/{file}", ( string run, string file ) => RawFile( root, run, file ) );
    }
 
@@ -63,22 +72,93 @@ public static class BenchResultsEndpoints
    }
 
    /// <summary>
-   /// Renders the small Markdown subset the Bench report uses (headings, pipe tables, fenced
-   /// code, bullets, paragraphs, inline code, bold) as HTML. Everything is HTML-escaped first,
-   /// so file content can never inject markup. Public so it can be tested directly.
+   /// Renders a Bench report as HTML (see <see cref="BenchMarkdown.Render"/>). Kept here so
+   /// existing callers and tests keep working.
    /// </summary>
    /// <param name="markdown">Report text.</param>
    /// <returns>HTML fragment.</returns>
    public static string RenderMarkdown( string markdown )
    {
-      var html = new StringBuilder();
-      string[] lines = markdown.Replace( "\r", string.Empty ).Split( '\n' );
-      for( int i = 0; i < lines.Length; )
+      return BenchMarkdown.Render( markdown );
+   }
+
+   /// <summary>
+   /// Builds the /bench-results page: the summary from the published consolidated.json when it
+   /// exists, then every run. Without that file it falls back to the run list alone.
+   /// Internal so tests can render it against a folder of their own.
+   /// </summary>
+   /// <param name="root">Results root.</param>
+   /// <returns>Full HTML page.</returns>
+   internal static string ListPageHtml( string root )
+   {
+      if( !Directory.Exists( root ) )
       {
-         i = RenderBlock( lines, i, html );
+         return Page( "Benchmark results", "<h1>Benchmark results</h1><p class=\"muted\">No results folder yet.</p>" );
       }
 
-      return html.ToString();
+      var body = new StringBuilder();
+      string consolidated = Path.Combine( root, PUBLISHED_FOLDER, CONSOLIDATED_JSON );
+      if( File.Exists( consolidated ) )
+      {
+         body.Append( "<h1>Vector search benchmark</h1>" );
+         body.Append( SummaryOrError( () => BenchSummaryReader.FromConsolidated( BenchRunList.ReadCapped( consolidated ) ), SUMMARY_NOTE, BenchSummaryHtml.PUBLISHED_DATA ) );
+         body.Append( BenchSummaryHtml.Caveats() ).Append( "<h2>All runs</h2>" );
+      }
+      else
+      {
+         body.Append( "<h1>Benchmark results</h1>" );
+      }
+
+      IEnumerable<BenchRunInfo> runs = new DirectoryInfo( root ).GetDirectories().Where( d => SAFE_NAME.IsMatch( d.Name ) )
+         .OrderByDescending( d => d.Name, StringComparer.Ordinal ).Take( MAX_RUNS_LISTED ).Select( BenchRunList.Describe );
+      body.Append( BenchRunList.Html( runs ) );
+      return Page( "Vector search benchmark", body.ToString() );
+   }
+
+   /// <summary>
+   /// Builds one run's page: its title, the summary block for that run, then its report with the
+   /// per-engine detail folded, then links to its raw files.
+   /// Internal so tests can render it against a folder of their own.
+   /// </summary>
+   /// <param name="root">Results root.</param>
+   /// <param name="run">Run folder name.</param>
+   /// <returns>Full HTML page, or null when the name is refused or the folder does not exist.</returns>
+   internal static string? RunPageHtml( string root, string run )
+   {
+      string? folder = Resolve( root, run, null );
+      if( folder == null || !Directory.Exists( folder ) )
+      {
+         return null;
+      }
+
+      string? md = REPORTS.Select( f => Path.Combine( folder, f ) ).FirstOrDefault( File.Exists );
+      ( string? title, string rest ) = md == null ? ( null, string.Empty ) : BenchMarkdown.SplitTitle( BenchRunList.ReadCapped( md ) );
+      var body = new StringBuilder( "<p><a href=\"/bench-results\">Summary and all runs</a></p>" );
+      body.Append( "<h1>" ).Append( BenchMarkdown.Inline( title ?? run ) ).Append( "</h1>" );
+      body.Append( RunSummary( folder, run ) );
+      body.Append( md == null ? "<p class=\"muted\">This run has no Markdown report.</p>" : "<h2>Full results</h2>" + BenchMarkdown.Render( rest ) );
+      body.Append( "<h2>Raw files</h2><ul>" );
+      foreach( string file in Directory.GetFiles( folder ).Select( Path.GetFileName ).OfType<string>().Where( f => RAW_EXTENSIONS.Contains( Path.GetExtension( f ) ) && SAFE_NAME.IsMatch( f ) ).OrderBy( f => f, StringComparer.Ordinal ) )
+      {
+         body.Append( $"<li><a href=\"/bench-results/{Enc( run )}/{Enc( file )}\">{Enc( file )}</a></li>" );
+      }
+
+      body.Append( "</ul>" );
+      return Page( title ?? run, body.ToString() );
+   }
+
+   /// <summary>
+   /// The path of a raw .md or .json file a request may download, or null when refused.
+   /// Internal so the refusal rules can be tested.
+   /// </summary>
+   /// <param name="root">Results root.</param>
+   /// <param name="run">Run folder name.</param>
+   /// <param name="file">File name.</param>
+   /// <returns>The path, or null.</returns>
+   internal static string? RawFilePath( string root, string run, string file )
+   {
+      string? path = Resolve( root, run, file );
+      return path == null || !RAW_EXTENSIONS.Contains( Path.GetExtension( path ) ) || !File.Exists( path ) || new FileInfo( path ).Length > BenchRunList.MAX_FILE_BYTES ? null : path;
    }
 
    #endregion Public Methods
@@ -86,86 +166,48 @@ public static class BenchResultsEndpoints
    #region Private Methods
 
    /// <summary>
-   /// Builds the list page: every run folder, newest first, with its pipeline and target count
-   /// when its results.json can be read.
+   /// The summary block for a run folder: from its results.json, or from consolidated.json for a
+   /// folder of medians, or nothing when it has neither.
    /// </summary>
-   /// <param name="root">Results root.</param>
-   /// <returns>Full HTML page.</returns>
-   private static string ListPage( string root )
+   /// <param name="folder">Run folder path (already resolved).</param>
+   /// <param name="run">Run folder name.</param>
+   /// <returns>HTML fragment.</returns>
+   private static string RunSummary( string folder, string run )
    {
-      var body = new StringBuilder( "<h1>Benchmark results</h1>" );
-      if( !Directory.Exists( root ) )
+      string results = Path.Combine( folder, RESULTS_JSON );
+      if( File.Exists( results ) )
       {
-         body.Append( "<p class=\"muted\">No results folder yet.</p>" );
-         return Page( "Benchmark results", body.ToString() );
+         BenchRunInfo info = BenchRunList.Describe( new DirectoryInfo( folder ) );
+         string data = $"Run started {info.When} UTC. Data: {info.Data}. Queries: {info.Queries}.";
+         return SummaryOrError( () => BenchSummaryReader.FromRunResults( BenchRunList.ReadCapped( results ) ), RUN_NOTE, data );
       }
 
-      body.Append( "<p class=\"muted\">Every run the benchmark wrote, newest first. Each opens as a table.</p><ul class=\"runs-list\">" );
-      foreach( DirectoryInfo dir in new DirectoryInfo( root ).GetDirectories().Where( d => SAFE_NAME.IsMatch( d.Name ) ).OrderByDescending( d => d.Name, StringComparer.Ordinal ) )
-      {
-         string summary = Summarize( dir.FullName );
-         body.Append( $"<li><a href=\"/bench-results/{Enc( dir.Name )}\">{Enc( dir.Name )}</a> <span class=\"muted\">{Enc( summary )}</span></li>" );
-      }
-
-      body.Append( "</ul>" );
-      return Page( "Benchmark results", body.ToString() );
+      string consolidated = Path.Combine( folder, CONSOLIDATED_JSON );
+      string? published = run == PUBLISHED_FOLDER ? BenchSummaryHtml.PUBLISHED_DATA : null;
+      return File.Exists( consolidated )
+         ? SummaryOrError( () => BenchSummaryReader.FromConsolidated( BenchRunList.ReadCapped( consolidated ) ), RUN_NOTE, published )
+         : string.Empty;
    }
 
    /// <summary>
-   /// One-line summary of a run folder from its results.json (pipeline, targets, queries), or a
-   /// note when the folder holds something else (e.g. consolidated numbers).
+   /// Renders the summary block, or a visible error when the numbers cannot be read.
+   /// Why not throw: the rest of the page (the run list, the full report) is still worth showing,
+   /// and the error is printed where the chart would be, so nobody mistakes it for no data.
    /// </summary>
-   /// <param name="folder">Run folder.</param>
-   /// <returns>Summary text.</returns>
-   private static string Summarize( string folder )
+   /// <param name="read">Reads the numbers.</param>
+   /// <param name="noteHtml">Trusted fixed markup for the "not final" line.</param>
+   /// <param name="dataLine">Plain text data description, or null.</param>
+   /// <returns>HTML fragment.</returns>
+   private static string SummaryOrError( Func<BenchSummary> read, string noteHtml, string? dataLine )
    {
-      string json = Path.Combine( folder, "results.json" );
-      if( !File.Exists( json ) )
-      {
-         string[] files = Directory.GetFiles( folder ).Select( Path.GetFileName ).OfType<string>().ToArray();
-         return files.Length == 0 ? "empty" : string.Join( ", ", files );
-      }
-
       try
       {
-         using JsonDocument doc = JsonDocument.Parse( File.ReadAllText( json ) );
-         JsonElement r = doc.RootElement;
-         int targets = r.TryGetProperty( "targets", out JsonElement t ) ? t.GetArrayLength() : 0;
-         string pipeline = r.TryGetProperty( "pipeline", out JsonElement p ) ? p.GetString() ?? "?" : "?";
-         string queries = r.TryGetProperty( "queries", out JsonElement q ) ? q.ToString() : "?";
-         return $"pipeline {pipeline}, {targets} targets, queries {queries}";
+         return BenchSummaryHtml.Block( read(), noteHtml, dataLine );
       }
-      catch( Exception ex ) when( ex is JsonException or IOException )
+      catch( Exception ex ) when( ex is JsonException or IOException or InvalidDataException or UnauthorizedAccessException )
       {
-         return $"results.json unreadable: {ex.Message}";
+         return $"<p class=\"errors\">The summary numbers could not be read: {Enc( ex.Message )}</p>";
       }
-   }
-
-   /// <summary>
-   /// Renders one run's results.md (or consolidated.md) as a page, with links to its raw files.
-   /// </summary>
-   /// <param name="root">Results root.</param>
-   /// <param name="run">Run folder name.</param>
-   /// <returns>The page, or 404.</returns>
-   private static IResult RunPage( string root, string run )
-   {
-      string? folder = Resolve( root, run, null );
-      if( folder == null || !Directory.Exists( folder ) )
-      {
-         return Results.NotFound( new { error = "No such benchmark run." } );
-      }
-
-      string? md = new[] { "results.md", "consolidated.md" }.Select( f => Path.Combine( folder, f ) ).FirstOrDefault( File.Exists );
-      var body = new StringBuilder( $"<p><a href=\"/bench-results\">All runs</a></p>" );
-      body.Append( md == null ? $"<h1>{Enc( run )}</h1><p class=\"muted\">This run has no Markdown report.</p>" : RenderMarkdown( File.ReadAllText( md ) ) );
-      body.Append( "<h2>Raw files</h2><ul>" );
-      foreach( string file in Directory.GetFiles( folder ).Select( Path.GetFileName ).OfType<string>().Where( f => RAW_EXTENSIONS.Contains( Path.GetExtension( f ) ) ).OrderBy( f => f, StringComparer.Ordinal ) )
-      {
-         body.Append( $"<li><a href=\"/bench-results/{Enc( run )}/{Enc( file )}\">{Enc( file )}</a></li>" );
-      }
-
-      body.Append( "</ul>" );
-      return Results.Content( Page( run, body.ToString() ), "text/html; charset=utf-8" );
    }
 
    /// <summary>
@@ -177,113 +219,14 @@ public static class BenchResultsEndpoints
    /// <returns>The file, or 404.</returns>
    private static IResult RawFile( string root, string run, string file )
    {
-      string? path = Resolve( root, run, file );
-      if( path == null || !RAW_EXTENSIONS.Contains( Path.GetExtension( path ) ) || !File.Exists( path ) || new FileInfo( path ).Length > MAX_FILE_BYTES )
+      string? path = RawFilePath( root, run, file );
+      if( path == null )
       {
          return Results.NotFound( new { error = "No such file." } );
       }
 
       string type = Path.GetExtension( path ).Equals( ".json", StringComparison.OrdinalIgnoreCase ) ? "application/json" : "text/plain";
       return Results.File( path, $"{type}; charset=utf-8" );
-   }
-
-   /// <summary>
-   /// Renders the block starting at a line and returns the index of the next unread line.
-   /// </summary>
-   /// <param name="lines">All lines.</param>
-   /// <param name="i">Current line.</param>
-   /// <param name="html">Output.</param>
-   /// <returns>Next line index.</returns>
-   private static int RenderBlock( string[] lines, int i, StringBuilder html )
-   {
-      string line = lines[i];
-      if( line.StartsWith( "```", StringComparison.Ordinal ) )
-      {
-         var code = new List<string>();
-         for( i++; i < lines.Length && !lines[i].StartsWith( "```", StringComparison.Ordinal ); i++ )
-         {
-            code.Add( lines[i] );
-         }
-
-         html.Append( "<pre>" ).Append( Enc( string.Join( "\n", code ) ) ).Append( "</pre>" );
-         return i + 1;
-      }
-
-      if( line.StartsWith( '|' ) )
-      {
-         return RenderTable( lines, i, html );
-      }
-
-      if( line.StartsWith( "- ", StringComparison.Ordinal ) )
-      {
-         html.Append( "<ul>" );
-         for( ; i < lines.Length && lines[i].StartsWith( "- ", StringComparison.Ordinal ); i++ )
-         {
-            html.Append( "<li>" ).Append( Inline( lines[i][2..] ) ).Append( "</li>" );
-         }
-
-         html.Append( "</ul>" );
-         return i;
-      }
-
-      int level = line.TakeWhile( c => c == '#' ).Count();
-      if( level is >= 1 and <= 4 && line.Length > level && line[level] == ' ' )
-      {
-         html.Append( $"<h{level}>" ).Append( Inline( line[( level + 1 )..] ) ).Append( $"</h{level}>" );
-      }
-      else if( !string.IsNullOrWhiteSpace( line ) )
-      {
-         html.Append( "<p>" ).Append( Inline( line ) ).Append( "</p>" );
-      }
-
-      return i + 1;
-   }
-
-   /// <summary>
-   /// Renders a pipe table (header, separator, rows) inside a horizontally scrolling box, since
-   /// the benchmark tables are wider than a phone screen.
-   /// </summary>
-   /// <param name="lines">All lines.</param>
-   /// <param name="i">First table line.</param>
-   /// <param name="html">Output.</param>
-   /// <returns>Next line index after the table.</returns>
-   private static int RenderTable( string[] lines, int i, StringBuilder html )
-   {
-      html.Append( "<div class=\"preview\"><table>" );
-      bool header = true;
-      for( ; i < lines.Length && lines[i].StartsWith( '|' ); i++ )
-      {
-         string[] cells = lines[i].Trim().Trim( '|' ).Split( '|' ).Select( c => c.Trim() ).ToArray();
-         if( cells.All( c => c.Length > 0 && c.All( ch => ch is '-' or ':' ) ) )
-         {
-            continue;
-         }
-
-         string tag = header ? "th" : "td";
-         html.Append( "<tr>" );
-         foreach( string cell in cells )
-         {
-            html.Append( $"<{tag}>" ).Append( Inline( cell ) ).Append( $"</{tag}>" );
-         }
-
-         html.Append( "</tr>" );
-         header = false;
-      }
-
-      html.Append( "</table></div>" );
-      return i;
-   }
-
-   /// <summary>
-   /// Escapes a line, then applies inline code and bold.
-   /// </summary>
-   /// <param name="text">Raw text.</param>
-   /// <returns>Safe HTML.</returns>
-   private static string Inline( string text )
-   {
-      string safe = Enc( text );
-      safe = INLINE_CODE.Replace( safe, "<code>$1</code>" );
-      return BOLD.Replace( safe, "<strong>$1</strong>" );
    }
 
    /// <summary>
@@ -305,7 +248,7 @@ public static class BenchResultsEndpoints
    private static string Page( string title, string body )
    {
       return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-         + $"<title>{Enc( title )}</title><link rel=\"stylesheet\" href=\"/style.css\"></head><body>"
+         + $"<meta name=\"color-scheme\" content=\"light dark\"><title>{Enc( title )}</title><link rel=\"stylesheet\" href=\"/style.css\"></head><body>"
          + "<header class=\"topbar\"><h1><a href=\"/\">GenericVectorBuilder</a></h1><a href=\"/bench-results\">Benchmark results</a></header>"
          + $"<main class=\"card bench\">{body}</main></body></html>";
    }
