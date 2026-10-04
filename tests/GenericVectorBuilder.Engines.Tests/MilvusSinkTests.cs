@@ -9,6 +9,7 @@ namespace GenericVectorBuilder.Engines.Tests;
 /// Runs the shared sink contract against the local Milvus container
 /// (deploy/engines/milvus.compose.yaml must be up).
 /// </summary>
+[Collection( "MilvusNode" )]
 [Trait( "Category", "Live" )]
 public sealed class MilvusSinkTests : SinkContractTests
 {
@@ -28,6 +29,7 @@ public sealed class MilvusSinkTests : SinkContractTests
 /// (the count, well-formed hits, a stored vector finding itself); the timings are printed for
 /// the benchmark write-up. Run with: dotnet test --filter "Category=Scale&amp;FullyQualifiedName~Milvus"
 /// </summary>
+[Collection( "MilvusNode" )]
 [Trait( "Category", "Scale" )]
 public sealed class MilvusSinkScaleTests
 {

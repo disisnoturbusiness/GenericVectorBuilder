@@ -8,8 +8,10 @@ namespace GenericVectorBuilder.Bench.Running;
 
 /// <summary>
 /// Measures one target from start to finish: make sure its engine is up, load it (with its
-/// index step), read the engine's own index state, search it, read the index state again,
-/// read memory and disk, then drop the copy and stop the engine if this run started it.
+/// index step), read the engine's own index state, rehearse every pass type and let the latency
+/// settle (untimed), run the timed passes, read the index state again, read memory and disk,
+/// then drop the copy and stop the engine if this run started it. Each timed pass is written
+/// into the target's notes with its UTC window, its searches and the pass that ran before it.
 /// Why the index state is read on both sides of the searches: a number is only worth quoting
 /// when the engine itself says which index produced it. A target whose index is not ready after
 /// the load is still measured, and its notes say so in capitals, so the gap is visible instead
@@ -112,6 +114,53 @@ public sealed class TargetRunner
       return $"{( state.Ready ? "ready" : "NOT ready" )}{counts} ({state.Detail})";
    }
 
+   /// <summary>
+   /// One line for the rehearsal: which pass types ran, for how long, and how many searches.
+   /// </summary>
+   /// <param name="preparation">The preparation.</param>
+   /// <param name="each">Rehearsal length per pass type.</param>
+   /// <returns>The note.</returns>
+   public static string DescribePreparation( Preparation preparation, TimeSpan each )
+   {
+      string passes = string.Join( ", ", preparation.Rehearsals.Select( r => $"{r.Pass} {r.Searches:N0} searches in {r.Seconds:0.0} s{( r.Errors > 0 ? $" ({r.Errors} FAILED)" : string.Empty )}" ) );
+      return $"Rehearsal before any timed pass, untimed, every pass type for at least {each.TotalSeconds:0.#} s through the same code the timed passes use: {passes}.";
+   }
+
+   /// <summary>
+   /// One line for the settle, a WARNING when the latency had not settled.
+   /// </summary>
+   /// <param name="settle">The settle, or null when it did not run.</param>
+   /// <returns>The note.</returns>
+   public static string DescribeSettle( SettleResult? settle )
+   {
+      if( settle == null )
+      {
+         return "WARNING: no settle ran before the timed passes.";
+      }
+
+      string p50s = settle.WindowP50s.Count == 0 ? "no full window" : string.Join( ", ", settle.WindowP50s.TakeLast( SearchRunner.SETTLE_WINDOWS ).Select( p => $"{p:0.00}" ) ) + " ms";
+      string how = $"{settle.Seconds:0.0} s and {settle.Searches:N0} searches ({settle.Errors} failed); p50 of the last windows of {SearchRunner.SETTLE_WINDOW}: {p50s}";
+      return settle.Settled
+         ? $"Settle: settled after {how}, within {SearchRunner.SETTLE_TOLERANCE:0%} across {SearchRunner.SETTLE_WINDOWS} windows."
+         : $"WARNING: latency had NOT settled when timing began ({settle.StoppedBecause}) after {how}. Its numbers may still include warm-up; rerun before quoting them.";
+   }
+
+   /// <summary>
+   /// One line for a timed pass: what ran before it, its window in UTC, its searches and its
+   /// latency summary.
+   /// </summary>
+   /// <param name="pass">The pass record.</param>
+   /// <returns>The note.</returns>
+   public static string DescribePass( PassRecord pass )
+   {
+      string latency = pass.P50Ms is double p50
+         ? $"p50 {p50:0.000} ms, mean {pass.MeanMs:0.000} ms, p99 {pass.P99Ms:0.000} ms, "
+         : "no latency (no search completed), ";
+      string perSearch = pass.Qps > 0 ? $" (1000/QPS {1000 / pass.Qps:0.000} ms)" : string.Empty;
+      return $"Pass {pass.Name} after {pass.Previous ?? "nothing"}: {pass.StartUtc:yyyy-MM-ddTHH:mm:ss.fffZ} to {pass.EndUtc:yyyy-MM-ddTHH:mm:ss.fffZ} ({pass.Seconds:0.0} s), "
+         + $"{pass.Searches:N0} searches, {pass.Errors} failed, {latency}{pass.Qps:0.0} QPS{perSearch}.";
+   }
+
    #endregion Public Methods
 
    #region Private Methods
@@ -135,7 +184,11 @@ public sealed class TargetRunner
    }
 
    /// <summary>
-   /// Runs every timed pass, then reads the index state again and writes the method notes.
+   /// Rehearses and settles the target, runs every timed pass, then reads the index state again
+   /// and writes the method notes, one record per pass and the measurement flags.
+   /// Why the preparation runs here, after the index state was read: the settle has to start
+   /// from the index the engine says it is using, and the timed passes have to start from a
+   /// settled engine and a client whose code for every pass is already compiled.
    /// </summary>
    /// <param name="target">The target.</param>
    /// <param name="runner">Search runner.</param>
@@ -145,15 +198,22 @@ public sealed class TargetRunner
    private async Task SearchAsync( BenchTarget target, SearchRunner runner, TargetReport result, int expected, CancellationToken ct )
    {
       NoteLoad( result );
-      SearchOutcome outcome = await runner.RunAsync( target, _options.Collection, _log, ct );
+      Preparation preparation = await runner.PrepareAsync( target, _options.Collection, _log, ct );
+      SearchOutcome outcome = await runner.RunAsync( target, _options.Collection, _log, ct, preparation );
       result.Search = outcome.Report;
       result.PassOrder = outcome.PassOrder;
-      result.WarmupErrors = outcome.WarmupErrors;
+      result.WarmupErrors = outcome.UntimedErrors;
       result.IndexState!.AfterSearch = await target.ReadIndexStateAsync( _options.Collection, STATE_TIMEOUT, ct );
+      result.Notes.Add( DescribePreparation( preparation, runner.RehearsalTime ) );
+      result.Notes.Add( DescribeSettle( preparation.Settle ) );
+      result.Notes.AddRange( outcome.Passes.Select( DescribePass ) );
       result.Notes.Add( $"Passes in the order run: {string.Join( ", ", outcome.PassOrder )}; each after its own warm-up. "
-         + $"Warm-up: {outcome.WarmupSearches} searches, {outcome.WarmupErrors} failed{( outcome.FirstWarmupError != null ? $" (first {outcome.FirstWarmupError})" : string.Empty )}"
-         + $"{( outcome.WarmupsCutShort.Count > 0 ? $"; stopped early by its time budget before {string.Join( ", ", outcome.WarmupsCutShort )}" : string.Empty )}. "
+         + $"Untimed searches (rehearsal, settle and per-pass warm-ups): {outcome.UntimedSearches:N0} sent, {outcome.UntimedErrors} failed (warmupErrors)"
+         + $"{( outcome.FirstWarmupError != null ? $"; first warm-up failure {outcome.FirstWarmupError}" : string.Empty )}"
+         + $"{( preparation.FirstError != null ? $"; first {preparation.FirstError}" : string.Empty )}"
+         + $"{( outcome.WarmupsCutShort.Count > 0 ? $"; warm-up stopped early by its time budget before {string.Join( ", ", outcome.WarmupsCutShort )}" : string.Empty )}. "
          + $"Index after the searches: {Describe( result.IndexState.AfterSearch )}." );
+      result.Notes.AddRange( outcome.Flags );
       NoteIndexChange( result );
       NoteCountMismatch( result, expected );
    }

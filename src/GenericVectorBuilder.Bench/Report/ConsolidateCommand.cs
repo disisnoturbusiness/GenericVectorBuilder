@@ -87,9 +87,12 @@ public static class ConsolidateCommand
       return @"consolidate --targets a,b,c [--runs FOLDER|GLOB[,...]] [FOLDER|GLOB ...] [--out DIR] [--pairs a:b,c:d]
 
   Uses only runs in which every listed target has a result; every other run is logged with its reason.
+  Runs measured under different build configuration, CPU governor, CPU partition, warm-up count, exact-mode seconds,
+  seconds per level or search settings of a listed target are never mixed: the largest consistent group is used.
   GLOB may use * and ? in any path segment and {x,y} alternatives, e.g. 'bench-results/2026100{3,4}-*-eshoponweb'.
   --out defaults to a new consolidated-<UTC time> folder beside the first run used.
-  --pairs defaults to sql-diskann:sql and qdrant-hnsw:qdrant (when both are listed).";
+  --pairs a:b[,c:d] compares two targets run by run; there is no default pair, because two targets hold separate copies of the data.
+  Load rows/s is reported but never ranked. Flags (spread, p50 against mean, unsettled engine, busy box, governor, shared cores) are in consolidated.md and .json.";
    }
 
    /// <summary>
@@ -334,7 +337,7 @@ public sealed class ConsolidateArgs
    /// <summary>Output folder, or null for the default.</summary>
    public string? OutFolder { get; private set; }
 
-   /// <summary>Pairs to compare run by run.</summary>
+   /// <summary>Pairs to compare run by run (none unless --pairs is given).</summary>
    public IReadOnlyList<(string A, string B)> Pairs { get; private set; } = Consolidator.DEFAULT_PAIRS;
 
    /// <summary>

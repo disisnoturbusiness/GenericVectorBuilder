@@ -1,10 +1,11 @@
 using System.Globalization;
+using GenericVectorBuilder.Bench.Running;
 
 namespace GenericVectorBuilder.Bench.Cli;
 
 /// <summary>
 /// The command line, parsed and checked. Format: a command word, then "--name value" pairs
-/// (and the "--keep" switch).
+/// (and the "--keep" and "--no-machine-control" switches).
 /// Why a hand-rolled parser instead of a library: there are a dozen options, all simple, and
 /// every mistake gets a plain-English message naming the option at fault.
 /// </summary>
@@ -16,14 +17,14 @@ public sealed class BenchOptions
    public const string COLLECTION_PREFIX = "gvbbench_";
 
    /// <summary>Commands the tool understands.</summary>
-   public static readonly string[] COMMANDS = { "replicate", "bench", "run-all", "clean", "list" };
+   public static readonly string[] COMMANDS = { "replicate", "bench", "run-all", "clean", "list", "restore-machine" };
 
    private const string DEFAULT_GOLDEN = "/home/dan/ForClaude/evalkit/questions_golden.json";
-   private static readonly HashSet<string> SWITCHES = new( StringComparer.Ordinal ) { "keep" };
+   private static readonly HashSet<string> SWITCHES = new( StringComparer.Ordinal ) { "keep", "no-machine-control" };
    private static readonly HashSet<string> VALUED = new( StringComparer.Ordinal )
    {
       "pipeline", "targets", "limit", "batch", "queries", "top", "concurrency", "seconds", "warmup", "hnsw-ef",
-      "golden-file", "out", "repo", "exact-seconds", "search-timeout", "seed",
+      "golden-file", "out", "repo", "exact-seconds", "search-timeout", "seed", "machine-state",
    };
 
    #endregion Data Members
@@ -95,6 +96,20 @@ public sealed class BenchOptions
    /// <summary>run-all only: keep the benchmark collections instead of dropping them afterwards.</summary>
    public bool Keep { get; private set; }
 
+   /// <summary>
+   /// bench and run-all: put the machine into a known state for the timed passes (performance
+   /// governor, engine and client on separate physical cores, passes held while the box is
+   /// busy) and back afterwards. False with --no-machine-control, which changes nothing on the
+   /// machine and says so in the results; meant for tests and for boxes without sudo.
+   /// </summary>
+   public bool MachineControl { get; private set; } = true;
+
+   /// <summary>
+   /// The state file recording every machine change before it is made, so a run killed without
+   /// its finally block is put back by the next start or by "restore-machine".
+   /// </summary>
+   public string MachineStateFile { get; private set; } = MachineStateStore.DEFAULT_PATH;
+
    /// <summary>Collection name every target is loaded under: "gvbbench_" + pipeline.</summary>
    public string Collection => COLLECTION_PREFIX + Pipeline;
 
@@ -141,12 +156,18 @@ public sealed class BenchOptions
   bench     --pipeline P --targets a,b [--limit N] [--queries random:200|golden] [--top 10] [--concurrency 1,8] [--seconds 20]
   run-all   --pipeline P [--targets a,b] [same options as replicate and bench] [--keep]
   clean     --pipeline P --targets a,b
+  restore-machine [--machine-state FILE]   put back what a run that did not finish changed
 
-Other options: --warmup 20, --seed N, --hnsw-ef N, --golden-file F, --exact-seconds 60, --search-timeout 120, --out DIR, --repo DIR.
+Other options: --warmup 20, --seed N, --hnsw-ef N, --golden-file F, --exact-seconds 60, --search-timeout 120, --out DIR, --repo DIR,
+--no-machine-control, --machine-state FILE (default /home/dan/gvb-work/bench-machine-state.json).
 Every target is loaded under the collection 'gvbbench_' + P, never the live name.
 Targets run in a random order, and each target's timed passes (default search at each concurrency
 level, exact mode) run in a random order, each after its own warm-up. --seed N repeats an order;
-without it the seed comes from the start time and is written to results.json as runSeed.";
+without it the seed comes from the start time and is written to results.json as runSeed.
+bench and run-all set every CPU's governor to performance, run the engine under test on the upper half
+of the physical cores and this client on the lower half, and hold each timed pass (up to 60 s) while
+other work uses more than 1.5 CPUs; everything is put back at the end and recorded under 'conditions'
+in results.json. --no-machine-control changes nothing on the machine.";
    }
 
    #endregion Public Methods
@@ -207,6 +228,8 @@ without it the seed comes from the start time and is written to results.json as 
          case "search-timeout": SearchTimeoutSeconds = Positive( name, value ); break;
          case "seed": Seed = WholeNumber( name, value ); break;
          case "keep": Keep = true; break;
+         case "no-machine-control": MachineControl = false; break;
+         case "machine-state": MachineStateFile = value; break;
       }
    }
 
@@ -215,7 +238,7 @@ without it the seed comes from the start time and is written to results.json as 
    /// </summary>
    private void Validate()
    {
-      if( Command != "list" && !System.Text.RegularExpressions.Regex.IsMatch( Pipeline, "^[a-z0-9_]{1,100}$" ) )
+      if( Command is not ( "list" or "restore-machine" ) && !System.Text.RegularExpressions.Regex.IsMatch( Pipeline, "^[a-z0-9_]{1,100}$" ) )
       {
          throw new ArgumentException( "--pipeline is required: the pipeline name (lower-case letters, digits, underscores)." );
       }

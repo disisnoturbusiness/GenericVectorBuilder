@@ -41,6 +41,7 @@ public static class ConsolidatedMarkdown
       AppendExact( md, report );
       AppendFacts( md, report );
       AppendFlags( md, report );
+      AppendNotes( md, report );
       return md.ToString();
    }
 
@@ -70,6 +71,12 @@ public static class ConsolidatedMarkdown
          new[] { "top", Int( s.Top ) },
          new[] { "concurrency", s.Concurrency.Count == 0 ? MISSING : string.Join( ", ", s.Concurrency ) },
          new[] { "seconds per level", Int( s.SecondsPerLevel ) },
+         new[] { "build configuration", Recorded( s.BuildConfiguration, s, "buildConfiguration" ) },
+         new[] { "machine control", Recorded( s.MachineControl, s, "machineControl" ) },
+         new[] { "CPU governor", Recorded( s.Governor, s, "governor" ) },
+         new[] { "CPU partition", Recorded( s.CpuPartition, s, "cpuPartition" ) },
+         new[] { "warm-up searches before each timed pass", Recorded( s.WarmupSearches?.ToString( CultureInfo.InvariantCulture ), s, "warmupSearches" ) },
+         new[] { "exact mode seconds", Recorded( s.ExactSeconds?.ToString( CultureInfo.InvariantCulture ), s, "exactSeconds" ) },
       } );
    }
 
@@ -98,9 +105,10 @@ public static class ConsolidatedMarkdown
    private static void AppendTargets( StringBuilder md, ConsolidatedReport report )
    {
       md.AppendLine( "## Targets" ).AppendLine();
-      Table( md, new[] { "target", "hosting", "engine", "index" }, report.TargetSummaries.Select( t => new[]
+      Table( md, new[] { "target", "hosting", "engine", "index", "search settings" }, report.TargetSummaries.Select( t => new[]
       {
          t.Name, Join( t.Hosting ), Join( t.Engines ), Join( t.Indexes ),
+         report.Settings.SearchSettings.TryGetValue( t.Name, out string? settings ) && settings != null ? settings : MISSING,
       } ) );
    }
 
@@ -117,7 +125,7 @@ public static class ConsolidatedMarkdown
       var header = new List<string> { "target", "n", "p50 ms", "p95 ms" };
       header.AddRange( levels.Select( l => $"QPS@{l}" ) );
       header.AddRange( ratios.Select( r => $"QPS ratio {r}" ) );
-      header.AddRange( new[] { "load rows/s", $"recall@{Int( top )}", $"nDCG@{Int( top )}", "exact p50 ms", "errors", "warm-up errors" } );
+      header.AddRange( new[] { "load rows/s (not ranked)", $"recall@{Int( top )}", $"nDCG@{Int( top )}", "exact p50 ms", "errors", "warm-up errors" } );
       md.AppendLine( "## Per target: median [min, max]" ).AppendLine();
       Table( md, header, report.TargetSummaries.Select( t =>
       {
@@ -225,6 +233,16 @@ public static class ConsolidatedMarkdown
       }
 
       md.AppendLine( "## Paired per run: exact p50 / default p50" ).AppendLine();
+      foreach( ExactVsDefault hinted in report.ExactVsDefault.Where( e => e.DeclaredPair != null ) )
+      {
+         md.AppendLine( $"- {hinted.Target}, default pair {hinted.DeclaredPair}: {hinted.Note ?? "no note"}" );
+      }
+
+      if( report.ExactVsDefault.Any( e => e.DeclaredPair != null ) )
+      {
+         md.AppendLine();
+      }
+
       Table( md, new[] { "target", "run", "default p50 ms", "exact p50 ms", "exact - default ms", "exact / default", "exact recall", "exact pass before default@1" },
          report.ExactVsDefault.SelectMany( e => e.Runs.Select( r => new[]
          {
@@ -248,12 +266,14 @@ public static class ConsolidatedMarkdown
    private static void AppendFacts( StringBuilder md, ConsolidatedReport report )
    {
       md.AppendLine( "## Recorded per run: order, passes, index state, durability" ).AppendLine();
-      Table( md, new[] { "target", "run", "order", "passOrder", "warm-up errors", "errors", "afterLoad ready", "afterLoad indexed/total", "afterLoad detail", "afterSearch ready", "afterSearch indexed/total", "durability", "load indexNote" },
+      Table( md, new[] { "target", "run", "order", "passOrder", "warm-up errors", "errors", "afterLoad ready", "afterLoad indexed/total", "afterLoad detail", "afterSearch ready", "afterSearch indexed/total", "durability", "load indexNote", "settled", "mean ms" },
          report.TargetSummaries.SelectMany( t => t.PerRun.Select( r => new[]
          {
             t.Name, r.Run, Int( r.OrderInRun ), r.PassOrder == null ? MISSING : string.Join( ", ", r.PassOrder ), Int( r.WarmupErrors ), Int( r.Errors ),
             Ready( r.AfterLoad ), Counts( r.AfterLoad ), r.AfterLoad == null ? MISSING : r.AfterLoad.Detail ?? MISSING,
             Ready( r.AfterSearch ), Counts( r.AfterSearch ), r.Durability ?? MISSING, r.LoadIndexNote ?? "-",
+            r.Settled.HasValue ? ( r.Settled.Value ? "yes" : "no" + ( r.SettleDetail == null ? string.Empty : ": " + r.SettleDetail ) ) : MISSING,
+            r.MeanMs.HasValue ? $"{Number( r.MeanMs, MsFormat( r.MeanMs.Value ) )} ({r.MeanSource})" : "-",
          } ) ) );
    }
 
@@ -269,6 +289,35 @@ public static class ConsolidatedMarkdown
       {
          f.Target, f.Kind, $"{f.Runs.Count} of {report.Runs.Count}", f.Detail,
       } ) );
+   }
+
+   /// <summary>
+   /// The rules the numbers follow, as bullets.
+   /// </summary>
+   /// <param name="md">Output.</param>
+   /// <param name="report">The report.</param>
+   private static void AppendNotes( StringBuilder md, ConsolidatedReport report )
+   {
+      if( report.Notes.Count == 0 )
+      {
+         return;
+      }
+
+      md.AppendLine( "## Notes" ).AppendLine();
+      report.Notes.ForEach( n => md.AppendLine( $"- {n}" ) );
+      md.AppendLine();
+   }
+
+   /// <summary>
+   /// A recorded setting with the source when it was derived, "missing" when it was not recorded.
+   /// </summary>
+   /// <param name="value">The value, or null.</param>
+   /// <param name="settings">The report's settings (holds the derived sources).</param>
+   /// <param name="field">Field name in the derived map.</param>
+   /// <returns>Text such as "Debug (from the path of the binary in the command line)".</returns>
+   private static string Recorded( string? value, RunSettings settings, string field )
+   {
+      return value == null ? MISSING : settings.Derived.TryGetValue( field, out string? how ) ? $"{value} ({how})" : value;
    }
 
    /// <summary>

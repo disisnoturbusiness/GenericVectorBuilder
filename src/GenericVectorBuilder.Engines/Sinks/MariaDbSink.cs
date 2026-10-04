@@ -19,7 +19,7 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// in a VECTOR(n) column that holds raw float32 values.
 /// Default search: a VECTOR INDEX (MariaDB's HNSW variant, DISTANCE=cosine, M 16) queried with
 /// ORDER BY VEC_DISTANCE_COSINE(embedding, query) LIMIT n, with the beam width
-/// (mhnsw_ef_search) taken from <see cref="MariaDbSinkOptions.HnswEfSearch"/>.
+/// (mhnsw_ef_search, 100 unless set) taken from <see cref="MariaDbSinkOptions.HnswEfSearch"/>.
 /// Why the key is BINARY(16) and not MariaDB's UUID type: UUID rejects any value whose version
 /// and variant bits are not valid ("Incorrect uuid value"), and chunk ids are derived from hashes,
 /// so many are not valid UUIDs.
@@ -30,11 +30,28 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// Measured 2026-10-03: running the INSERTs with mhnsw_ef_search set to 128 or 512 (20,000
 /// clustered vectors of 1024 dimensions) loaded in 129 s each against 131 s with the default,
 /// and recall stayed within build-to-build noise, so the search setting does not reach the build.
-/// Why mhnsw_ef_search is 3200: MariaDB defaults it to 20. Measured 2026-10-03 on this box (shared
-/// with other benchmark containers, so milliseconds are rough), 100,000 vectors of 1024 dimensions,
-/// M 16, 20 queries, recall@10 against an in-memory brute force. Clustered means 500 centres, each
-/// point its centre plus noise (0.7 of a random unit vector), normalized; neighbours inside a
-/// cluster are close to ties, so this is a hard set. Uniform random is the worst case:
+/// Why mhnsw_ef_search is 100: the benchmark compares engines at the same search effort, and the
+/// other HNSW sinks in this tree (pgvector, Milvus, Chroma, DuckDB, Typesense, Redis, OpenSearch,
+/// Oracle, Vespa) all default to 100, so MariaDB gets 100 too. MariaDB's own default is 20. The sink
+/// used 3200 until 2026-10-04; that made MariaDB walk 32 times the candidates of the others and its
+/// latency and queries per second were not comparable. The price of matching the effort is recall,
+/// which falls off with size. Measured 2026-10-04 on this box, 1024-dimension random unit vectors
+/// (the hardest input for a graph), M 16, 50 queries, recall@10 against an in-memory brute force:
+///   vectors   ef 20                   ef 100                  ef 3200
+///   524       0.886, 0.908, 0.892     0.986, 0.996, 0.994     0.986, 0.996, 0.994
+///   2,000     0.512, 0.492, 0.522     0.914, 0.888, 0.924     0.992, 0.992, 0.998
+/// (three separate loads each; the graph is not built the same way twice, so expect about 0.03 of
+/// movement). The p50 was 1.5 to 2.1 ms at ef 100 on both sizes.
+/// At 100,000 vectors (older measurement, 20 queries, shared box so milliseconds are rough) ef 100
+/// found 0.52 of the true neighbours of clustered data and 0.09 of uniform random data.
+/// A run that wants equal recall instead of equal effort must raise
+/// <see cref="MariaDbSinkOptions.HnswEfSearch"/>, and the report prints the value used (the index
+/// description, and the readiness detail, which reads the applied value back from the server).
+/// The curve behind that, measured 2026-10-03 (shared box, so milliseconds are rough), 100,000
+/// vectors of 1024 dimensions, M 16, 20 queries, recall@10 against an in-memory brute force.
+/// Clustered means 500 centres, each point its centre plus noise (0.7 of a random unit vector),
+/// normalized; neighbours inside a cluster are close to ties, so this is a hard set. Uniform
+/// random is the worst case:
 ///   mhnsw_ef_search   clustered recall / ms p50   uniform random recall / ms p50
 ///   20                0.48 / 2.1                  0.02 / 2.7
 ///   100               0.52 / 1.4                  0.09 / 4.7
@@ -76,7 +93,13 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// nothing, and searches for 10, 100, 300 or 2,000 rows (first on a load) did not show it. So the
 /// first poll of the readiness check fails and the second passes, and finishing takes about
 /// 0.6 s, almost all of it the pause between the two polls. A check that only asked for the
-/// default top 10 would never see this. Why there is no exact indexed count: MariaDB keeps the
+/// default top 10 would never see this. Why the walk names the index (FORCE INDEX) and the default
+/// search's own EXPLAIN does not: measured 2026-10-04 on a freshly loaded 524-vector table, the
+/// optimizer chose a full scan for a LIMIT of 524 (the whole table) until InnoDB refreshed its row
+/// statistics, which took 17.5 s over 7 polls on both the old and the new search effort, so the
+/// finish step reported 17.5 s for an engine that builds nothing. The walk only asks whether the
+/// graph returns the rows, so it forces the index; the EXPLAIN of the LIMIT 10 search stays
+/// unforced and must still name the index by itself. Why there is no exact indexed count: MariaDB keeps the
 /// graph in a hidden InnoDB table (name#i#01) that information_schema does not list and that
 /// SELECT refuses ("doesn't exist"), so the engine offers no per-index row count to read. Why the
 /// walk is held to 90 percent and not 100: it asks an approximate graph search for rows, which is
@@ -116,8 +139,15 @@ public sealed class MariaDbSink : ISink, IExactSearchSink, IEngineDescription, I
    /// Creates a sink with explicit settings.
    /// </summary>
    /// <param name="options">Connection and index settings.</param>
+   /// <exception cref="ArgumentOutOfRangeException">The search effort is outside the 1 to 10,000 the server accepts.</exception>
    public MariaDbSink( MariaDbSinkOptions options )
    {
+      if( options.HnswEfSearch < 1 || options.HnswEfSearch > MariaDbSinkOptions.MAX_EF_SEARCH )
+      {
+         throw new ArgumentOutOfRangeException( nameof( options ), options.HnswEfSearch,
+            $"mhnsw_ef_search must be 1 to {MariaDbSinkOptions.MAX_EF_SEARCH} (the range the server accepts); got {options.HnswEfSearch}." );
+      }
+
       _options = options;
       var builder = new MySqlConnectionStringBuilder
       {
@@ -146,7 +176,10 @@ public sealed class MariaDbSink : ISink, IExactSearchSink, IEngineDescription, I
 
    /// <inheritdoc />
    public string IndexDescription =>
-      $"VECTOR INDEX (HNSW variant) DISTANCE=cosine, M={_options.HnswM} (no ef_construction setting exists), mhnsw_ef_search={_options.HnswEfSearch}, "
+      $"VECTOR INDEX (HNSW variant) DISTANCE=cosine, M={_options.HnswM} (no ef_construction setting exists), mhnsw_ef_search={_options.HnswEfSearch} "
+      + $"per statement ({( _options.HnswEfSearch == MariaDbSinkOptions.DEFAULT_EF_SEARCH ? "the ef 100 most engines here use, so the search effort matches; " : string.Empty )}"
+      + "MariaDB's own default is 20; recall@10 at ef 100 falls as the set grows (random 1024-dimension vectors, measured 2026-10-04: 0.99 at 524, 0.89 to 0.92 at 2,000; "
+      + "an earlier run gave about 0.09 at 100,000)), "
       + "mhnsw_max_cache_size 4G; exact mode = IGNORE INDEX full scan";
 
    /// <inheritdoc />
@@ -187,9 +220,10 @@ public sealed class MariaDbSink : ISink, IExactSearchSink, IEngineDescription, I
       }
 
       byte[] probe = (byte[])( await ProbeScalarAsync( connection, $"SELECT embedding FROM {Table( collection )} LIMIT 1", ct ) )!;
+      int applied = Convert.ToInt32( await ProbeScalarAsync( connection, $"SET STATEMENT mhnsw_ef_search = {_options.HnswEfSearch} FOR SELECT @@mhnsw_ef_search", ct ), CultureInfo.InvariantCulture );
       string defaultKey = await ExplainKeyAsync( connection, $"SET STATEMENT mhnsw_ef_search = {_options.HnswEfSearch} FOR EXPLAIN " + SearchSql( collection, 10, string.Empty ), probe, ct );
       int wanted = (int)Math.Min( total, WALK_ROWS );
-      string walkSql = $"SELECT chunk_id FROM {Table( collection )} ORDER BY VEC_DISTANCE_COSINE( embedding, @q ) LIMIT {wanted}";
+      string walkSql = $"SELECT chunk_id FROM {Table( collection )} FORCE INDEX ( {INDEX_NAME} ) ORDER BY VEC_DISTANCE_COSINE( embedding, @q ) LIMIT {wanted}";
       string walkKey = await ExplainKeyAsync( connection, $"SET STATEMENT mhnsw_ef_search = {_options.HnswEfSearch} FOR EXPLAIN " + walkSql, probe, ct );
       int walked = defaultKey == INDEX_NAME && walkKey == INDEX_NAME ? await WalkAsync( connection, walkSql, probe, ct ) : 0;
       var problems = new List<string>();
@@ -198,12 +232,18 @@ public sealed class MariaDbSink : ISink, IExactSearchSink, IEngineDescription, I
          problems.Add( $"EXPLAIN of the default search names key '{defaultKey}', not {INDEX_NAME}" );
       }
 
+      if( applied != _options.HnswEfSearch )
+      {
+         problems.Add( $"the sink asked for mhnsw_ef_search {_options.HnswEfSearch} but the server applied {applied}" );
+      }
+
       if( walked < Math.Ceiling( wanted * WALK_MIN_FRACTION ) )
       {
          problems.Add( $"a search at mhnsw_ef_search {_options.HnswEfSearch} returned only {walked} of {wanted} requested rows through the index (EXPLAIN key '{walkKey}')" );
       }
 
-      string facts = $"information_schema lists {INDEX_NAME} as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key {defaultKey}, a search at mhnsw_ef_search {_options.HnswEfSearch} "
+      string facts = $"information_schema lists {INDEX_NAME} as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key {defaultKey}, the server applied mhnsw_ef_search {applied} "
+         + $"(asked for {_options.HnswEfSearch}, read back from the server), a search at that effort "
          + $"returned {walked} of {wanted} requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported";
       return new IndexState( problems.Count == 0, null, total, problems.Count == 0 ? facts : $"not ready: {string.Join( "; ", problems )} ({facts})" );
    }

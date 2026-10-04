@@ -16,6 +16,9 @@ namespace GenericVectorBuilder.Bench.Running;
 /// memory and disk, and every number would depend on what else happened to be running.
 /// Why a random order: in a fixed order the same query ran faster later in a run, so the order
 /// favoured whichever engine came last. The seed is recorded so the order can be repeated.
+/// For bench and run-all the run also takes control of the machine (<see cref="MachineControl"/>):
+/// performance governor, engine and client on separate physical cores, timed passes held while
+/// the box is busy, all put back in a finally block and recorded under "conditions".
 /// </summary>
 public sealed class BenchSession : IDisposable
 {
@@ -30,6 +33,7 @@ public sealed class BenchSession : IDisposable
    private readonly string _repoRoot;
    private readonly TargetFactory _factory;
    private readonly IEngineHost _host = new ComposeEngineHost();
+   private readonly IMachineSystem _system;
 
    #endregion Data Members
 
@@ -46,6 +50,7 @@ public sealed class BenchSession : IDisposable
       _log = log;
       _repoRoot = FindRepoRoot( options.RepoRoot );
       _factory = new TargetFactory( _settings, _repoRoot, options.HnswEf );
+      _system = new LinuxMachineSystem( _settings.BuildSqlConnectionString );
    }
 
    #endregion Constructor
@@ -98,7 +103,8 @@ public sealed class BenchSession : IDisposable
    #region Private Methods
 
    /// <summary>
-   /// replicate, bench or run-all.
+   /// replicate, bench or run-all. Machine control starts before anything is read and is put
+   /// back in the finally block, whatever happens in between.
    /// </summary>
    /// <param name="ct">Cancellation.</param>
    /// <returns>Exit code.</returns>
@@ -108,27 +114,135 @@ public sealed class BenchSession : IDisposable
       int seed = _options.Seed ?? RunOrder.SeedFromTime( started );
       IReadOnlyList<string> order = RunOrder.ShuffleTargets( _options.Targets.Count > 0 ? _options.Targets : _factory.Names, seed );
       _log( $"Seed {seed} ({( _options.Seed.HasValue ? "from --seed" : "from the start time" )}); target order: {string.Join( ", ", order )}" );
+      using MachineControl machine = await MachineControl.StartAsync( MachineConditions.ForRun( _options ), MachineOptions(), _system, _log, ct );
       BenchReport report = await NewReportAsync( started, seed, ct );
       string folder = Path.Combine( _options.OutFolder ?? Path.Combine( _repoRoot, "bench-results" ), $"{started:yyyyMMdd-HHmmss}-{_options.Pipeline}" );
+      try
+      {
+         await MeasureTargetsAsync( report, folder, order, seed, machine, ct );
+      }
+      finally
+      {
+         await FinishMachineAsync( machine, report, folder );
+      }
+
+      _log( $"Results: {Path.Combine( folder, "results.md" )}" );
+      return report.Targets.Any( t => t.Error != null ) ? 1 : 0;
+   }
+
+   /// <summary>
+   /// Reads the rows, prepares the queries, then measures every target in order, rewriting the
+   /// results after each.
+   /// </summary>
+   /// <param name="report">The run's report.</param>
+   /// <param name="folder">The run's results folder.</param>
+   /// <param name="order">Targets in run order.</param>
+   /// <param name="seed">The run's seed.</param>
+   /// <param name="machine">Machine control (on or off).</param>
+   /// <param name="ct">Cancellation.</param>
+   private async Task MeasureTargetsAsync( BenchReport report, string folder, IReadOnlyList<string> order, int seed, MachineControl machine, CancellationToken ct )
+   {
       PipelineData data = await ReadDataAsync( report, ct );
       SearchRunner? runner = _options.Command == "replicate" ? null : await PrepareSearchAsync( data, report, seed, ct );
       List<(string Name, BenchTarget? Target, string? Error)> targets = order.Select( Create ).ToList();
-      var lifecycle = new EngineLifecycle( _host, _options.Command == "run-all", _log );
+      Action<string> log = machine.WrapLog( _log );
+      var lifecycle = new EngineLifecycle( machine.WrapHost( _host ), _options.Command == "run-all", log );
       await lifecycle.SnapshotAsync( targets.Select( t => t.Target?.ComposePath ), ct );
-      var measurer = new TargetRunner( _options, lifecycle, _log );
+      var measurer = new TargetRunner( _options, lifecycle, log );
+      await machine.PinClientAsync( ct );
       foreach( (string name, BenchTarget? target, string? error) in targets )
       {
-         _log( $"== {name}" );
+         log( $"== {name}" );
          report.TargetOrder.Add( name );
-         report.Targets.Add( target == null ? new TargetReport { Name = name, Error = error } : await measurer.MeasureAsync( target, data, runner, ct ) );
-         ResultsWriter.Write( report, folder );
+         report.Targets.Add( target == null ? new TargetReport { Name = name, Error = error } : await MeasureOneAsync( measurer, machine, target, data, runner, ct ) );
+         WriteResults( report, folder, machine );
       }
 
       report.Notes.AddRange( RunFlags( report ) );
       await DropEmptyDatabaseAsync( _options.Command == "run-all" && !_options.Keep, report );
+   }
+
+   /// <summary>
+   /// Measures one target with its engine pinned to the engine CPUs, and puts the pin back
+   /// afterwards even when the measurement fails.
+   /// </summary>
+   /// <param name="measurer">Target runner.</param>
+   /// <param name="machine">Machine control.</param>
+   /// <param name="target">The target.</param>
+   /// <param name="data">Rows.</param>
+   /// <param name="runner">Search runner, or null for replicate.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The target's results, with the machine notes added.</returns>
+   private static async Task<TargetReport> MeasureOneAsync( TargetRunner measurer, MachineControl machine, BenchTarget target, PipelineData data, SearchRunner? runner, CancellationToken ct )
+   {
+      await machine.EnterTargetAsync( target.Name, target.Hosting, target.ComposePath, ct );
+      TargetReport result;
+      try
+      {
+         result = await measurer.MeasureAsync( target, data, runner, ct );
+      }
+      finally
+      {
+         await machine.LeaveTargetAsync( target.Name );
+      }
+
+      machine.AnnotateTarget( result );
+      return result;
+   }
+
+   /// <summary>
+   /// Machine control settings for this command: on for bench and run-all unless
+   /// --no-machine-control; replicate times no searches and only records the machine.
+   /// </summary>
+   /// <returns>The settings.</returns>
+   private MachineControlOptions MachineOptions()
+   {
+      bool timed = _options.Command is "bench" or "run-all";
+      return new MachineControlOptions
+      {
+         Enabled = timed && _options.MachineControl,
+         DisabledReason = timed ? "--no-machine-control" : $"{_options.Command} times no searches",
+         StateFile = _options.MachineStateFile,
+      };
+   }
+
+   /// <summary>
+   /// Puts the machine back, adds the machine notes and flags, and writes the results a last
+   /// time (only when a target was written, so a run that failed before its first target
+   /// leaves no half-empty results folder).
+   /// </summary>
+   /// <param name="machine">Machine control.</param>
+   /// <param name="report">The run.</param>
+   /// <param name="folder">The run's folder.</param>
+   private async Task FinishMachineAsync( MachineControl machine, BenchReport report, string folder )
+   {
+      await machine.RestoreAsync();
+      machine.Annotate( report );
+      if( !Directory.Exists( folder ) )
+      {
+         return;
+      }
+
+      try
+      {
+         WriteResults( report, folder, machine );
+      }
+      catch( Exception ex ) when( ex is IOException or UnauthorizedAccessException or InvalidDataException )
+      {
+         _log( $"Could not write the final results to {folder}: {ex.Message}" );
+      }
+   }
+
+   /// <summary>
+   /// Writes results.json and results.md, then the machine conditions into results.json.
+   /// </summary>
+   /// <param name="report">The run.</param>
+   /// <param name="folder">The run's folder.</param>
+   /// <param name="machine">Machine control.</param>
+   private static void WriteResults( BenchReport report, string folder, MachineControl machine )
+   {
       ResultsWriter.Write( report, folder );
-      _log( $"Results: {Path.Combine( folder, "results.md" )}" );
-      return report.Targets.Any( t => t.Error != null ) ? 1 : 0;
+      MachineFlags.WriteInto( folder, machine.Conditions );
    }
 
    /// <summary>

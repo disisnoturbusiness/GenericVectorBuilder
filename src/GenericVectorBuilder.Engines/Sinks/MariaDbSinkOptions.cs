@@ -11,6 +11,12 @@ public sealed class MariaDbSinkOptions
 {
    #region Data Members
 
+   /// <summary>The effort the other engines use; see <see cref="HnswEfSearch"/>.</summary>
+   public const int DEFAULT_EF_SEARCH = 100;
+
+   /// <summary>Largest mhnsw_ef_search the server accepts.</summary>
+   public const int MAX_EF_SEARCH = 10000;
+
    private const string SECRETS_ENV = "GVB_ENGINE_SECRETS";
    private const string PASSWORD_KEY = "MARIADB_ROOT_PASSWORD";
 
@@ -44,12 +50,18 @@ public sealed class MariaDbSinkOptions
    public int HnswM { get; set; } = 16;
 
    /// <summary>
-   /// mhnsw_ef_search for each search: how many candidates the graph walk keeps (MariaDB's
-   /// default is 20, which finds under half the true neighbours at 100,000 vectors; the sink
-   /// documentation has the measured curve). Applied to one statement only (SET STATEMENT),
-   /// never to the server. The server accepts 1 to 10000.
+   /// mhnsw_ef_search for each search: how many candidates the graph walk keeps. The default is
+   /// 100, the same effort the other HNSW engines in the benchmark default to (pgvector, Milvus,
+   /// OpenSearch, Chroma, DuckDB, Oracle, Typesense, Redis, Vespa), so a latency or QPS comparison
+   /// is not a comparison of different search effort. MariaDB's own default is 20.
+   /// Why it is not tuned for recall: recall at this ef falls as the set grows (see the measured
+   /// curve in <see cref="MariaDbSink"/>), so a run that wants equal recall rather than equal
+   /// effort must raise it, and the report prints the value used either way.
+   /// Applied to one statement only (SET STATEMENT), never to the server. The server accepts 1 to
+   /// <see cref="MAX_EF_SEARCH"/>, and the sink refuses a value outside that range instead of
+   /// letting the server clamp it without a word.
    /// </summary>
-   public int HnswEfSearch { get; set; } = 3200;
+   public int HnswEfSearch { get; set; } = DEFAULT_EF_SEARCH;
 
    /// <summary>
    /// How many rows go into one INSERT. Each row also updates the HNSW graph, which costs far

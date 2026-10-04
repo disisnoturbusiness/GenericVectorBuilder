@@ -16,7 +16,7 @@ namespace GenericVectorBuilder.Engines.Tests.Bench;
 /// Why assertions read consolidated.json: it is the contract writeups consume, so the tests
 /// check the numbers exactly where a reader will find them.
 /// </summary>
-public sealed class ConsolidateTests : IDisposable
+public sealed partial class ConsolidateTests : IDisposable
 {
    #region Data Members
 
@@ -24,8 +24,8 @@ public sealed class ConsolidateTests : IDisposable
    private static readonly Lazy<Assembly> COMPILED = new( Compile );
    private static readonly string[] SOURCES =
    {
-      "Report/RunResult.cs", "Report/ResultJson.cs", "Report/ConsolidatedMarkdown.cs", "Report/ConsolidateCommand.cs",
-      "Stats/ConsolidateMath.cs", "Stats/ConsolidatedReport.cs", "Stats/Consolidator.cs", "Stats/BenchMath.cs",
+      "Report/RunResult.cs", "Report/RunConditions.cs", "Report/ResultJson.cs", "Report/ConsolidatedMarkdown.cs", "Report/ConsolidateCommand.cs",
+      "Stats/ConsolidateMath.cs", "Stats/ConsolidatedReport.cs", "Stats/Consolidator.cs", "Stats/ConsolidateFlags.cs", "Stats/CpuSet.cs", "Stats/BenchMath.cs",
    };
 
    private readonly string _root;
@@ -109,7 +109,7 @@ public sealed class ConsolidateTests : IDisposable
       WriteRun( "r2", "2026-10-05T11:00:00Z", Target( "sql", 4, 400, 100 ), Target( "sql-diskann", 8, 200, 50 ) );
       WriteRun( "r3", "2026-10-05T12:00:00Z", Target( "sql", 3, 300, 100 ), Target( "sql-diskann", 3, 300, 100 ) );
 
-      JsonElement json = Consolidate( "--targets", "sql,sql-diskann", Path.Combine( _root, "r*" ) );
+      JsonElement json = Consolidate( "--targets", "sql,sql-diskann", "--pairs", "sql-diskann:sql", Path.Combine( _root, "r*" ) );
 
       JsonElement pair = Assert.Single( json.GetProperty( "pairs" ).EnumerateArray() );
       Assert.Equal( "sql-diskann", pair.GetProperty( "a" ).GetString() );
@@ -247,7 +247,7 @@ public sealed class ConsolidateTests : IDisposable
    [Fact]
    public void OldResultFolders_LoadWithFieldsMissing()
    {
-      WriteRun( "old", "2026-10-03T18:44:45Z", Target( "sql", 6.5, 800, 190 ) );
+      WriteRun( "old", "2026-10-03T18:44:45Z", Legacy, Old( Target( "sql", 5.5, 800, 190 ) ) );
 
       JsonElement json = Consolidate( "--targets", "sql", "--out", Path.Combine( _root, "out" ), Path.Combine( _root, "old" ) );
 
@@ -261,10 +261,12 @@ public sealed class ConsolidateTests : IDisposable
 
       JsonElement flag = Assert.Single( json.GetProperty( "flags" ).EnumerateArray() );
       Assert.Equal( "fields-missing", flag.GetProperty( "kind" ).GetString() );
-      Assert.Equal( "targetOrder, passOrder, warmupErrors, indexState.afterLoad, indexState.afterSearch, durability", flag.GetProperty( "detail" ).GetString() );
-      Assert.Equal( 6.5, json.GetProperty( "targetSummaries" )[0].GetProperty( "p50Ms" ).GetProperty( "median" ).GetDouble(), 9 );
+      Assert.Equal( "targetOrder, passOrder, warmupErrors, indexState.afterLoad, indexState.afterSearch, durability, settled, "
+         + "conditions.buildConfiguration, conditions.governor, conditions.clientCpus, conditions.engineCpus, conditions.warmupSearches, conditions.exactSeconds", flag.GetProperty( "detail" ).GetString() );
+      Assert.Equal( 5.5, json.GetProperty( "targetSummaries" )[0].GetProperty( "p50Ms" ).GetProperty( "median" ).GetDouble(), 9 );
       string md = File.ReadAllText( Path.Combine( _root, "out", "consolidated.md" ) );
-      Assert.Contains( "| sql | old | missing | missing | missing | 0 | missing | missing | missing | missing | missing | missing | - |", md );
+      Assert.Contains( "| sql | old | missing | missing | missing | 0 | missing | missing | missing | missing | missing | missing | - | missing | 5.26 (1000 / QPS@1) |", md );
+      Assert.Contains( "| CPU governor | missing |", md );
       Assert.DoesNotContain( "\u2014", md );
    }
 
@@ -368,6 +370,7 @@ public sealed class ConsolidateTests : IDisposable
          ["secondsPerLevel"] = 20,
          ["targets"] = new JsonArray( targets.Select( t => (JsonNode)t ).ToArray() ),
       };
+      Conditioned( run );
       change( run );
       string folder = Path.Combine( _root, name );
       Directory.CreateDirectory( folder );
@@ -375,7 +378,7 @@ public sealed class ConsolidateTests : IDisposable
    }
 
    /// <summary>
-   /// A synthetic target in the shape every harness version wrote (no method-fix fields).
+   /// A synthetic target with every field the current harness writes (settled, search settings).
    /// </summary>
    /// <param name="name">Target name.</param>
    /// <param name="p50">p50 ms (p95 is twice it).</param>
@@ -409,6 +412,8 @@ public sealed class ConsolidateTests : IDisposable
          ["hosting"] = "compose",
          ["load"] = new JsonObject { ["rows"] = 524, ["rowsPerSecond"] = 1000.0 },
          ["search"] = search,
+         ["settled"] = true,
+         ["searchSettings"] = new JsonObject { ["ef"] = 100 },
       };
    }
 

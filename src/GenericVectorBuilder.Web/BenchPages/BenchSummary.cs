@@ -13,7 +13,8 @@ namespace GenericVectorBuilder.Web.BenchPages;
 /// <param name="P50Ms">Median latency of one search at a time, in milliseconds, or null when missing.</param>
 /// <param name="Recall">Share of the exact top 10 the engine returned (1 = same answers), or null when missing.</param>
 /// <param name="InMemory">True when the engine holds everything in memory, which the chart marks.</param>
-public sealed record BenchEngineRow( string Key, string Name, double Qps8, double? Qps8Min, double? Qps8Max, double? P50Ms, double? Recall, bool InMemory );
+/// <param name="Flags">Warnings about this engine's numbers (spread, unsettled, ...); null or empty when there are none.</param>
+public sealed record BenchEngineRow( string Key, string Name, double Qps8, double? Qps8Min, double? Qps8Max, double? P50Ms, double? Recall, bool InMemory, IReadOnlyList<BenchFlag>? Flags = null );
 
 /// <summary>
 /// The ranked numbers behind a summary block: the leader first.
@@ -23,7 +24,8 @@ public sealed record BenchEngineRow( string Key, string Name, double Qps8, doubl
 /// <param name="Ranked">Engines with a result, fastest first by searches per second with 8 at once.</param>
 /// <param name="NoResult">Friendly names of engines that produced no throughput number.</param>
 /// <param name="Runs">How many runs each median covers (1 for a single run page).</param>
-public sealed record BenchSummary( IReadOnlyList<BenchEngineRow> Ranked, IReadOnlyList<string> NoResult, int Runs )
+/// <param name="Conditions">The machine conditions the numbers were measured under; null or <see cref="BenchConditions.None"/> when the result files did not record them.</param>
+public sealed record BenchSummary( IReadOnlyList<BenchEngineRow> Ranked, IReadOnlyList<string> NoResult, int Runs, BenchConditions? Conditions = null )
 {
    /// <summary>True when the numbers are medians across runs, so the chart draws min to max lines.</summary>
    public bool HasRanges => Runs > 1;
@@ -83,8 +85,10 @@ public static class BenchSummaryReader
    }
 
    /// <summary>
-   /// Reads consolidated.json: an object keyed by target, each with qps8, p50 and recall as
-   /// { median, min, max } and a run count.
+   /// Reads consolidated.json in either shape: the published one (an object keyed by target,
+   /// each with qps8, p50 and recall as { median, min, max } and a run count; it carries no
+   /// flags and no conditions), or the one the Bench tool's consolidate command writes
+   /// (targetSummaries, settings, runs and flags).
    /// </summary>
    /// <param name="json">File text.</param>
    /// <returns>The ranked summary.</returns>
@@ -95,6 +99,11 @@ public static class BenchSummaryReader
       if( root.ValueKind != JsonValueKind.Object )
       {
          throw new JsonException( "consolidated.json is not an object keyed by engine." );
+      }
+
+      if( root.TryGetProperty( "targetSummaries", out JsonElement summaries ) && summaries.ValueKind == JsonValueKind.Array )
+      {
+         return FromConsolidatedReport( root, summaries );
       }
 
       var rows = new List<BenchEngineRow>();
@@ -147,15 +156,86 @@ public static class BenchSummaryReader
             continue;
          }
 
-         rows.Add( new BenchEngineRow( key, FriendlyName( key ), qps.Value, null, null, Number( search, "p50Ms" ), Number( search, "recall" ), IN_MEMORY.Contains( key ) ) );
+         rows.Add( new BenchEngineRow( key, FriendlyName( key ), qps.Value, null, null, Number( search, "p50Ms" ), Number( search, "recall" ), IN_MEMORY.Contains( key ),
+            t.ValueKind == JsonValueKind.Object ? BenchFlagInfo.FromTarget( t ) : null ) );
       }
 
-      return new BenchSummary( Rank( rows ), missing, 1 );
+      return new BenchSummary( Rank( rows ), missing, 1, BenchConditions.FromRun( doc.RootElement ) );
    }
 
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// Reads the consolidated.json the consolidate command writes: one summary per target (qps by
+   /// level, p50 and recall as median/min/max), the shared settings, the runs used and the flags.
+   /// </summary>
+   /// <param name="root">The file's root object.</param>
+   /// <param name="summaries">Its targetSummaries array.</param>
+   /// <returns>The ranked summary with flags and conditions.</returns>
+   private static BenchSummary FromConsolidatedReport( JsonElement root, JsonElement summaries )
+   {
+      int runs = root.TryGetProperty( "runs", out JsonElement used ) && used.ValueKind == JsonValueKind.Array ? used.GetArrayLength() : 0;
+      Dictionary<string, List<BenchFlag>> flags = ReportFlags( root, runs );
+      var rows = new List<BenchEngineRow>();
+      var missing = new List<string>();
+      foreach( JsonElement t in summaries.EnumerateArray() )
+      {
+         GuardCount( rows.Count + missing.Count );
+         string key = t.ValueKind == JsonValueKind.Object && t.TryGetProperty( "name", out JsonElement n ) && n.ValueKind == JsonValueKind.String ? n.GetString() ?? "?" : "?";
+         JsonElement qps = t.ValueKind == JsonValueKind.Object && t.TryGetProperty( "qps", out JsonElement q ) ? q : default;
+         double? median = qps.ValueKind == JsonValueKind.Object && qps.TryGetProperty( EIGHT_AT_ONCE, out JsonElement at8 ) ? Number( at8, "median" ) : null;
+         if( median == null )
+         {
+            missing.Add( FriendlyName( key ) );
+            continue;
+         }
+
+         JsonElement eight = qps.GetProperty( EIGHT_AT_ONCE );
+         rows.Add( new BenchEngineRow( key, FriendlyName( key ), median.Value, Number( eight, "min" ), Number( eight, "max" ), Stat( t, "p50Ms", "median" ), Stat( t, "recall", "median" ),
+            IN_MEMORY.Contains( key ), flags.GetValueOrDefault( key ) ) );
+      }
+
+      BenchConditions conditions = root.TryGetProperty( "settings", out JsonElement settings ) && settings.ValueKind == JsonValueKind.Object ? BenchConditions.FromSettings( settings ) : BenchConditions.None;
+      return new BenchSummary( Rank( rows ), missing, Math.Max( runs, 1 ), conditions );
+   }
+
+   /// <summary>
+   /// Groups the report's flags by target; each detail ends with how many of the runs it covers.
+   /// </summary>
+   /// <param name="root">The file's root object.</param>
+   /// <param name="runs">Runs used.</param>
+   /// <returns>Flags by target name.</returns>
+   private static Dictionary<string, List<BenchFlag>> ReportFlags( JsonElement root, int runs )
+   {
+      var byTarget = new Dictionary<string, List<BenchFlag>>( StringComparer.Ordinal );
+      if( !root.TryGetProperty( "flags", out JsonElement flags ) || flags.ValueKind != JsonValueKind.Array )
+      {
+         return byTarget;
+      }
+
+      foreach( JsonElement flag in flags.EnumerateArray().Where( f => f.ValueKind == JsonValueKind.Object ) )
+      {
+         string? target = flag.TryGetProperty( "target", out JsonElement t ) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
+         string? kind = flag.TryGetProperty( "kind", out JsonElement k ) && k.ValueKind == JsonValueKind.String ? k.GetString() : null;
+         if( target == null || kind == null )
+         {
+            continue;
+         }
+
+         string detail = flag.TryGetProperty( "detail", out JsonElement d ) && d.ValueKind == JsonValueKind.String ? d.GetString() ?? string.Empty : string.Empty;
+         int covered = flag.TryGetProperty( "runs", out JsonElement r ) && r.ValueKind == JsonValueKind.Array ? r.GetArrayLength() : 0;
+         if( !byTarget.TryGetValue( target, out List<BenchFlag>? list ) )
+         {
+            byTarget[target] = list = new List<BenchFlag>();
+         }
+
+         list.Add( new BenchFlag( kind, runs > 0 && covered > 0 ? $"{detail} [{covered} of {runs} runs]" : detail ) );
+      }
+
+      return byTarget;
+   }
 
    /// <summary>
    /// Fastest first; equal numbers fall back to the name so the order never wobbles.

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using GenericVectorBuilder.Engines.Common;
 using Xunit.Abstractions;
 
@@ -169,14 +170,82 @@ public class TargetsLiveTests
       Assert.DoesNotContain( lines, l => l.StartsWith( "factory note:", StringComparison.Ordinal ) );
       Assert.Contains( "finisher False|settle False|reader True|durability A commit returns after", Line( "target sql|" ) );
       Assert.Contains( "finisher True|settle False|reader False|durability A commit returns after", Line( "target sql-diskann|" ) );
-      Assert.Contains( "finisher False|settle True|reader True|durability Every upsert here is sent with wait=true", Line( "target qdrant|" ) );
-      Assert.Contains( "finisher True|settle False|reader False|durability Every upsert here is sent with wait=true", Line( "target qdrant-hnsw|" ) );
+      Assert.Contains( "finisher False|settle True|reader True|durability What was measured (strace -f on the Qdrant server process", Line( "target qdrant|" ) );
+      Assert.Contains( "finisher True|settle False|reader False|durability What was measured (strace -f on the Qdrant server process", Line( "target qdrant-hnsw|" ) );
       Assert.All( lines.Where( l => l.StartsWith( "target ", StringComparison.Ordinal ) ), l => Assert.DoesNotContain( "not stated", l ) );
+      Assert.All( lines.Where( l => l.StartsWith( "target ", StringComparison.Ordinal ) ), l => Assert.DoesNotContain( "durability not read", l ) );
+      Assert.Contains( "|pair default@1 vs exact|", Line( "target sql-diskann|" ) );
+      Assert.All( new[] { "target sql|", "target qdrant|", "target qdrant-hnsw|" }, p => Assert.Contains( "|pair none|", Line( p ) ) );
+      Assert.Contains( "connection always-on SQL Server at ", Line( "target sql|" ) );
+      Assert.Contains( "connection always-on Qdrant at ", Line( "target qdrant|" ) );
+      Assert.All( lines.Where( l => l.StartsWith( "target ", StringComparison.Ordinal ) ), l => Assert.Contains( "not a container port published through docker-proxy", l ) );
       Assert.Contains( "ready False", Line( "sql target, table absent|" ) );
       Assert.Contains( "ready True|0/524|", Line( "qdrant state before searches|" ) );
       Assert.Contains( "ready True|524/524|", Line( "qdrant-hnsw state before searches|" ) );
       Assert.Contains( "ready True|524/524|", Line( "qdrant-hnsw state after searches|" ) );
       Assert.Contains( "ready True|0/524|", Line( "qdrant state after searches|" ) );
+   }
+
+   /// <summary>
+   /// The proof that a compose-hosted engine is measured without the docker-proxy hop, on the real
+   /// gvb-mariadb container: the target's recorded address is the container's (confirmed by a second,
+   /// independent docker read), and while searches run the kernel's socket table (sudo ss -tnp) shows
+   /// this process connected to the container's own address and port, with no socket to the published
+   /// 127.0.0.1 port and no docker-proxy socket facing one of ours. The control runs the same searches
+   /// through the published port and must show the opposite, which proves the check can see a proxy at all.
+   /// Prints the sockets and an alternating-rounds timing of both routes as evidence.
+   /// </summary>
+   [Fact]
+   public async Task Direct_MariaDbSearchesNeverTouchDockerProxy()
+   {
+      string[] lines = await TargetsHarness.CallContainerAsync( "LiveMariaDbAsync", TimeSpan.FromMinutes( 8 ), TargetsHarness.RepoRoot() );
+      foreach( string line in lines )
+      {
+         _output.WriteLine( line );
+      }
+
+      string connection = lines.Single( l => l.StartsWith( "connection|", StringComparison.Ordinal ) );
+      Match address = Regex.Match( connection, @"^connection\|gvb-mariadb \((?<id>[0-9a-f]{12})\) on network (?<net>\S+) at (?<ip>[\d.]+):3306, not through docker-proxy 127\.0\.0\.1:3306$" );
+      Assert.True( address.Success, connection );
+      string ip = address.Groups["ip"].Value;
+      Assert.Equal( ip, lines.Single( l => l.StartsWith( "docker says the address is|", StringComparison.Ordinal ) ).Split( '|' )[1].Trim() );
+
+      string[] direct = lines.Where( l => l.StartsWith( "direct|sample ", StringComparison.Ordinal ) ).ToArray();
+      Assert.Equal( 3, direct.Length );
+      Assert.All( direct, l => Assert.Matches( $@"\|ours [1-9]\d*\|to {Regex.Escape( ip )}:3306 [1-9]\d*\|to 127\.0\.0\.1:3306 0\|docker-proxy sockets facing ours 0$", l ) );
+      Assert.Matches( @"^direct\|searches\|completed [1-9]\d{2,}\|failed 0$", lines.Single( l => l.StartsWith( "direct|searches|", StringComparison.Ordinal ) ) );
+
+      string[] control = lines.Where( l => l.StartsWith( "proxied control|sample ", StringComparison.Ordinal ) ).ToArray();
+      Assert.Equal( 3, control.Length );
+      Assert.All( control, l => Assert.Matches( @"\|to 127\.0\.0\.1:3306 [1-9]\d*\|docker-proxy sockets facing ours [1-9]\d*$", l ) );
+      Assert.Matches( @"^proxied control\|searches\|completed [1-9]\d{2,}\|failed 0$", lines.Single( l => l.StartsWith( "proxied control|searches|", StringComparison.Ordinal ) ) );
+      Assert.Contains( lines, l => l.StartsWith( "cleanup|dropped gvb.gvb_gvbbench_direct", StringComparison.Ordinal ) );
+   }
+
+   /// <summary>
+   /// Real "docker inspect" output of every running engine container (one or two published ports each, on
+   /// different networks) is read into a recorded address that matches a second docker read and accepts a
+   /// real TCP connection from this process. gvb-mariadb must be among them; engines that other work has
+   /// stopped are skipped and printed as such.
+   /// </summary>
+   [Fact]
+   public async Task Bind_EveryRunningContainerResolvesAndAcceptsConnections()
+   {
+      string[] lines = await TargetsHarness.CallContainerAsync( "LiveBindRunningAsync", TimeSpan.FromMinutes( 4 ), TargetsHarness.RepoRoot() );
+      foreach( string line in lines )
+      {
+         _output.WriteLine( line );
+      }
+
+      string[] bound = lines.Where( l => l.Contains( "|bound|", StringComparison.Ordinal ) ).ToArray();
+      Assert.Contains( bound, l => l.StartsWith( "mariadb|bound|", StringComparison.Ordinal ) );
+      foreach( string[] fields in bound.Select( l => l.Split( '|' ) ) )
+      {
+         string ip = fields[2].Split( ':' )[0];
+         Assert.True( fields[5] == "reachable True", string.Join( " | ", fields ) );
+         Assert.Contains( ip, fields[6] );
+         Assert.StartsWith( "proxied 127.0.0.1:", fields[4] );
+      }
    }
 
    /// <summary>

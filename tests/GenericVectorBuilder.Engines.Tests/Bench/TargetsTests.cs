@@ -103,8 +103,17 @@ public class TargetsTests
    public void QdrantDurability_NamesWhatTheServerDoes()
    {
       string text = TargetsHarness.Call( "QdrantDurabilityText", QDRANT_CONFIG, Array.Empty<string>(), "1.17.0" );
-      Assert.Contains( "wait=true", text );
-      Assert.Contains( "update_worker.rs", text );
+      Assert.Contains( "What was measured (strace -f on the Qdrant server process", text );
+      Assert.Contains( "with wait=true each upsert had exactly one msync(MS_SYNC) of the write-ahead-log segment inside the request, before the reply (30 of 30)", text );
+      Assert.Contains( "with wait=false the 30 upserts were acknowledged within 0.26 s with no sync call, and the first WAL msync", text );
+      Assert.Contains( "came 2.7 s after the last reply", text );
+      Assert.Contains( "the log is flushed to disk under both settings, but with wait=false the flush comes after the acknowledgement", text );
+      Assert.Contains( "an operating-system crash or power cut in that gap loses acknowledged writes", text );
+      Assert.Contains( "(inferred, not tested)", text );
+      Assert.Contains( "Every upsert here is sent with wait=true in batches of 256 over gRPC", text );
+      Assert.Contains( "one flush per batch is inferred, not measured", text );
+      Assert.DoesNotContain( "update_worker.rs", text );
+      Assert.DoesNotContain( "survives a process or OS crash by log replay", text );
       Assert.Contains( "Segment files are flushed every 5 s (default)", text );
       Assert.Contains( "log segments 32 MB (default)", text );
       Assert.Contains( "storage.storage_path = /home/dan/qdrant/storage", text );
@@ -133,7 +142,7 @@ public class TargetsTests
       Assert.Contains( "(names only): QDRANT__STORAGE__WAL__WAL_CAPACITY_MB, QDRANT__SERVICE__API_KEY", env );
 
       string newer = TargetsHarness.Call( "QdrantDurabilityText", QDRANT_CONFIG, Array.Empty<string>(), "1.18.0" );
-      Assert.Contains( "The source was read at 1.17.0 and this server is 1.18.0, so re-check it.", newer );
+      Assert.Contains( "The flush behaviour was measured on 1.17.0 and this server is 1.18.0, so re-measure it.", newer );
    }
 
    /// <summary>
@@ -364,10 +373,11 @@ public class TargetsTests
    public void Sources_HaveNoDashes()
    {
       string bench = Path.Combine( TargetsHarness.RepoRoot(), "src", "GenericVectorBuilder.Bench", "Targets" );
-      foreach( string file in Directory.EnumerateFiles( bench, "*.cs" ).Append( Path.Combine( TargetsHarness.RepoRoot(), "tests", "GenericVectorBuilder.Engines.Tests", "Bench", "TargetsScenarios.cs" ) ) )
+      string tests = Path.Combine( TargetsHarness.RepoRoot(), "tests", "GenericVectorBuilder.Engines.Tests", "Bench" );
+      foreach( string file in Directory.EnumerateFiles( bench, "*.cs" ).Concat( Directory.EnumerateFiles( tests, "Targets*.cs" ) ) )
       {
          string text = File.ReadAllText( file );
-         Assert.False( text.Contains( '—' ) || text.Contains( '–' ), $"{Path.GetFileName( file )} contains an em or en dash" );
+         Assert.False( text.Contains( '\u2014' ) || text.Contains( '\u2013' ), $"{Path.GetFileName( file )} contains an em or en dash" );
       }
    }
 
@@ -427,14 +437,16 @@ public class TargetsTests
 }
 
 /// <summary>
-/// Compiles the repository's Bench target sources with the test scenarios once, and calls the
-/// scenarios by name. Shared by the pure and the live target tests.
+/// Compiles the repository's Bench target sources with the test scenarios (TargetsScenarios.cs and
+/// TargetsContainerScenarios.cs) once, and calls the scenarios by name. Shared by the pure and the
+/// live target tests.
 /// </summary>
 internal static class TargetsHarness
 {
    #region Data Members
 
    private const string SCENARIOS_TYPE = "GenericVectorBuilder.Bench.UnderTest.TargetsScenarios";
+   private const string CONTAINER_TYPE = "GenericVectorBuilder.Bench.UnderTest.TargetsContainerScenarios";
    private const string IMPLICIT_USINGS = "global using System; global using System.Collections.Generic; global using System.IO; global using System.Linq; "
       + "global using System.Net.Http; global using System.Threading; global using System.Threading.Tasks;";
    private static readonly Lazy<Assembly> COMPILED = new( Compile );
@@ -452,6 +464,33 @@ internal static class TargetsHarness
    public static dynamic Call( string method, params object?[] arguments )
    {
       return COMPILED.Value.GetType( SCENARIOS_TYPE )!.GetMethod( method )!.Invoke( null, arguments )!;
+   }
+
+   /// <summary>
+   /// Calls a synchronous method of the container-address scenarios.
+   /// </summary>
+   /// <param name="method">Method name.</param>
+   /// <param name="arguments">Arguments.</param>
+   /// <returns>The result, usable as dynamic or cast.</returns>
+   public static dynamic CallContainer( string method, params object?[] arguments )
+   {
+      return COMPILED.Value.GetType( CONTAINER_TYPE )!.GetMethod( method )!.Invoke( null, arguments )!;
+   }
+
+   /// <summary>
+   /// Calls an asynchronous method of the container-address scenarios and waits for it, within a limit.
+   /// </summary>
+   /// <param name="method">Method name.</param>
+   /// <param name="limit">Longest wait.</param>
+   /// <param name="arguments">Arguments.</param>
+   /// <returns>The task's result.</returns>
+   public static async Task<dynamic> CallContainerAsync( string method, TimeSpan limit, params object?[] arguments )
+   {
+      var task = (Task)COMPILED.Value.GetType( CONTAINER_TYPE )!.GetMethod( method )!.Invoke( null, arguments )!;
+      Task finished = await Task.WhenAny( task, Task.Delay( limit ) );
+      Assert.True( finished == task, $"{method} did not finish within {limit.TotalMinutes:0.#} minutes" );
+      await task;
+      return task.GetType().GetProperty( "Result" )!.GetValue( task )!;
    }
 
    /// <summary>
@@ -501,6 +540,8 @@ internal static class TargetsHarness
       List<SyntaxTree> trees = Directory.EnumerateFiles( Path.Combine( bench, "Targets" ), "*.cs" ).Select( f => CSharpSyntaxTree.ParseText( File.ReadAllText( f ), parse, f ) ).ToList();
       string scenarios = Path.Combine( root, "tests", "GenericVectorBuilder.Engines.Tests", "Bench", "TargetsScenarios.cs" );
       trees.Add( CSharpSyntaxTree.ParseText( File.ReadAllText( scenarios ), parse.WithPreprocessorSymbols( "BENCH_UNDER_TEST" ), scenarios ) );
+      string container = Path.Combine( root, "tests", "GenericVectorBuilder.Engines.Tests", "Bench", "TargetsContainerScenarios.cs" );
+      trees.Add( CSharpSyntaxTree.ParseText( File.ReadAllText( container ), parse.WithPreprocessorSymbols( "BENCH_UNDER_TEST" ), container ) );
       trees.Add( CSharpSyntaxTree.ParseText( IMPLICIT_USINGS, parse ) );
       List<string> platform = ( (string)AppContext.GetData( "TRUSTED_PLATFORM_ASSEMBLIES" )! ).Split( Path.PathSeparator ).ToList();
       List<string> extra = BenchOnlyPackages( bench, platform.Select( Path.GetFileName ).ToHashSet( StringComparer.OrdinalIgnoreCase ) );

@@ -10,16 +10,25 @@ namespace GenericVectorBuilder.Bench.Stats;
 /// comparisons between two targets, and between a target's exact and default search, are
 /// computed inside each run and only then summarized, never as a ratio of separate medians;
 /// ranks are taken per run and their median reported, not the rank of the medians.
+/// Rules added after the second review: runs measured under different build configurations,
+/// CPU governors, CPU partitions, warm-up counts, exact-mode budgets or per-engine search
+/// settings are never mixed (a number measured at 2.1 GHz and one at 3.5 GHz are not repeats of
+/// one experiment); load rows/s is reported but never ranked; there is no default pair, because
+/// the two targets of an obvious pair hold separate copies of the data; and the flags (spread,
+/// p50 against mean, unsettled engine, busy box, governor, shared cores) are computed here once
+/// so the markdown and the web page show the same warnings.
 /// </summary>
 public static class Consolidator
 {
    #region Data Members
 
    /// <summary>
-   /// Pairs compared run by run when both targets are listed: each index against the exact
-   /// scan of the same engine.
+   /// Pairs compared run by run when --pairs is not given: none. Why none: the obvious pairs
+   /// (sql-diskann against sql) write to different databases, so a difference between them mixes
+   /// the search method with a different copy of the data; an exact scan against the default
+   /// search inside one target is compared in the exact-versus-default tables instead.
    /// </summary>
-   public static readonly IReadOnlyList<(string A, string B)> DEFAULT_PAIRS = new[] { ( "sql-diskann", "sql" ), ( "qdrant-hnsw", "qdrant" ) };
+   public static readonly IReadOnlyList<(string A, string B)> DEFAULT_PAIRS = Array.Empty<(string A, string B)>();
 
    private const int MAX_ERROR_TEXT = 120;
 
@@ -53,7 +62,7 @@ public static class Consolidator
             + string.Join( " ", report.Dropped.Select( d => $"[{d.Name}: {d.Reason}]" ) ) );
       }
 
-      report.Settings = SettingsOf( used[0] );
+      report.Settings = SettingsOf( used[0], targets );
       report.Runs = used.Select( ToRunUsed ).ToList();
       IReadOnlyList<int> levels = Levels( used, targets );
       report.TargetSummaries = targets.Select( t => Summarize( t, used, levels ) ).ToList();
@@ -61,7 +70,8 @@ public static class Consolidator
       report.Pairs = pairs.Where( p => targets.Contains( p.A ) && targets.Contains( p.B ) && p.A != p.B )
          .Select( p => Pair( p.A, p.B, used, levels ) ).ToList();
       report.ExactVsDefault = targets.Select( t => Exact( t, used ) ).OfType<ExactVsDefault>().ToList();
-      report.Flags = report.TargetSummaries.SelectMany( FlagsFor ).ToList();
+      report.Flags = ConsolidateFlags.Build( report.TargetSummaries, used );
+      report.Notes = Notes( report );
       return report;
    }
 
@@ -100,13 +110,13 @@ public static class Consolidator
          return complete;
       }
 
-      IGrouping<string, RunResult> chosen = complete.GroupBy( Signature )
+      IGrouping<string, RunResult> chosen = complete.GroupBy( r => Signature( r, targets ) )
          .OrderByDescending( g => g.Count() )
          .ThenByDescending( g => g.Select( r => r.StartedUtc ?? string.Empty ).Max( StringComparer.Ordinal ), StringComparer.Ordinal )
          .First();
-      foreach( RunResult run in complete.Where( r => Signature( r ) != chosen.Key ) )
+      foreach( RunResult run in complete.Where( r => Signature( r, targets ) != chosen.Key ) )
       {
-         dropped.Add( new RunDropped { Name = run.Name, Folder = run.Folder, Reason = "settings differ from the runs used: " + SettingsDifference( run, chosen.First() ) } );
+         dropped.Add( new RunDropped { Name = run.Name, Folder = run.Folder, Reason = "settings differ from the runs used: " + SettingsDifference( run, chosen.First(), targets ) } );
       }
 
       return chosen.ToList();
@@ -147,18 +157,20 @@ public static class Consolidator
    /// The settings that must match between runs, as one comparable string.
    /// </summary>
    /// <param name="run">The run.</param>
+   /// <param name="targets">The listed targets (their search settings are part of the signature).</param>
    /// <returns>The signature.</returns>
-   private static string Signature( RunResult run )
+   private static string Signature( RunResult run, IReadOnlyList<string> targets )
    {
-      return string.Join( "|", SettingFields( run ).Select( f => f.Value ) );
+      return string.Join( "|", SettingFields( run, targets ).Select( f => f.Value ) );
    }
 
    /// <summary>
    /// Names and values of the settings that must match.
    /// </summary>
    /// <param name="run">The run.</param>
+   /// <param name="targets">The listed targets.</param>
    /// <returns>(name, value) pairs; "missing" for a field the run did not write.</returns>
-   private static IEnumerable<(string Name, string Value)> SettingFields( RunResult run )
+   private static IEnumerable<(string Name, string Value)> SettingFields( RunResult run, IReadOnlyList<string> targets )
    {
       yield return ( "pipeline", run.Pipeline ?? "missing" );
       yield return ( "host", run.Host ?? "missing" );
@@ -169,6 +181,18 @@ public static class Consolidator
       yield return ( "top", run.Top?.ToString() ?? "missing" );
       yield return ( "concurrency", string.Join( ",", run.Concurrency ) );
       yield return ( "secondsPerLevel", run.SecondsPerLevel?.ToString() ?? "missing" );
+      RunConditions c = run.Conditions;
+      yield return ( "buildConfiguration", c.BuildConfiguration ?? "missing" );
+      yield return ( "machineControl", c.MachineControlState ?? "missing" );
+      yield return ( "governor", c.Governor ?? "missing" );
+      yield return ( "cpuPartition", c.Partition ?? "missing" );
+      yield return ( "warmupSearches", c.WarmupSearches?.ToString() ?? "missing" );
+      yield return ( "exactSeconds", c.ExactSeconds?.ToString() ?? "missing" );
+      foreach( string target in targets )
+      {
+         yield return ( $"searchSettings[{target}]", run.Find( target )?.SearchSettings ?? "missing" );
+         yield return ( $"index[{target}]", run.Find( target )?.Index ?? "missing" );
+      }
    }
 
    /// <summary>
@@ -176,10 +200,11 @@ public static class Consolidator
    /// </summary>
    /// <param name="run">The dropped run.</param>
    /// <param name="reference">A run that was used.</param>
+   /// <param name="targets">The listed targets.</param>
    /// <returns>The differences.</returns>
-   private static string SettingsDifference( RunResult run, RunResult reference )
+   private static string SettingsDifference( RunResult run, RunResult reference, IReadOnlyList<string> targets )
    {
-      return string.Join( ", ", SettingFields( run ).Zip( SettingFields( reference ) )
+      return string.Join( ", ", SettingFields( run, targets ).Zip( SettingFields( reference, targets ) )
          .Where( p => p.First.Value != p.Second.Value )
          .Select( p => $"{p.First.Name} {p.First.Value} vs {p.Second.Value}" ) );
    }
@@ -188,9 +213,11 @@ public static class Consolidator
    /// The shared settings, from one used run (all used runs match).
    /// </summary>
    /// <param name="run">A used run.</param>
+   /// <param name="targets">The listed targets.</param>
    /// <returns>The settings.</returns>
-   private static RunSettings SettingsOf( RunResult run )
+   private static RunSettings SettingsOf( RunResult run, IReadOnlyList<string> targets )
    {
+      RunConditions c = run.Conditions;
       return new RunSettings
       {
          Pipeline = run.Pipeline,
@@ -202,6 +229,14 @@ public static class Consolidator
          Top = run.Top,
          Concurrency = run.Concurrency.ToList(),
          SecondsPerLevel = run.SecondsPerLevel,
+         BuildConfiguration = c.BuildConfiguration,
+         MachineControl = c.MachineControl,
+         Governor = c.Governor,
+         CpuPartition = c.Partition,
+         WarmupSearches = c.WarmupSearches,
+         ExactSeconds = c.ExactSeconds,
+         SearchSettings = targets.ToDictionary( t => t, t => run.Find( t )?.SearchSettings, StringComparer.Ordinal ),
+         Derived = c.Derived.ToDictionary( d => d.Key, d => d.Value, StringComparer.Ordinal ),
       };
    }
 
@@ -262,7 +297,7 @@ public static class Consolidator
          ExactP50Ms = Spread.Of( results.Select( t => t.ExactP50Ms ) ),
          Errors = SumOrNull( results.Select( t => t.Errors ) ),
          WarmupErrors = SumOrNull( results.Select( t => t.WarmupErrors ) ),
-         PerRun = used.Zip( results ).Select( p => ToFacts( p.First, p.Second ) ).ToList(),
+         PerRun = used.Zip( results ).Select( p => ToFacts( p.First, p.Second, levels ) ).ToList(),
       };
 
       foreach( int level in levels )
@@ -282,9 +317,11 @@ public static class Consolidator
    /// </summary>
    /// <param name="run">The run.</param>
    /// <param name="target">The target's result in that run.</param>
+   /// <param name="levels">Concurrency levels, lowest first.</param>
    /// <returns>The facts.</returns>
-   private static TargetRunFacts ToFacts( RunResult run, TargetResult target )
+   private static TargetRunFacts ToFacts( RunResult run, TargetResult target, IReadOnlyList<int> levels )
    {
+      ( double? mean, string? meanSource ) = MeanLatency( target, levels );
       return new TargetRunFacts
       {
          Run = run.Name,
@@ -297,7 +334,31 @@ public static class Consolidator
          AfterSearch = ToFacts( target.AfterSearch ),
          Durability = target.Durability,
          LoadIndexNote = target.LoadIndexNote,
+         SearchSettings = target.SearchSettings,
+         Settled = target.Settled,
+         SettleDetail = target.SettleDetail,
+         MeanMs = mean,
+         MeanSource = meanSource,
       };
+   }
+
+   /// <summary>
+   /// The mean latency of one search at a time: the recorded mean, else 1000 divided by the QPS
+   /// measured with one searcher (one searcher going back to back finishes one search per mean
+   /// latency).
+   /// </summary>
+   /// <param name="target">The target's result.</param>
+   /// <param name="levels">Concurrency levels, lowest first.</param>
+   /// <returns>The mean in ms and where it came from, or nulls when neither exists.</returns>
+   private static (double? Mean, string? Source) MeanLatency( TargetResult target, IReadOnlyList<int> levels )
+   {
+      if( ConsolidateMath.IsNumber( target.MeanMs ) )
+      {
+         return ( target.MeanMs, "recorded" );
+      }
+
+      double? one = levels.Count > 0 && levels[0] == 1 ? Qps( target, 1 ) : null;
+      return ConsolidateMath.IsNumber( one ) && one > 0 ? ( 1000.0 / one, "1000 / QPS@1" ) : ( null, null );
    }
 
    /// <summary>
@@ -312,6 +373,8 @@ public static class Consolidator
 
    /// <summary>
    /// Ranks every target inside each run, for each metric, then takes the median rank.
+   /// Load rows/s is deliberately not ranked: the loads are a few hundred rows, so they time
+   /// connection and first-call costs more than the engine.
    /// </summary>
    /// <param name="summaries">Target summaries, in target order.</param>
    /// <param name="used">Runs used.</param>
@@ -324,7 +387,6 @@ public static class Consolidator
          ( "p95Ms", t => t.P95Ms, false ),
       };
       metrics.AddRange( levels.Select( l => ( $"qps@{l}", (Func<TargetResult, double?>)( t => Qps( t, l ) ), true ) ) );
-      metrics.Add( ( "loadRowsPerSecond", t => t.LoadRowsPerSecond, true ) );
       metrics.Add( ( "recall", t => t.Recall, true ) );
       metrics.Add( ( "ndcg", t => t.Ndcg, true ) );
       foreach( (string name, Func<TargetResult, double?> value, bool higher) in metrics )
@@ -439,6 +501,7 @@ public static class Consolidator
          } );
       }
 
+      PairHintValue? hint = used.Select( r => r.Find( name )!.PairHint ).FirstOrDefault( h => h != null );
       return rows.Count == 0 ? null : new ExactVsDefault
       {
          Target = name,
@@ -446,6 +509,8 @@ public static class Consolidator
          Ratio = Spread.Of( rows.Select( r => r.Ratio ) ),
          DifferenceMs = Spread.Of( rows.Select( r => r.DifferenceMs ) ),
          RunsExactSlower = rows.Count( r => r.ExactP50Ms > r.DefaultP50Ms ),
+         DeclaredPair = hint == null ? null : $"{hint.PassA ?? "?"} vs {hint.PassB ?? "?"}",
+         Note = hint?.Note,
       };
    }
 
@@ -468,110 +533,24 @@ public static class Consolidator
    }
 
    /// <summary>
-   /// The flags for one target: index not ready, durability not stated or missing, fields not
-   /// recorded, errors, and engine or index text that changed between runs.
+   /// The rules the numbers follow, printed next to them.
    /// </summary>
-   /// <param name="s">The target's summary.</param>
-   /// <returns>The flags.</returns>
-   private static IEnumerable<Flag> FlagsFor( TargetSummary s )
+   /// <param name="report">The consolidated report (settings and pairs filled).</param>
+   /// <returns>One sentence per rule.</returns>
+   private static List<string> Notes( ConsolidatedReport report )
    {
-      var flags = new List<Flag>();
-      List<TargetRunFacts> runs = s.PerRun;
-      AddFlag( flags, s.Name, "index-not-ready-after-load", runs.Where( r => r.AfterLoad != null && r.AfterLoad.Ready != true ).ToList(), r => StateText( r.AfterLoad! ) );
-      AddFlag( flags, s.Name, "index-not-ready-after-search", runs.Where( r => r.AfterSearch != null && r.AfterSearch.Ready != true ).ToList(), r => StateText( r.AfterSearch! ) );
-      AddFlag( flags, s.Name, "durability-not-stated", runs.Where( r => r.Durability != null && IsNotStated( r.Durability ) ).ToList(), r => r.Durability!.Trim().Length == 0 ? "(empty)" : r.Durability! );
-      AddFlag( flags, s.Name, "warmup-errors", runs.Where( r => r.WarmupErrors > 0 ).ToList(), r => $"{r.WarmupErrors} warm-up errors" );
-      AddFlag( flags, s.Name, "search-errors", runs.Where( r => r.Errors > 0 ).ToList(), r => $"{r.Errors} search errors" );
-      AddFlag( flags, s.Name, "exact-recall-below-1", runs.Where( r => r.ExactRecall < 1.0 ).ToList(), r => $"exactRecall {r.ExactRecall:0.000}" );
-      AddFlag( flags, s.Name, "fields-missing", runs.Where( r => MissingFields( r ).Length > 0 ).ToList(), r => string.Join( ", ", MissingFields( r ) ) );
-      if( s.Engines.Count > 1 || s.Indexes.Count > 1 )
+      string rows = report.Settings.Rows.HasValue ? $"{report.Settings.Rows.Value.ToString( "N0", System.Globalization.CultureInfo.InvariantCulture )} rows" : "a few hundred rows";
+      var notes = new List<string>
       {
-         flags.Add( new Flag { Target = s.Name, Kind = "engine-or-index-text-differs", Runs = runs.Select( r => r.Run ).ToList(), Detail = $"{s.Engines.Count} engine texts, {s.Indexes.Count} index texts" } );
+         $"Load rows/s is reported but not ranked and does not feed any comparison: each load wrote {rows}, which is too few to separate engines from connection set-up and first-call cost.",
+         $"Runs were used together only when their build configuration, CPU governor, CPU partition, warm-up count, exact-mode seconds, seconds per level and every listed target's search settings matched; runs that differed are listed under Runs dropped. Spread is flagged when the largest value is more than {ConsolidateFlags.SPREAD_RATIO.ToString( "0.00", System.Globalization.CultureInfo.InvariantCulture )} times the smallest across runs.",
+      };
+      if( report.Pairs.Count > 0 )
+      {
+         notes.Add( "Each pair compares two targets that hold their own copy of the data (a separate database, table or collection), so a difference mixes the engine setting with the copy. The exact-versus-default tables compare the two search methods inside one target." );
       }
 
-      return flags;
-   }
-
-   /// <summary>
-   /// Adds one flag covering the given runs, with each distinct detail and its run count.
-   /// Nothing is added when no run qualifies.
-   /// </summary>
-   /// <param name="flags">Receives the flag.</param>
-   /// <param name="target">Target name.</param>
-   /// <param name="kind">Flag kind.</param>
-   /// <param name="runs">Runs it applies to.</param>
-   /// <param name="detail">Evidence text of one run.</param>
-   private static void AddFlag( List<Flag> flags, string target, string kind, IReadOnlyList<TargetRunFacts> runs, Func<TargetRunFacts, string> detail )
-   {
-      if( runs.Count == 0 )
-      {
-         return;
-      }
-
-      string text = string.Join( "; ", runs.GroupBy( detail ).Select( g => g.Count() == runs.Count ? g.Key : $"{g.Key} ({g.Count()} runs)" ) );
-      flags.Add( new Flag { Target = target, Kind = kind, Runs = runs.Select( r => r.Run ).ToList(), Detail = text } );
-   }
-
-   /// <summary>
-   /// Index state as short evidence text: "ready false, 0 of 524: detail".
-   /// </summary>
-   /// <param name="state">The state.</param>
-   /// <returns>The text.</returns>
-   private static string StateText( IndexStateFacts state )
-   {
-      string ready = state.Ready?.ToString().ToLowerInvariant() ?? "not written";
-      return $"ready {ready}, {state.IndexedVectors?.ToString() ?? "?"} of {state.TotalVectors?.ToString() ?? "?"}: {state.Detail ?? "no detail"}";
-   }
-
-   /// <summary>
-   /// True for a durability statement that says nothing: "not stated" or empty.
-   /// </summary>
-   /// <param name="durability">The statement.</param>
-   /// <returns>True when nothing was disclosed.</returns>
-   private static bool IsNotStated( string durability )
-   {
-      return durability.Trim().Length == 0 || durability.Trim().Equals( "not stated", StringComparison.OrdinalIgnoreCase );
-   }
-
-   /// <summary>
-   /// Contract fields a run did not record for a target.
-   /// </summary>
-   /// <param name="facts">The target's facts in one run.</param>
-   /// <returns>Names of the missing fields.</returns>
-   private static string[] MissingFields( TargetRunFacts facts )
-   {
-      var missing = new List<string>();
-      if( facts.OrderInRun == null )
-      {
-         missing.Add( "targetOrder" );
-      }
-
-      if( facts.PassOrder == null )
-      {
-         missing.Add( "passOrder" );
-      }
-
-      if( facts.WarmupErrors == null )
-      {
-         missing.Add( "warmupErrors" );
-      }
-
-      if( facts.AfterLoad == null )
-      {
-         missing.Add( "indexState.afterLoad" );
-      }
-
-      if( facts.AfterSearch == null )
-      {
-         missing.Add( "indexState.afterSearch" );
-      }
-
-      if( facts.Durability == null )
-      {
-         missing.Add( "durability" );
-      }
-
-      return missing.ToArray();
+      return notes;
    }
 
    /// <summary>

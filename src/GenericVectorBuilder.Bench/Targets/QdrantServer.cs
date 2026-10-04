@@ -27,8 +27,8 @@ public sealed class QdrantServer : IDisposable
 {
    #region Data Members
 
-   /// <summary>Qdrant version the durability text was read against (the source cited is from this tag).</summary>
-   public const string SOURCE_VERSION = "1.17.0";
+   /// <summary>Qdrant version the durability text was measured on (strace of the server process, 2026-10-04).</summary>
+   public const string MEASURED_VERSION = "1.17.0";
 
    private const int MAX_ATTEMPTS = 3;
    private const int STALL_POLLS = 30;
@@ -273,8 +273,8 @@ public sealed class QdrantServer : IDisposable
    }
 
    /// <summary>
-   /// Describes what a crash can lose, from the config file, the server's environment and the
-   /// source of the version cited.
+   /// Describes what a crash can lose, from the strace measurement of the flush calls (see the
+   /// text), the config file and the server's environment.
    /// </summary>
    /// <param name="config">config.yaml flattened to dotted paths, or null when the file could not be read.</param>
    /// <param name="configPath">Where the config file was looked for.</param>
@@ -292,11 +292,15 @@ public sealed class QdrantServer : IDisposable
       string env = envOverrides == null ? "the server's QDRANT__ environment could not be read"
          : envOverrides.Count == 0 ? "no QDRANT__ environment overrides in the server process"
          : $"QDRANT__ environment overrides present in the server process (names only): {string.Join( ", ", envOverrides )}";
-      string sourceNote = version == SOURCE_VERSION ? string.Empty : $" The source was read at {SOURCE_VERSION} and this server is {version}, so re-check it.";
-      return "Every upsert here is sent with wait=true, and Qdrant flushes the open write-ahead-log segment (msync) before it applies a write sent with wait=true, "
-         + $"so an acknowledged write survives a process or OS crash by log replay (update_worker.rs and the wal crate's segment.rs, source tag v{SOURCE_VERSION}). "
+      string measuredNote = version == MEASURED_VERSION ? string.Empty : $" The flush behaviour was measured on {MEASURED_VERSION} and this server is {version}, so re-measure it.";
+      return "What was measured (strace -f on the Qdrant server process, 30 single-point REST upserts per setting, every sync call timed against the request that caused it): "
+         + "with wait=true each upsert had exactly one msync(MS_SYNC) of the write-ahead-log segment inside the request, before the reply (30 of 30); "
+         + "with wait=false the 30 upserts were acknowledged within 0.26 s with no sync call, and the first WAL msync (one call covering all 30 records) came 2.7 s after the last reply, followed by the segment-file flushes. "
+         + "So the log is flushed to disk under both settings, but with wait=false the flush comes after the acknowledgement: an operating-system crash or power cut in that gap loses acknowledged writes, "
+         + "while a crash of the Qdrant process alone should not, because the bytes are already in the kernel's page cache (inferred, not tested). "
+         + "Every upsert here is sent with wait=true in batches of 256 over gRPC; the strace used one point per request, so one flush per batch is inferred, not measured. "
          + $"Segment files are flushed every {flush}; log segments {walMb}, {ahead} created ahead. {file}; {env}. "
-         + $"Not tested by cutting power; whether the disk's own write cache reaches the media was not checked.{sourceNote}";
+         + $"Not tested by cutting power; whether the disk's own write cache reaches the media was not checked.{measuredNote}";
    }
 
    #endregion Public Methods

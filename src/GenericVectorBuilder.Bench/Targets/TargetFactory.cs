@@ -21,6 +21,11 @@ namespace GenericVectorBuilder.Bench.Targets;
 /// <see cref="IIndexFinisher"/>s that wait for and prove a real index; "sql" and "qdrant" (the
 /// builder's own sinks, which this benchmark wraps rather than changes) get an index-state
 /// reader that proves from the server that no index is used, plus their durability text.
+/// How compose-hosted engines are reached: through the container's own address on its Docker
+/// network and the port inside the container (read with docker inspect when the engine is first
+/// used, see <see cref="ContainerRoutes"/>), never through the published 127.0.0.1 port that
+/// docker-proxy serves. SQL Server and Qdrant are native services on this host, so they never
+/// had that extra hop; routing the container engines around it makes the comparison fair.
 /// </summary>
 public sealed class TargetFactory : IDisposable
 {
@@ -29,12 +34,23 @@ public sealed class TargetFactory : IDisposable
    /// <summary>Database the "sql" target writes to.</summary>
    public const string SQL_BENCH_DATABASE = "GvbBench";
 
+   /// <summary>
+   /// The pair of passes a consolidated report compares by default: SQL Server's DiskANN default
+   /// search against its own exact mode. Both read the SAME table (gvb_{collection}_ann in
+   /// GvbBenchDiskAnn), so the pair differs only in the search method. It replaces the old
+   /// default of sql-diskann against the "sql" target, which searched a different database and table.
+   /// </summary>
+   public static readonly PassPair SQL_DISKANN_PAIR = new( "sql-diskann", "default@1", "exact",
+      "DiskANN default search against SQL Server's exact mode on the same table (dbo.gvb_{collection}_ann in GvbBenchDiskAnn); only the search method differs" );
+
    private const string ENGINE_DATA_ROOT = "~/gvb-data/engines";
    private const string QDRANT_COLLECTIONS = "~/qdrant/storage/collections";
-   private const string NOT_READ = "not read: see the run's notes";
+   private const string NOT_READ = "not read";
    private const string QDRANT_CONFIG = "~/qdrant/config/config.yaml";
    private const int QDRANT_HTTP_PORT = 6333;
    private static readonly TimeSpan QDRANT_CALL_DEADLINE = TimeSpan.FromSeconds( 60 );
+   private static readonly TimeSpan BIND_DEADLINE = TimeSpan.FromSeconds( 30 );
+   private static readonly TimeSpan BIND_POLL = TimeSpan.FromSeconds( 1 );
    private static readonly string[] BUILT_IN = { "sql", "sql-diskann", "qdrant", "qdrant-hnsw" };
 
    private readonly GvbSettings _settings;
@@ -44,7 +60,10 @@ public sealed class TargetFactory : IDisposable
    private readonly string _repoRoot;
    private readonly int? _hnswEf;
    private readonly Dictionary<string, ISink> _engines;
+   private readonly IContainerInspector _inspector;
+   private readonly List<BenchTarget> _created = new();
    private readonly List<string> _notes = new();
+   private bool _initialized;
    private string _sqlVersion = "SQL Server";
    private string _qdrantVersion = "unknown version";
    private string? _sqlDurability;
@@ -62,8 +81,10 @@ public sealed class TargetFactory : IDisposable
    /// <param name="repoRoot">Repository root, where deploy/engines lives.</param>
    /// <param name="hnswEf">Search beam for qdrant-hnsw, or null for the server default.</param>
    /// <param name="log">Progress output for the long waits inside targets, or null for the console.</param>
-   public TargetFactory( GvbSettings settings, string repoRoot, int? hnswEf, Action<string>? log = null )
+   /// <param name="inspector">Asks Docker about containers; null for the real "docker inspect". Tests pass a fake.</param>
+   public TargetFactory( GvbSettings settings, string repoRoot, int? hnswEf, Action<string>? log = null, IContainerInspector? inspector = null )
    {
+      _inspector = inspector ?? new DockerInspector();
       _settings = settings;
       _sqlConnection = settings.BuildSqlConnectionString();
       _qdrant = new QdrantClient( settings.QdrantHost, settings.QdrantGrpcPort, false, null, QDRANT_CALL_DEADLINE );
@@ -113,6 +134,7 @@ public sealed class TargetFactory : IDisposable
       }
 
       await ReadDurabilityAsync( ct );
+      _initialized = true;
    }
 
    /// <summary>
@@ -120,27 +142,13 @@ public sealed class TargetFactory : IDisposable
    /// </summary>
    /// <param name="name">Target name.</param>
    /// <returns>The target.</returns>
-   /// <exception cref="ArgumentException">Unknown name.</exception>
+   /// <exception cref="ArgumentException">Unknown name, or a compose-hosted engine with no container route.</exception>
+   /// <exception cref="InvalidOperationException"><see cref="InitializeAsync"/> has not run, so the built-in targets would carry no version or durability text.</exception>
    public BenchTarget Create( string name )
    {
-      switch( name.ToLowerInvariant() )
-      {
-         case "sql":
-            return SqlTarget( new SqlVectorSink( _sqlConnection, SQL_BENCH_DATABASE ), SQL_BENCH_DATABASE, c => $"gvb_{c}", "exact VECTOR_DISTANCE cosine, no vector index (full scan)", true );
-         case "sql-diskann":
-            return SqlTarget( new SqlDiskAnnSink( _sqlConnection, _sqlVersion, _sqlDurability ?? NOT_READ ), SqlDiskAnnSink.DATABASE, SqlDiskAnnSink.AnnTable, "DiskANN (preview) via VECTOR_SEARCH", false );
-         case "qdrant":
-            return QdrantTarget( new QdrantSink( _qdrant ), c => $"gvb_{c}", "exact scan: the builder's sink sends exact=true on every search, so no HNSW graph is used whether or not Qdrant has built one (see the index state)", true );
-         case "qdrant-hnsw":
-            return QdrantTarget( new QdrantHnswSink( _qdrant, _qdrantServer, _hnswEf, _qdrantVersion, _qdrantDurability ?? NOT_READ ), QdrantHnswSink.CollectionName, "HNSW", false );
-      }
-
-      if( _engines.TryGetValue( name, out ISink? sink ) )
-      {
-         return EngineTarget( sink );
-      }
-
-      throw new ArgumentException( $"Unknown target '{name}'. Known: {string.Join( ", ", Names )}." );
+      BenchTarget target = Build( name );
+      _created.Add( target );
+      return target;
    }
 
    /// <summary>
@@ -177,6 +185,38 @@ public sealed class TargetFactory : IDisposable
    #region Private Methods
 
    /// <summary>
+   /// Builds a target by name (see <see cref="Create"/>).
+   /// </summary>
+   /// <param name="name">Target name.</param>
+   /// <returns>The target.</returns>
+   private BenchTarget Build( string name )
+   {
+      if( BUILT_IN.Contains( name, StringComparer.OrdinalIgnoreCase ) && !_initialized )
+      {
+         throw new InvalidOperationException( $"Target '{name}' was requested before InitializeAsync finished, so it would carry no server version and no durability text. Call InitializeAsync first." );
+      }
+
+      switch( name.ToLowerInvariant() )
+      {
+         case "sql":
+            return SqlTarget( new SqlVectorSink( _sqlConnection, SQL_BENCH_DATABASE ), SQL_BENCH_DATABASE, c => $"gvb_{c}", "exact VECTOR_DISTANCE cosine, no vector index (full scan)", true );
+         case "sql-diskann":
+            return SqlTarget( new SqlDiskAnnSink( _sqlConnection, _sqlVersion, _sqlDurability ?? NOT_READ ), SqlDiskAnnSink.DATABASE, SqlDiskAnnSink.AnnTable, "DiskANN (preview) via VECTOR_SEARCH", false, SQL_DISKANN_PAIR );
+         case "qdrant":
+            return QdrantTarget( new QdrantSink( _qdrant ), c => $"gvb_{c}", "exact scan: the builder's sink sends exact=true on every search, so no HNSW graph is used whether or not Qdrant has built one (see the index state)", true );
+         case "qdrant-hnsw":
+            return QdrantTarget( new QdrantHnswSink( _qdrant, _qdrantServer, _hnswEf, _qdrantVersion, _qdrantDurability ?? NOT_READ ), QdrantHnswSink.CollectionName, "HNSW", false );
+      }
+
+      if( _engines.TryGetValue( name, out ISink? sink ) )
+      {
+         return EngineTarget( sink );
+      }
+
+      throw new ArgumentException( $"Unknown target '{name}'. Known: {string.Join( ", ", Names )}." );
+   }
+
+   /// <summary>
    /// A SQL Server target: memory is the whole server's, disk is the table's reserved pages.
    /// </summary>
    /// <param name="sink">The sink.</param>
@@ -185,8 +225,9 @@ public sealed class TargetFactory : IDisposable
    /// <param name="index">Index description.</param>
    /// <param name="builderSink">True for the builder's own SQL sink, which this benchmark wraps: it gets an index-state reader that
    /// proves from the plan of a real search that no vector index is used, and the durability text. False for a sink that does both itself.</param>
+   /// <param name="pair">The passes a consolidated report compares by default for this target, or null.</param>
    /// <returns>The target.</returns>
-   private BenchTarget SqlTarget( ISink sink, string database, Func<string, string> searchedTable, string index, bool builderSink )
+   private BenchTarget SqlTarget( ISink sink, string database, Func<string, string> searchedTable, string index, bool builderSink, PassPair? pair = null )
    {
       return new BenchTarget( sink, _sqlVersion, index, "always-on", null,
          ( _, ct ) => ResourceProbe.SqlServerRamAsync( _sqlConnection, ct ),
@@ -194,6 +235,8 @@ public sealed class TargetFactory : IDisposable
       {
          IndexStateReader = builderSink ? ( c, ct ) => SqlProbe.ExactStateAsync( _sqlConnection, database, searchedTable( c ), ct ) : null,
          DurabilityNote = builderSink ? _sqlDurability ?? NOT_READ : null,
+         DirectNote = $"always-on SQL Server at {_settings.SqlServer}, reached directly (a native service, not a container port published through docker-proxy)",
+         PairHint = pair,
       };
    }
 
@@ -216,6 +259,7 @@ public sealed class TargetFactory : IDisposable
          Settle = builderSink ? ( c, ct ) => _qdrantServer.WaitUntilSettledAsync( sink.Name, collectionName( c ), false, ct ) : null,
          IndexStateReader = builderSink ? ( c, ct ) => _qdrantServer.StateAsync( collectionName( c ), SearchExpectation.ScanEveryVector, ct ) : null,
          DurabilityNote = builderSink ? _qdrantDurability ?? NOT_READ : null,
+         DirectNote = $"always-on Qdrant at {_settings.QdrantHost}, gRPC {_settings.QdrantGrpcPort} and HTTP {QDRANT_HTTP_PORT}, reached directly (a native service, not a container port published through docker-proxy)",
       };
    }
 
@@ -233,6 +277,7 @@ public sealed class TargetFactory : IDisposable
       catch( Exception ex ) when( ex is not OperationCanceledException || !ct.IsCancellationRequested )
       {
          _notes.Add( $"Could not read the SQL Server durability settings: {ex.Message}" );
+         _sqlDurability = $"{NOT_READ}: the SQL Server durability settings could not be read ({ex.Message})";
       }
 
       try
@@ -242,6 +287,7 @@ public sealed class TargetFactory : IDisposable
       catch( Exception ex ) when( ex is not OperationCanceledException || !ct.IsCancellationRequested )
       {
          _notes.Add( $"Could not read the Qdrant durability settings: {ex.Message}" );
+         _qdrantDurability = $"{NOT_READ}: the Qdrant durability settings could not be read ({ex.Message})";
       }
    }
 
@@ -272,8 +318,13 @@ public sealed class TargetFactory : IDisposable
       string key = composeFile[..^".compose.yaml".Length];
       string composePath = Path.Combine( _repoRoot, "deploy", "engines", composeFile );
       string dataFolder = Path.Combine( GvbSettings.Expand( ENGINE_DATA_ROOT ), key );
+      EngineRoute route = ContainerRoutes.Find( sink.Name )
+         ?? throw new ArgumentException( $"Target '{sink.Name}' is hosted by compose but has no entry in ContainerRoutes, so it would be measured through docker-proxy. Add its container route first." );
       return new BenchTarget( sink, engine, index, "compose", composePath, ( _, ct ) => ResourceProbe.DockerRamAsync( composePath, ct ),
-         ( _, ct ) => ResourceProbe.FolderSizeAsync( dataFolder, "whole engine data folder", ct ) );
+         ( _, ct ) => ResourceProbe.FolderSizeAsync( dataFolder, "whole engine data folder", ct ) )
+      {
+         Container = new ContainerBinding( route, _inspector, BIND_DEADLINE, BIND_POLL ),
+      };
    }
 
    /// <summary>
@@ -318,10 +369,11 @@ public sealed class TargetFactory : IDisposable
    #region IDisposable
 
    /// <summary>
-   /// Disposes the Qdrant client and every engine sink that holds resources.
+   /// Disposes the sinks the targets built on container addresses, the Qdrant client and every engine sink that holds resources.
    /// </summary>
    public void Dispose()
    {
+      _created.ForEach( t => t.Dispose() );
       _qdrantServer.Dispose();
       _qdrant.Dispose();
       foreach( ISink sink in _engines.Values )

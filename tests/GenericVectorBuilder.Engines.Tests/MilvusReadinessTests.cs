@@ -17,6 +17,7 @@ namespace GenericVectorBuilder.Engines.Tests;
 /// come from the sink's own readings: the query node's own search counter says which kind of
 /// segment answered the searches.
 /// </summary>
+[Collection( "MilvusNode" )]
 [Trait( "Category", "Live" )]
 public sealed class MilvusReadinessTests
 {

@@ -333,7 +333,7 @@ public static class TargetsScenarios
       foreach( string name in new[] { "sql", "sql-diskann", "qdrant", "qdrant-hnsw" } )
       {
          BenchTarget target = factory.Create( name );
-         lines.Add( $"target {name}|finisher {target.HasIndexFinisher}|settle {target.Settle != null}|reader {target.IndexStateReader != null}|durability {target.Durability}" );
+         lines.Add( $"target {name}|finisher {target.HasIndexFinisher}|settle {target.Settle != null}|reader {target.IndexStateReader != null}|durability {target.Durability}|pair {( target.PairHint == null ? "none" : $"{target.PairHint.PassA} vs {target.PairHint.PassB}" )}|connection {target.ConnectionText}" );
       }
 
       BenchTarget missing = factory.Create( "sql" );

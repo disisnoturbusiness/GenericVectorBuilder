@@ -37,8 +37,11 @@ public sealed class ConsolidatedReport
    /// <summary>Each engine's exact mode against its default search, run by run.</summary>
    public List<ExactVsDefault> ExactVsDefault { get; set; } = new();
 
-   /// <summary>Everything a reader must see before trusting a number (index not ready, durability not stated, errors).</summary>
+   /// <summary>Everything a reader must see before trusting a number (index not ready, durability not stated, errors, spread, machine conditions).</summary>
    public List<Flag> Flags { get; set; } = new();
+
+   /// <summary>Rules the numbers follow that a reader needs next to them, e.g. why load rows/s is not ranked.</summary>
+   public List<string> Notes { get; set; } = new();
 
    #endregion Public Methods
 }
@@ -77,6 +80,30 @@ public sealed class RunSettings
 
    /// <summary>Seconds per concurrency level.</summary>
    public int? SecondsPerLevel { get; set; }
+
+   /// <summary>Build configuration of the benchmark client ("Release" or "Debug"); null when the runs did not record it.</summary>
+   public string? BuildConfiguration { get; set; }
+
+   /// <summary>"on", or "off" with the reason: whether the machine was held steady during the runs (governor, CPU split, quiet-box waits); null when not recorded.</summary>
+   public string? MachineControl { get; set; }
+
+   /// <summary>CPU governor during the runs; null when not recorded.</summary>
+   public string? Governor { get; set; }
+
+   /// <summary>CPU partition (which CPUs the client and the engines could use) as one text; null when not recorded.</summary>
+   public string? CpuPartition { get; set; }
+
+   /// <summary>Untimed warm-up searches before every timed pass; null when not recorded.</summary>
+   public int? WarmupSearches { get; set; }
+
+   /// <summary>Seconds each engine's exact mode was allowed; null when not recorded.</summary>
+   public int? ExactSeconds { get; set; }
+
+   /// <summary>Search-effort settings by target (e.g. "hnsw_ef=100"); null where the runs did not record them.</summary>
+   public Dictionary<string, string?> SearchSettings { get; set; } = new();
+
+   /// <summary>Fields above that were derived from the command line or notes instead of recorded, with the source.</summary>
+   public Dictionary<string, string> Derived { get; set; } = new();
 
    #endregion Public Methods
 }
@@ -246,6 +273,21 @@ public sealed class TargetRunFacts
    /// <summary>What the load's index step reported; null when the run wrote none. Why carried: for runs made before indexState existed it is the only index evidence.</summary>
    public string? LoadIndexNote { get; set; }
 
+   /// <summary>The target's search-effort settings in this run; null when not recorded.</summary>
+   public string? SearchSettings { get; set; }
+
+   /// <summary>True when the engine was idle and warm before it was timed; null when not recorded.</summary>
+   public bool? Settled { get; set; }
+
+   /// <summary>The run's own words on settling; null when not recorded.</summary>
+   public string? SettleDetail { get; set; }
+
+   /// <summary>Mean latency of one search at a time, ms: as recorded, or 1000 / QPS at one searcher; null when neither exists.</summary>
+   public double? MeanMs { get; set; }
+
+   /// <summary>Where <see cref="MeanMs"/> came from: "recorded" or "1000 / QPS@1".</summary>
+   public string? MeanSource { get; set; }
+
    #endregion Public Methods
 }
 
@@ -386,6 +428,12 @@ public sealed class ExactVsDefault
    /// <summary>Runs where the exact p50 was higher than the default p50.</summary>
    public int RunsExactSlower { get; set; }
 
+   /// <summary>The pair of passes this target declared as its fair default comparison, e.g. "default@1 vs exact"; null when it declared none.</summary>
+   public string? DeclaredPair { get; set; }
+
+   /// <summary>What makes the declared pair fair, in the target's words (e.g. "same table, only the search method differs"); null when it declared none.</summary>
+   public string? Note { get; set; }
+
    #endregion Public Methods
 }
 
@@ -430,7 +478,7 @@ public sealed class Flag
    /// <summary>Target name.</summary>
    public string Target { get; set; } = string.Empty;
 
-   /// <summary>Kind, e.g. "index-not-ready-after-load" or "durability-not-stated".</summary>
+   /// <summary>Kind, e.g. "index-not-ready-after-load", "spread" or "governor-not-performance".</summary>
    public string Kind { get; set; } = string.Empty;
 
    /// <summary>Runs it applies to.</summary>

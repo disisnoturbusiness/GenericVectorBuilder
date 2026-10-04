@@ -37,6 +37,14 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// and no growing segment may hold rows. The state must hold on two reads one second apart.
 /// A bare "indexedRows >= totalRows and pendingRows == 0" check is true on an unflushed collection
 /// (all three are 0 until the first flush seals a segment), so it proves nothing by itself.
+/// Why <see cref="GetIndexStateAsync"/> also keeps a search ledger (see <see cref="MilvusSearchLedger"/>):
+/// the readiness above is a reading taken before the timed searches, and does not show where those
+/// searches ran. <see cref="FinishLoadAsync"/> starts the ledger (the query node's search counters,
+/// the searches this sink has sent, the sealed segments with their index builds) and every later
+/// read compares against it, so a read after the timed passes says how many searches ran on sealed
+/// segments, that none ran on a growing one, and that the same indexed segments were served the
+/// whole time. The index description must also name type HNSW. Every search this sink sends carries
+/// searchParams.params.ef (100 unless set), which only an HNSW index reads.
 /// Why errors are read from the body: Milvus answers HTTP 200 and reports failure in a "code"
 /// field, so a successful status alone proves nothing.
 /// </summary>
@@ -64,6 +72,8 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
    private readonly MilvusSinkOptions _options;
    private readonly HttpClient _http;
    private readonly ConcurrentDictionary<string, bool> _unflushed = new( StringComparer.Ordinal );
+   private readonly ConcurrentDictionary<string, long> _searchesSent = new( StringComparer.Ordinal );
+   private readonly ConcurrentDictionary<string, MilvusLedgerStart> _ledgers = new( StringComparer.Ordinal );
 
    #endregion Data Members
 
@@ -196,6 +206,7 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
                row.GetProperty( "distance" ).GetDouble() ) );
          }
 
+         _searchesSent.AddOrUpdate( name, 1, ( _, sent ) => sent + 1 );
          return hits;
       }
    }
@@ -208,6 +219,10 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
       {
          await PostAsync( "v2/vectordb/collections/drop", JsonSerializer.SerializeToUtf8Bytes( new { collectionName = name } ), ct );
       }
+
+      _ledgers.TryRemove( name, out _ );
+      _searchesSent.TryRemove( name, out _ );
+      _unflushed.TryRemove( name, out _ );
    }
 
    /// <summary>
@@ -219,18 +234,19 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
    /// </summary>
    /// <param name="collection">Collection name as passed to the sink.</param>
    /// <param name="ct">Cancellation.</param>
-   /// <returns>The engine's own evidence, plus how long the wait took.</returns>
+   /// <returns>The engine's own evidence, plus how long the wait took. Also starts the search ledger (see <see cref="GetIndexStateAsync"/>).</returns>
    public async Task<string> FinishLoadAsync( string collection, CancellationToken ct )
    {
       string name = CollectionName( collection );
       var clock = Stopwatch.StartNew();
-      IndexState state = await WaitUntilReadyAsync( name, TimeSpan.FromMinutes( _options.IndexWaitMinutes ), ct );
-      if( !state.Ready )
+      Readout readout = await WaitUntilReadyAsync( name, TimeSpan.FromMinutes( _options.IndexWaitMinutes ), ct );
+      if( !readout.State.Ready )
       {
-         throw new InvalidOperationException( $"Milvus did not finish indexing {name} within {_options.IndexWaitMinutes} minutes. Last reading: {state.Detail}" );
+         throw new InvalidOperationException( $"Milvus did not finish indexing {name} within {_options.IndexWaitMinutes} minutes. Last reading: {readout.State.Detail}" );
       }
 
-      return $"{state.Detail}; flush, index build and load took {clock.Elapsed.TotalSeconds:F1} s";
+      await StartLedgerAsync( name, readout, ct );
+      return $"{readout.State.Detail}; flush, index build and load took {clock.Elapsed.TotalSeconds:F1} s; search ledger started, later state reads count the searches against the query node's own counters";
    }
 
    /// <summary>
@@ -238,14 +254,43 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
    /// is the smaller of what the index description says is indexed and what the query node serves
    /// from loaded indexes; TotalVectors is the Strong count(*). When the management port cannot be
    /// read, Ready is false and Detail says why.
+   /// Also reports the search ledger: how many searches this sink has sent since
+   /// <see cref="FinishLoadAsync"/> (or, when it was never called on this sink, since the first
+   /// ready read), what the query node counted for them, and whether the same indexed segments
+   /// were served throughout. A read made after the timed searches therefore proves they used the
+   /// index, and it is not Ready when they did not.
    /// </summary>
    /// <param name="collection">Collection name as passed to the sink.</param>
    /// <param name="ct">Cancellation.</param>
    /// <returns>The engine's account of its index.</returns>
    public async Task<IndexState> GetIndexStateAsync( string collection, CancellationToken ct )
    {
-      Readout readout = await ReadStateAsync( CollectionName( collection ), ct );
-      return readout.State;
+      string name = CollectionName( collection );
+      Readout readout = await ReadStateAsync( name, ct );
+      if( readout.Node is null )
+      {
+         return readout.State;
+      }
+
+      MilvusSearchCounters? now = await TryReadCountersAsync( readout.CollectionId, ct );
+      if( now is null )
+      {
+         return readout.State with { Ready = false, Detail = $"{readout.State.Detail}; the query node's search counters could not be read from {_options.ManagementUrl}/metrics" };
+      }
+
+      if( !_ledgers.TryGetValue( name, out MilvusLedgerStart? start ) )
+      {
+         if( !readout.State.Ready )
+         {
+            return readout.State;
+         }
+
+         _ledgers[name] = new MilvusLedgerStart( now, _searchesSent.GetValueOrDefault( name ), readout.Node.Segments );
+         return readout.State with { Detail = $"{readout.State.Detail}; search ledger started by this read (FinishLoadAsync was not called on this sink)" };
+      }
+
+      MilvusLedgerReading reading = MilvusSearchLedger.Evaluate( start, now, _searchesSent.GetValueOrDefault( name ), readout.Node.Segments, SearchParamsText() );
+      return readout.State with { Ready = readout.State.Ready && reading.Problems.Count == 0, Detail = $"{readout.State.Detail}; {reading.Detail}" };
    }
 
    /// <summary>
@@ -258,8 +303,8 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
    /// <returns>True when the index covers every row and the query node serves it, false on timeout.</returns>
    public async Task<bool> WaitForIndexAsync( string collection, TimeSpan timeout, CancellationToken ct )
    {
-      IndexState state = await WaitUntilReadyAsync( CollectionName( collection ), timeout, ct );
-      return state.Ready;
+      Readout readout = await WaitUntilReadyAsync( CollectionName( collection ), timeout, ct );
+      return readout.State.Ready;
    }
 
    #endregion Public Methods
@@ -272,7 +317,9 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
    /// <param name="State">The engine's account of its index.</param>
    /// <param name="Unsealed">True when stored rows are still in growing segments, so another flush is needed.</param>
    /// <param name="EvidenceMissing">True when a source of evidence could not be read, which waiting cannot fix.</param>
-   private sealed record Readout( IndexState State, bool Unsealed, bool EvidenceMissing );
+   /// <param name="Node">What the query node served at this reading, or null when it could not be read.</param>
+   /// <param name="CollectionId">Milvus's internal id of the collection, 0 when not read.</param>
+   private sealed record Readout( IndexState State, bool Unsealed, bool EvidenceMissing, NodeView? Node = null, long CollectionId = 0 );
 
    /// <summary>
    /// What the query node serves for one collection.
@@ -281,7 +328,8 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
    /// <param name="GrowingRows">Rows still served from growing segments (searches scan these).</param>
    /// <param name="SealedWithIndex">Sealed segments with their index loaded.</param>
    /// <param name="SealedWithoutIndex">Sealed segments without a loaded index.</param>
-   private sealed record NodeView( long IndexedRows, long GrowingRows, int SealedWithIndex, int SealedWithoutIndex );
+   /// <param name="Segments">Fingerprint of every served segment and its index builds (see <see cref="MilvusSearchLedger.Fingerprint"/>).</param>
+   private sealed record NodeView( long IndexedRows, long GrowingRows, int SealedWithIndex, int SealedWithoutIndex, string Segments );
 
    /// <summary>
    /// Flushes, then polls until the state is ready on <see cref="STEADY_READS"/> reads in a row or
@@ -292,13 +340,13 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
    /// <param name="name">Milvus collection name.</param>
    /// <param name="timeout">Longest wait.</param>
    /// <param name="ct">Cancellation.</param>
-   /// <returns>The last state read; the caller checks its Ready flag. Throws at once when the evidence cannot be read.</returns>
-   private async Task<IndexState> WaitUntilReadyAsync( string name, TimeSpan timeout, CancellationToken ct )
+   /// <returns>The last reading; the caller checks its State.Ready flag. Throws at once when the evidence cannot be read.</returns>
+   private async Task<Readout> WaitUntilReadyAsync( string name, TimeSpan timeout, CancellationToken ct )
    {
       DateTime start = DateTime.UtcNow;
       using var limit = CancellationTokenSource.CreateLinkedTokenSource( ct );
       limit.CancelAfter( timeout );
-      IndexState last = new( false, null, null, "no reading taken yet" );
+      Readout last = new( new IndexState( false, null, null, "no reading taken yet" ), Unsealed: false, EvidenceMissing: false );
       try
       {
          await FlushAsync( name, limit.Token );
@@ -308,13 +356,13 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
          while( true )
          {
             Readout readout = await ReadStateAsync( name, limit.Token );
-            last = readout.State;
+            last = readout;
             if( readout.EvidenceMissing )
             {
-               throw new InvalidOperationException( last.Detail );
+               throw new InvalidOperationException( last.State.Detail );
             }
 
-            steady = last.Ready ? steady + 1 : 0;
+            steady = last.State.Ready ? steady + 1 : 0;
             if( steady >= STEADY_READS )
             {
                return last;
@@ -323,7 +371,7 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
             DateTime now = DateTime.UtcNow;
             if( now >= nextProgress )
             {
-               Progress?.Invoke( $"Milvus {name}: waiting for the index, {( now - start ).TotalSeconds:F0} s so far. {last.Detail}" );
+               Progress?.Invoke( $"Milvus {name}: waiting for the index, {( now - start ).TotalSeconds:F0} s so far. {last.State.Detail}" );
                nextProgress = now + PROGRESS_INTERVAL;
             }
 
@@ -338,13 +386,15 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
       }
       catch( OperationCanceledException ) when( !ct.IsCancellationRequested )
       {
-         return last with { Ready = false };
+         return last with { State = last.State with { Ready = false } };
       }
    }
 
    /// <summary>
-   /// Reads the four pieces of evidence (see the class remarks) and decides whether searches now
-   /// use the finished index.
+   /// Reads the four pieces of evidence (see the class remarks), checks that the index is HNSW,
+   /// and decides whether searches now use the finished index. Segments without rows are left out
+   /// of the segment fingerprint, because an empty growing segment can come and go without
+   /// meaning anything.
    /// </summary>
    /// <param name="name">Milvus collection name.</param>
    /// <param name="ct">Cancellation.</param>
@@ -361,20 +411,91 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
 
       JsonElement index = indexes[0];
       string indexState = index.TryGetProperty( "indexState", out JsonElement st ) ? st.GetString() ?? "unknown" : "unknown";
+      string indexType = index.TryGetProperty( "indexType", out JsonElement it ) ? it.GetString() ?? "unknown" : "unknown";
       long sealedRows = Number( index, "totalRows" );
       long indexedRows = Number( index, "indexedRows" );
       long pendingRows = Number( index, "pendingRows" );
       string loadState = await LoadStateAsync( name, ct );
-      ( NodeView? node, string nodeDetail ) = await QueryNodeAsync( await CollectionIdAsync( name, ct ), ct );
-      string detail = $"index {indexState}, indexedRows {indexedRows} of {sealedRows} sealed rows, pendingRows {pendingRows}; stored rows {stored}; {loadState}; query node: {nodeDetail}";
+      long collectionId = await CollectionIdAsync( name, ct );
+      ( NodeView? node, string nodeDetail ) = await QueryNodeAsync( collectionId, ct );
+      string detail = $"index {indexState}, type {indexType} {DescribeIndexParams( index )}, indexedRows {indexedRows} of {sealedRows} sealed rows, pendingRows {pendingRows}; stored rows {stored}; {loadState}; query node: {nodeDetail}";
       if( node is null )
       {
          return new Readout( new IndexState( false, indexedRows, stored, detail ), Unsealed: false, EvidenceMissing: true );
       }
 
-      bool ready = indexState == "Finished" && pendingRows == 0 && indexedRows == sealedRows && sealedRows >= stored && loadState == "LoadStateLoaded"
+      bool ready = indexState == "Finished" && indexType == "HNSW" && pendingRows == 0 && indexedRows == sealedRows && sealedRows >= stored && loadState == "LoadStateLoaded"
          && node.GrowingRows == 0 && node.SealedWithoutIndex == 0 && node.IndexedRows >= stored;
-      return new Readout( new IndexState( ready, Math.Min( indexedRows, node.IndexedRows ), stored, detail ), Unsealed: sealedRows < stored || node.GrowingRows > 0, EvidenceMissing: false );
+      bool unsealed = sealedRows < stored || node.GrowingRows > 0;
+      return new Readout( new IndexState( ready, Math.Min( indexedRows, node.IndexedRows ), stored, indexType == "HNSW" ? detail : $"{detail}; the index type is {indexType}, not HNSW" ),
+         unsealed, EvidenceMissing: false, node, collectionId );
+   }
+
+   /// <summary>
+   /// Names the metric and the build parameters Milvus lists for the index, e.g. "(COSINE, {"M":16,"efConstruction":128})".
+   /// </summary>
+   /// <param name="index">One entry of the index description.</param>
+   /// <returns>The text, or "(parameters not listed)" when Milvus lists none.</returns>
+   private static string DescribeIndexParams( JsonElement index )
+   {
+      string metric = index.TryGetProperty( "metricType", out JsonElement mt ) ? mt.GetString() ?? "?" : "?";
+      string build = string.Empty;
+      if( index.TryGetProperty( "indexParams", out JsonElement list ) && list.ValueKind == JsonValueKind.Array )
+      {
+         foreach( JsonElement item in list.EnumerateArray() )
+         {
+            if( item.TryGetProperty( "key", out JsonElement key ) && key.GetString() == "params" && item.TryGetProperty( "value", out JsonElement value ) )
+            {
+               build = value.GetString() ?? string.Empty;
+            }
+         }
+      }
+
+      return build.Length == 0 ? $"({metric}, parameters not listed)" : $"({metric}, {build})";
+   }
+
+   /// <summary>
+   /// Starts the search ledger of a collection from a ready reading: reads the query node's search
+   /// counters now and remembers them with the searches this sink has sent and the served segments.
+   /// </summary>
+   /// <param name="name">Milvus collection name.</param>
+   /// <param name="ready">The ready reading the ledger starts from.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <exception cref="InvalidOperationException">The counters cannot be read, which no wait can fix.</exception>
+   private async Task StartLedgerAsync( string name, Readout ready, CancellationToken ct )
+   {
+      MilvusSearchCounters counters = await TryReadCountersAsync( ready.CollectionId, ct )
+         ?? throw new InvalidOperationException( $"Milvus is ready for {name} but its search counters cannot be read from {_options.ManagementUrl}/metrics, so the searches cannot be shown to use the index. Set MilvusSinkOptions.ManagementUrl." );
+      _ledgers[name] = new MilvusLedgerStart( counters, _searchesSent.GetValueOrDefault( name ), ready.Node!.Segments );
+   }
+
+   /// <summary>
+   /// Reads the query node's search counters from the management port's /metrics page.
+   /// </summary>
+   /// <param name="collectionId">Milvus's internal id of the collection.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The counters, or null when the page did not answer.</returns>
+   private async Task<MilvusSearchCounters?> TryReadCountersAsync( long collectionId, CancellationToken ct )
+   {
+      try
+      {
+         return MilvusSearchLedger.Parse( await GetTextAsync( $"{_options.ManagementUrl.TrimEnd( '/' )}/metrics", ct ), collectionId );
+      }
+      catch( Exception ex ) when( ex is HttpRequestException or TimeoutException )
+      {
+         return null;
+      }
+   }
+
+   /// <summary>
+   /// How this sink's searches name their effort, for the report: the HNSW parameter ef, or the
+   /// fact that none is sent.
+   /// </summary>
+   /// <returns>Text such as "searchParams.params.ef=100, Strong consistency".</returns>
+   private string SearchParamsText()
+   {
+      string ef = _options.Ef.HasValue ? $"searchParams.params.ef={_options.Ef.Value.ToString( CultureInfo.InvariantCulture )}" : "no ef sent, Milvus default";
+      return $"{ef}, {_options.SearchConsistency} consistency";
    }
 
    /// <summary>
@@ -439,12 +560,18 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
       long growingRows = 0;
       int withIndex = 0;
       int withoutIndex = 0;
+      var served = new List<( string SegmentId, string State, IEnumerable<string> IndexBuilds )>();
       using JsonDocument segments = JsonDocument.Parse( text );
       if( segments.RootElement.ValueKind == JsonValueKind.Array )
       {
          foreach( JsonElement segment in segments.RootElement.EnumerateArray() )
          {
             long rows = long.Parse( segment.GetProperty( "loaded_insert_row_count" ).GetString() ?? "0", CultureInfo.InvariantCulture );
+            if( rows > 0 )
+            {
+               served.Add( ( segment.TryGetProperty( "segment_id", out JsonElement sid ) ? sid.GetString() ?? "?" : "?", segment.GetProperty( "state" ).GetString() ?? "?", LoadedBuilds( segment ) ) );
+            }
+
             if( segment.GetProperty( "state" ).GetString() != "Sealed" )
             {
                growingRows += rows;
@@ -461,7 +588,7 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
          }
       }
 
-      return ( new NodeView( indexedRows, growingRows, withIndex, withoutIndex ),
+      return ( new NodeView( indexedRows, growingRows, withIndex, withoutIndex, MilvusSearchLedger.Fingerprint( served ) ),
          $"{withIndex} sealed segment(s) with the index loaded covering {indexedRows} rows, {withoutIndex} sealed without it, {growingRows} rows in growing segments" );
    }
 
@@ -478,6 +605,23 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
       }
 
       return fields.EnumerateArray().All( f => f.TryGetProperty( "is_loaded", out JsonElement loaded ) && loaded.GetString() == "true" );
+   }
+
+   /// <summary>
+   /// The build ids of the loaded indexes of a query node segment, so a swapped index shows up as a
+   /// different fingerprint.
+   /// </summary>
+   /// <param name="segment">One entry of the management port's segment list.</param>
+   /// <returns>The build ids; empty when the segment lists no index.</returns>
+   private static IEnumerable<string> LoadedBuilds( JsonElement segment )
+   {
+      if( !segment.TryGetProperty( "index_fields", out JsonElement fields ) || fields.ValueKind != JsonValueKind.Array )
+      {
+         return [];
+      }
+
+      return fields.EnumerateArray().Where( f => f.TryGetProperty( "is_loaded", out JsonElement loaded ) && loaded.GetString() == "true" )
+         .Select( f => f.TryGetProperty( "build_id", out JsonElement build ) ? build.GetString() ?? "?" : "?" ).ToArray();
    }
 
    /// <summary>

@@ -34,6 +34,9 @@ public static class BenchSummaryHtml
       "Redis holds everything in memory. As set up here it snapshots every 5 minutes with no append-only log, so a crash can lose recent writes.",
    };
 
+   /// <summary>Inline style of a flag marker (the page's stylesheet is shared and not owned here); colors are its tokens, so light and dark both work.</summary>
+   private const string MARK_STYLE = "display:inline-block;margin-left:4px;padding:0 5px;border:1px solid var(--warn);border-radius:8px;color:var(--warn);font-size:11px;font-weight:700;line-height:16px;cursor:help;text-decoration:none;vertical-align:1px";
+
    #endregion Data Members
 
    #region Public Methods
@@ -85,13 +88,15 @@ public static class BenchSummaryHtml
          html.Append( $"<p class=\"bench-data muted\">{Enc( dataLine )}</p>" );
       }
 
+      html.Append( ConditionsLine( summary.Conditions ) );
+
       string svg = BenchChart.Svg( summary );
       if( svg.Length > 0 )
       {
          html.Append( $"<figure class=\"bench-figure\">{svg}<figcaption>{Enc( Caption( summary ) )}</figcaption></figure>" );
       }
 
-      html.Append( Table( summary ) ).Append( "</section>" );
+      html.Append( Table( summary ) ).Append( Legend( summary ) ).Append( "</section>" );
       return html.ToString();
    }
 
@@ -111,7 +116,7 @@ public static class BenchSummaryHtml
          string memory = row.InMemory ? " <span class=\"muted\">(in memory)</span>" : string.Empty;
          string same = SameAnswers( row.Recall );
          string sameClass = same.StartsWith( "no", StringComparison.Ordinal ) ? " class=\"bench-no\"" : string.Empty;
-         html.Append( $"<tr><td class=\"n\">{i + 1}</td><td>{Enc( row.Name )}{memory}</td><td class=\"n\">{Enc( BenchChart.Count( row.Qps8 ) )}</td>" );
+         html.Append( $"<tr><td class=\"n\">{i + 1}</td><td>{Enc( row.Name )}{memory}{Markers( row )}</td><td class=\"n\">{Enc( BenchChart.Count( row.Qps8 ) )}</td>" );
          html.Append( $"<td class=\"n\">{Enc( Ms( row.P50Ms ) )}</td><td{sameClass}>{Enc( same )}</td></tr>" );
       }
 
@@ -121,6 +126,98 @@ public static class BenchSummaryHtml
       }
 
       return html.Append( "</tbody></table></div>" ).ToString();
+   }
+
+   /// <summary>
+   /// The one line that states the machine conditions the numbers were measured under, or says
+   /// they were not recorded (old result files). A governor other than performance and a
+   /// non-Release build are marked like the "no" answers in the table.
+   /// </summary>
+   /// <param name="conditions">The conditions, or null when the result file had none.</param>
+   /// <returns>HTML fragment.</returns>
+   public static string ConditionsLine( BenchConditions? conditions )
+   {
+      if( conditions == null || conditions.NoneRecorded )
+      {
+         return "<p class=\"bench-conditions muted\">Machine conditions (CPU governor, CPU partition, build) were not recorded in these results.</p>";
+      }
+
+      var parts = new List<string>
+      {
+         $"CPU governor {Value( conditions.Governor, conditions.GovernorIsWrong )}",
+         $"CPU partition {Value( conditions.Partition, false )}",
+         conditions.Build == null ? "build not recorded" : conditions.BuildIsWrong ? $"<span class=\"bench-no\">{Enc( conditions.Build )} build</span>" : $"{Enc( conditions.Build )} build",
+      };
+      if( conditions.WarmupSearches != null )
+      {
+         parts.Add( $"{Enc( conditions.WarmupSearches )} warm-up searches before each timed pass" );
+      }
+
+      if( conditions.ExactSeconds != null )
+      {
+         parts.Add( $"exact mode up to {Enc( conditions.ExactSeconds )} s" );
+      }
+
+      return $"<p class=\"bench-conditions muted\">Machine: {string.Join( "; ", parts )}.</p>";
+   }
+
+   /// <summary>
+   /// The small markers after an engine's name, one per kind of warning, each with its evidence
+   /// as hover text. Empty when the engine has no warning.
+   /// </summary>
+   /// <param name="row">The engine.</param>
+   /// <returns>HTML fragment.</returns>
+   public static string Markers( BenchEngineRow row )
+   {
+      if( row.Flags is not { Count: > 0 } flags )
+      {
+         return string.Empty;
+      }
+
+      var html = new StringBuilder();
+      foreach( IGrouping<string, BenchFlag> group in flags.GroupBy( f => BenchFlagInfo.Code( f.Kind ) ).OrderBy( g => g.Min( f => BenchFlagInfo.Order( f.Kind ) ) ) )
+      {
+         string evidence = string.Join( "\n", group.Select( f => $"{f.Kind}: {f.Detail}" ) );
+         html.Append( $"<abbr class=\"bench-mark\" style=\"{MARK_STYLE}\" title=\"{Enc( evidence )}\" aria-label=\"{Enc( evidence )}\">{Enc( group.Key )}</abbr>" );
+      }
+
+      return html.ToString();
+   }
+
+   /// <summary>
+   /// The legend under the table: what each marker used on the page means, and (closed by
+   /// default, so it works without hover) the evidence behind every marker, engine by engine.
+   /// Empty when no engine has a warning.
+   /// </summary>
+   /// <param name="summary">Ranked engines.</param>
+   /// <returns>HTML fragment.</returns>
+   public static string Legend( BenchSummary summary )
+   {
+      var flagged = summary.Ranked.Where( r => r.Flags is { Count: > 0 } ).ToList();
+      if( flagged.Count == 0 )
+      {
+         return string.Empty;
+      }
+
+      var html = new StringBuilder( "<div class=\"bench-legend\"><p class=\"muted\">The small markers after an engine name warn about its numbers. Hover a marker for the evidence.</p><ul>" );
+      foreach( IGrouping<string, ( BenchEngineRow Row, BenchFlag Flag )> group in flagged.SelectMany( r => r.Flags!.Select( f => ( Row: r, Flag: f ) ) )
+         .GroupBy( x => BenchFlagInfo.Code( x.Flag.Kind ) ).OrderBy( g => g.Min( x => BenchFlagInfo.Order( x.Flag.Kind ) ) ) )
+      {
+         int engines = group.Select( x => x.Row.Key ).Distinct().Count();
+         string meaning = BenchFlagInfo.Meaning( group.OrderBy( x => BenchFlagInfo.Order( x.Flag.Kind ) ).First().Flag.Kind );
+         html.Append( $"<li><abbr class=\"bench-mark\" style=\"{MARK_STYLE}\">{Enc( group.Key )}</abbr> {Enc( meaning )} <span class=\"muted\">({engines} of {summary.Ranked.Count} engines)</span></li>" );
+      }
+
+      html.Append( "</ul><details class=\"bench-evidence\"><summary>Evidence behind the markers</summary><ul>" );
+      foreach( BenchEngineRow row in flagged )
+      {
+         foreach( BenchFlag flag in row.Flags! )
+         {
+            html.Append( $"<li><strong>{Enc( row.Name )}</strong> {Enc( BenchFlagInfo.Code( flag.Kind ) )} {Enc( flag.Kind )}: {Enc( flag.Detail )}</li>" );
+         }
+      }
+
+      return html.Append( "</ul></details></div>" ).ToString();
    }
 
    /// <summary>
@@ -188,6 +285,22 @@ public static class BenchSummaryHtml
    private static string Percent( double share )
    {
       return ( share * 100 ).ToString( "0.#", CultureInfo.InvariantCulture ) + "%";
+   }
+
+   /// <summary>
+   /// A condition value for the conditions line: "not recorded" for null, marked when wrong.
+   /// </summary>
+   /// <param name="value">The value, or null.</param>
+   /// <param name="wrong">True to mark it like a "no" answer.</param>
+   /// <returns>HTML fragment.</returns>
+   private static string Value( string? value, bool wrong )
+   {
+      if( value == null )
+      {
+         return "not recorded";
+      }
+
+      return wrong ? $"<span class=\"bench-no\">{Enc( value )}</span>" : Enc( value );
    }
 
    /// <summary>

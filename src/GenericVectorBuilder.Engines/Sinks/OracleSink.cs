@@ -133,11 +133,12 @@ public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription, II
 
    /// <inheritdoc />
    public string Durability =>
-      "Committed rows survive a crash or power loss. The sink uses a plain COMMIT and commit_logging, commit_wait and commit_write are unset in the database, so every commit "
+      "By these settings a committed row should survive a crash or power loss. The sink uses a plain COMMIT and commit_logging, commit_wait and commit_write are unset in the database, so every commit "
       + "waits for its redo to be written. Measured 2026-10-04: 50 separate client commits raised V$SYSSTAT 'redo synch writes' by 55 (the 50 commits plus the CREATE and DROP "
       + "of the probe table), and the log writer and the datafile writer hold their files open with O_DSYNC (open flags 02110002, filesystemio_options none). The database "
       + "runs NOARCHIVELOG (V$DATABASE.LOG_MODE), so redo serves crash recovery only and there is no point-in-time restore. The HNSW graph lives in the 768 MB vector memory "
-      + "pool (oracle-init/01-vector-memory.sh) and is not the durable copy; the table is.";
+      + "pool (oracle-init/01-vector-memory.sh) and is not the durable copy; the table is. "
+      + "Not tested by cutting power; whether the disk's own write cache reaches the media was not checked.";
 
    /// <summary>
    /// Optional receiver for progress lines while <see cref="FinishLoadAsync"/> works (one line
