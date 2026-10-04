@@ -210,3 +210,10 @@ input[type="text"], input[type="password"], select {
 .git-card h3 { overflow-wrap: anywhere; }
 .git-card details { margin-top: 8px; }
 .git-card ul { margin: 6px 0 0; padding-left: 20px; font-size: 14px; overflow-wrap: anywhere; }
+
+/* Benchmark results pages (/bench-results): wide tables wrap instead of cutting text off. */
+.bench { max-width: 1400px; margin: 16px auto; }
+.bench .preview th, .bench .preview td { white-space: normal; max-width: 420px; overflow: visible; vertical-align: top; }
+.bench pre { white-space: pre-wrap; word-break: break-all; background: var(--bg); padding: 8px; border-radius: 6px; font-size: 13px; }
+.bench h1 { font-size: 22px; } .bench h2 { font-size: 18px; margin-top: 24px; } .bench h3 { font-size: 16px; margin-top: 18px; }
+.topbar h1 a, .topbar > a { color: inherit; text-decoration: none; }

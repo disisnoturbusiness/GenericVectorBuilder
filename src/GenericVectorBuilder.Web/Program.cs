@@ -68,4 +68,5 @@ ScanEndpoints.Map( app );
 OdbcEndpoints.Map( app );
 GitEndpoints.Map( app );
 RunEndpoints.Map( app );
+BenchResultsEndpoints.Map( app );
 app.Run();
