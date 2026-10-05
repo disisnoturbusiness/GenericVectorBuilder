@@ -12,6 +12,9 @@ namespace GenericVectorBuilder.Bench.Report;
 /// Why a command in the benchmark instead of a script beside it: the published numbers must
 /// come from tested code with fixed rules (paired comparisons per run, dropped runs logged),
 /// not from a one-off script that each writeup rewrites.
+/// It refuses to merge runs that are not the same kind of experiment (different command, engine
+/// hosting or segment layout) and prints the speed ranking as tie bands under a title that says
+/// what it ranks (see <see cref="ConsolidateIdentity"/> and <see cref="ConsolidateBands"/>).
 /// It touches no engine and makes no network call; it only reads files and writes two.
 /// </summary>
 public static class ConsolidateCommand
@@ -39,7 +42,7 @@ public static class ConsolidateCommand
    /// <param name="args">Arguments after the command word.</param>
    /// <param name="log">Progress and error output.</param>
    /// <param name="ct">Cancellation (checked between folders and before writing).</param>
-   /// <returns>0 when written, 1 when no run qualified or a file could not be read or written, 2 for a bad command line.</returns>
+   /// <returns>0 when written, 1 when no run qualified, the runs are not one kind of experiment, or a file could not be read or written, 2 for a bad command line.</returns>
    public static int Run( IReadOnlyList<string> args, Action<string> log, CancellationToken ct )
    {
       ConsolidateArgs parsed;
@@ -89,6 +92,9 @@ public static class ConsolidateCommand
   Uses only runs in which every listed target has a result; every other run is logged with its reason.
   Runs measured under different build configuration, CPU governor, CPU partition, warm-up count, exact-mode seconds,
   seconds per level or search settings of a listed target are never mixed: the largest consistent group is used.
+  Runs of different commands (run-all against bench), a different engine hosting (container against native) or a different segment
+  layout reported by an engine are refused, not merged: the command stops (exit 1) and names the runs on each side.
+  Targets whose min-max ranges overlap on a speed metric share a tie band (band 1 is the fastest); no strict rank is printed.
   GLOB may use * and ? in any path segment and {x,y} alternatives, e.g. 'bench-results/2026100{3,4}-*-eshoponweb'.
   --out defaults to a new consolidated-<UTC time> folder beside the first run used.
   --pairs a:b[,c:d] compares two targets run by run; there is no default pair, because two targets hold separate copies of the data.

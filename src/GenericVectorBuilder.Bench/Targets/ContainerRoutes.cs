@@ -200,4 +200,27 @@ public static class ContainerRoutes
 /// </summary>
 /// <param name="Containers">Names of the containers the sink talks to (from the compose file's container_name).</param>
 /// <param name="Build">Builds the sink from the addresses read for those containers.</param>
-public sealed record EngineRoute( IReadOnlyList<string> Containers, Func<ContainerRouter, ISink> Build );
+public sealed record EngineRoute( IReadOnlyList<string> Containers, Func<ContainerRouter, ISink> Build )
+{
+   #region Public Methods
+
+   /// <summary>
+   /// Builds the sink asynchronously; used instead of <see cref="Build"/> when set. Why: the
+   /// benchmark's own SQL Server and Qdrant containers are asked for their build, CPUs and
+   /// durability settings the moment the target first reaches them, which needs a round trip.
+   /// </summary>
+   public Func<ContainerRouter, CancellationToken, Task<ISink>>? BuildAsync { get; init; }
+
+   /// <summary>
+   /// A route whose sink is built asynchronously.
+   /// </summary>
+   /// <param name="containers">Container names.</param>
+   /// <param name="build">The asynchronous builder.</param>
+   /// <returns>The route; its synchronous <see cref="Build"/> refuses with a plain message.</returns>
+   public static EngineRoute Async( IReadOnlyList<string> containers, Func<ContainerRouter, CancellationToken, Task<ISink>> build )
+   {
+      return new EngineRoute( containers, _ => throw new InvalidOperationException( $"The sink for {string.Join( ", ", containers )} is built asynchronously; use BuildAsync." ) ) { BuildAsync = build };
+   }
+
+   #endregion Public Methods
+}

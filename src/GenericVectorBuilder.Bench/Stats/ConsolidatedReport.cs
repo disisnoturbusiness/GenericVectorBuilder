@@ -43,6 +43,12 @@ public sealed class ConsolidatedReport
    /// <summary>Rules the numbers follow that a reader needs next to them, e.g. why load rows/s is not ranked.</summary>
    public List<string> Notes { get; set; } = new();
 
+   /// <summary>
+   /// Tie bands for the request-speed metrics (p50 and QPS at each level): targets whose
+   /// slowest-to-fastest ranges over the runs overlap share a band, so no strict rank is claimed.
+   /// </summary>
+   public List<MetricBands> Bands { get; set; } = new();
+
    #endregion Public Methods
 }
 
@@ -56,6 +62,9 @@ public sealed class RunSettings
 
    /// <summary>Source pipeline.</summary>
    public string? Pipeline { get; set; }
+
+   /// <summary>The benchmark command every run used (run-all or bench); null when the runs did not record it. Why: runs of different commands load their data differently and are never merged.</summary>
+   public string? Command { get; set; }
 
    /// <summary>Machine.</summary>
    public string? Host { get; set; }
@@ -213,6 +222,9 @@ public sealed class TargetSummary
    /// <summary>Carry-through facts from each run used, in run order.</summary>
    public List<TargetRunFacts> PerRun { get; set; } = new();
 
+   /// <summary>What a reader needs to know about this engine to read its numbers: a CPU cap, an exact-by-design search, a scan where an index was meant; each with where it came from.</summary>
+   public List<EngineNote> EngineNotes { get; set; } = new();
+
    #endregion Public Methods
 }
 
@@ -266,6 +278,12 @@ public sealed class TargetRunFacts
 
    /// <summary>Index state after the searches; null when not recorded.</summary>
    public IndexStateFacts? AfterSearch { get; set; }
+
+   /// <summary>Segment layout the engine reported after the load, e.g. "2 segments"; null when the engine reported none.</summary>
+   public string? SegmentLayoutAfterLoad { get; set; }
+
+   /// <summary>Segment layout the engine reported after the searches; null when the engine reported none.</summary>
+   public string? SegmentLayoutAfterSearch { get; set; }
 
    /// <summary>Durability statement; null when not recorded.</summary>
    public string? Durability { get; set; }
@@ -486,6 +504,89 @@ public sealed class Flag
 
    /// <summary>Evidence from the result files (the engine's detail text, counts), never a cause.</summary>
    public string Detail { get; set; } = string.Empty;
+
+   #endregion Public Methods
+}
+
+/// <summary>
+/// The tie bands of one request-speed metric.
+/// Why bands and not ranks: three runs of a target give a range, and two targets whose ranges
+/// overlap cannot be told apart on that metric; a strict rank would claim a difference the
+/// runs do not show.
+/// </summary>
+public sealed class MetricBands
+{
+   #region Public Methods
+
+   /// <summary>Metric key, e.g. "p50Ms" or "qps@8"; the same key the per-run ranks use.</summary>
+   public string Metric { get; set; } = string.Empty;
+
+   /// <summary>Reader-facing title, e.g. "p50 latency, one search at a time (lower is faster)".</summary>
+   public string Title { get; set; } = string.Empty;
+
+   /// <summary>True when a larger value is faster (QPS); false for latency.</summary>
+   public bool HigherIsBetter { get; set; }
+
+   /// <summary>Runs behind each range. Below 2 there is no spread, so no bands are drawn and the entries show this run's order only.</summary>
+   public int Runs { get; set; }
+
+   /// <summary>True when bands were drawn (two runs or more).</summary>
+   public bool Banded { get; set; }
+
+   /// <summary>Targets, band by band, best band first; inside a band by median, which is not a ranking. Targets without a value come last.</summary>
+   public List<BandEntry> Entries { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>
+/// One target's place in a metric's tie bands.
+/// </summary>
+public sealed class BandEntry
+{
+   #region Public Methods
+
+   /// <summary>Target name.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>Band number (1 is the fastest band); null when the metric has no value or only one run was used.</summary>
+   public int? Band { get; set; }
+
+   /// <summary>Position inside the band by median (1 = best median); this order is not a ranking. With one run it is the position in that run.</summary>
+   public int? OrderInBand { get; set; }
+
+   /// <summary>Median over the runs.</summary>
+   public double? Median { get; set; }
+
+   /// <summary>Smallest value over the runs.</summary>
+   public double? Min { get; set; }
+
+   /// <summary>Largest value over the runs.</summary>
+   public double? Max { get; set; }
+
+   /// <summary>Runs that had a value.</summary>
+   public int N { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>
+/// One thing to know about an engine before reading its numbers.
+/// Why the source is carried: a note read from the result files and a note from earlier probes
+/// (written down here because the run did not record it) must not look the same.
+/// </summary>
+public sealed class EngineNote
+{
+   #region Public Methods
+
+   /// <summary>Kind: "cpu-cap", "exact-by-design" or "scans-all-vectors".</summary>
+   public string Kind { get; set; } = string.Empty;
+
+   /// <summary>The note, one or two sentences.</summary>
+   public string Text { get; set; } = string.Empty;
+
+   /// <summary>"results" when the result files say it, "known" when it is a known product limit the run did not record.</summary>
+   public string Source { get; set; } = string.Empty;
 
    #endregion Public Methods
 }

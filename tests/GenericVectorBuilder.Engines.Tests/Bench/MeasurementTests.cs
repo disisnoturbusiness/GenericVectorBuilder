@@ -38,13 +38,126 @@ public class MeasurementTests
    #region Public Methods
 
    /// <summary>
-   /// The benchmark's own rehearsal length is 5 s per pass type and its settle cap is 120 s.
+   /// The benchmark's own rehearsal length is 5 s per pass type and its settle cap is 120 s; the
+   /// settle check takes a 2 s trial, allows 15%, and extends once for 30 s to 120 s.
    /// </summary>
    [Fact]
    public void Defaults_FiveSecondRehearsalAndTwoMinuteSettleCap()
    {
       double[] defaults = (double[])Invoke( "Defaults" );
-      Assert.Equal( new[] { 5.0, 120.0 }, defaults );
+      Assert.Equal( new[] { 5.0, 120.0, 2.0, 0.15, 30.0, 120.0 }, defaults );
+   }
+
+   /// <summary>
+   /// The settled p50 is the median of the last three window p50s (of fewer when fewer ran, none
+   /// when none), and a trial agrees when the settled p50 is within 15% of the trial's p50.
+   /// </summary>
+   [Fact]
+   public void SettleCheck_Rules()
+   {
+      Assert.Equal( 2.0, Rules( new[] { 5.0, 1, 3, 2 }, 0, 0 )[0] );
+      Assert.Equal( 4.0, Rules( new[] { 4.0 }, 0, 0 )[0] );
+      Assert.Equal( 1.5, Rules( new[] { 1.0, 2 }, 0, 0 )[0] );
+      Assert.True( double.IsNaN( Rules( Array.Empty<double>(), 0, 0 )[0] ) );
+      Assert.Equal( 1.0, Rules( Array.Empty<double>(), 1.149, 1.0 )[1] );
+      Assert.Equal( 1.0, Rules( Array.Empty<double>(), 0.851, 1.0 )[1] );
+      Assert.Equal( 0.0, Rules( Array.Empty<double>(), 1.151, 1.0 )[1] );
+      Assert.Equal( 0.0, Rules( Array.Empty<double>(), 0.849, 1.0 )[1] );
+      Assert.Equal( 0.0, Rules( Array.Empty<double>(), 2.9, 1.35 )[1] );
+      Assert.Equal( 0.0, Rules( Array.Empty<double>(), 1.0, 0 )[1] );
+   }
+
+   /// <summary>
+   /// A steady engine: the trial right before the first timed pass agrees with the settled p50,
+   /// nothing is extended, the check sits between the first warm-up and the first timing, and the
+   /// note says the settle was confirmed (the consolidation reads it as settled).
+   /// </summary>
+   [Fact]
+   public async Task SettleCheck_AgreeingTrialNeedsNoExtension()
+   {
+      dynamic r = await ScenarioAsync( "SettleCheckAsync", "fixed:1", 0.3, 0.5, 3.0, 5.0 );
+      Assert.True( (bool)r.TrialAgreed, (string)r.Note );
+      Assert.False( (bool)r.Extended );
+      Assert.True( (bool)r.Confirmed );
+      Assert.StartsWith( "Settle: settled after", (string)r.Note );
+      Assert.Contains( "confirmed by a trial right before the first timed pass", (string)r.Note );
+      Assert.True( (bool?)r.ReadSettled );
+      string[] log = r.Log;
+      int warmup = Array.FindIndex( log, l => l.Contains( ": warm-up before ", StringComparison.Ordinal ) );
+      int check = Array.FindIndex( log, l => l.Contains( ": settle check: trial", StringComparison.Ordinal ) );
+      int timing = Array.FindIndex( log, l => l.Contains( ": timing ", StringComparison.Ordinal ) );
+      Assert.True( warmup < check && check < timing, string.Join( "\n", log ) );
+      Assert.DoesNotContain( log, l => l.Contains( "(again, after the settle extension)", StringComparison.Ordinal ) );
+      Assert.True( (int)r.CheckSearches > 0 && (int)r.PreparationSearches > (int)r.CheckSearches );
+   }
+
+   /// <summary>
+   /// The Elasticsearch case: 6 ms until the settle has settled, 2 ms from then on (2 ms, not
+   /// 1, so the scheduler's wake-up jitter on a busy test box stays well inside the 5% the
+   /// windows must agree within). The trial
+   /// disagrees, the settle is extended once (for at least its minimum), the second trial agrees,
+   /// the first pass's warm-up is announced and run again after the extension (so the quiet-box
+   /// check and the warm-up still come right before the timed pass), and the note says it settled
+   /// after the extension.
+   /// </summary>
+   [Fact]
+   public async Task SettleCheck_LateSpeedUpExtendsOnce()
+   {
+      dynamic r = await ScenarioAsync( "SettleCheckAsync", "drop:6:2", 0.3, 0.5, 3.0, 5.0 );
+      Assert.True( (bool)r.FirstSettled );
+      Assert.True( (double)r.SettledP50 > 5.0, $"settled p50 {r.SettledP50}" );
+      Assert.True( (double)r.TrialP50 < 0.7 * (double)r.SettledP50, $"trial p50 {r.TrialP50}" );
+      Assert.False( (bool)r.TrialAgreed );
+      Assert.True( (bool)r.Extended );
+      Assert.InRange( (double)r.ExtensionSeconds, 0.5, 3.5 );
+      Assert.True( (bool)r.RetrialAgreed, (string)r.Note );
+      Assert.True( (bool)r.Confirmed );
+      Assert.StartsWith( "Settle: settled after the one extension", (string)r.Note );
+      Assert.DoesNotContain( "NOT settled", (string)r.Note );
+      Assert.True( (bool?)r.ReadSettled );
+      string[] log = r.Log;
+      int extending = Array.FindIndex( log, l => l.Contains( "extending the settle once", StringComparison.Ordinal ) );
+      int again = Array.FindIndex( log, l => l.Contains( "(again, after the settle extension)", StringComparison.Ordinal ) );
+      int timing = Array.FindIndex( log, l => l.Contains( ": timing ", StringComparison.Ordinal ) );
+      Assert.True( extending > 0 && extending < again && again < timing, string.Join( "\n", log ) );
+      Assert.Equal( 2, log.Take( timing ).Count( l => l.Contains( ": warm-up before ", StringComparison.Ordinal ) ) );
+   }
+
+   /// <summary>
+   /// An engine whose latency keeps climbing: the settle hits its cap, the one extension does not
+   /// settle either, and the note is the WARNING the consolidation reads as not settled.
+   /// </summary>
+   [Fact]
+   public async Task SettleCheck_NeverAgreeingIsFlagged()
+   {
+      dynamic r = await ScenarioAsync( "SettleCheckAsync", "climb", 0.3, 0.3, 0.8, 0.8 );
+      Assert.False( (bool)r.FirstSettled );
+      Assert.True( (bool)r.Extended );
+      Assert.False( (bool)r.Confirmed );
+      Assert.StartsWith( "WARNING: latency had NOT settled when timing began, even after the one extension", (string)r.Note );
+      Assert.False( (bool?)r.ReadSettled );
+      Assert.Single( (string[])r.PassOrder );
+   }
+
+   /// <summary>
+   /// Every settle note reads right in the consolidation: settled when the check confirmed it
+   /// (with or without the extension) or when no check ran on a settled settle; not settled when
+   /// the extension did not help or the searches kept failing (then nothing is extended).
+   /// </summary>
+   [Fact]
+   public void SettleNote_ReadByConsolidation()
+   {
+      foreach( (string mode, bool settled, string start) in new[] { ( "agreed", true, "Settle: settled after" ), ( "extended-ok", true, "Settle: settled after the one extension" ),
+         ( "extended-bad", false, "WARNING: latency had NOT settled" ), ( "gave-up", false, "WARNING: latency had NOT settled" ), ( "unchecked", true, "Settle: settled after" ) } )
+      {
+         dynamic n = Invoke( "SettleNote", mode );
+         Assert.StartsWith( start, (string)n.Note );
+         Assert.Equal( settled, (bool?)n.ReadSettled );
+         Assert.True( settled != ( (string)n.Note ).Contains( "NOT settled", StringComparison.Ordinal ), $"{mode}: {n.Note}" );
+      }
+
+      Assert.Contains( "not extended, because the searches kept failing", (string)( (dynamic)Invoke( "SettleNote", "gave-up" ) ).Note );
+      Assert.Contains( "117% apart (limit 15%)", (string)( (dynamic)Invoke( "SettleNote", "extended-ok" ) ).Note );
    }
 
    /// <summary>
@@ -329,6 +442,16 @@ public class MeasurementTests
    private static string[] Flags( IEnumerable<double> latencies )
    {
       return (string[])Invoke( "ShapeFlags", (object)latencies.ToArray() );
+   }
+
+   /// <summary>MeasurementScenarios.TrialRules.</summary>
+   /// <param name="p50s">Window p50s.</param>
+   /// <param name="settled">Settled p50.</param>
+   /// <param name="trial">Trial p50.</param>
+   /// <returns>Settled p50 and 1 when they agree.</returns>
+   private static double[] Rules( double[] p50s, double settled, double trial )
+   {
+      return (double[])Invoke( "TrialRules", p50s, settled, trial );
    }
 
    /// <summary>MeasurementScenarios.IsSettled.</summary>

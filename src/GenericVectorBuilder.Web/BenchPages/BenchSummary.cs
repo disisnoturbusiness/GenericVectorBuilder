@@ -14,20 +14,31 @@ namespace GenericVectorBuilder.Web.BenchPages;
 /// <param name="Recall">Share of the exact top 10 the engine returned (1 = same answers), or null when missing.</param>
 /// <param name="InMemory">True when the engine holds everything in memory, which the chart marks.</param>
 /// <param name="Flags">Warnings about this engine's numbers (spread, unsettled, ...); null or empty when there are none.</param>
-public sealed record BenchEngineRow( string Key, string Name, double Qps8, double? Qps8Min, double? Qps8Max, double? P50Ms, double? Recall, bool InMemory, IReadOnlyList<BenchFlag>? Flags = null );
+/// <param name="Band">Tie band by searches per second with 8 at once (1 is the fastest band; engines whose min to max ranges overlap share one); null when only one run was used, so no spread is known.</param>
+/// <param name="Notes">What to know about this engine to read its speed (a CPU cap, an exact-by-design search); null or empty when there is none.</param>
+public sealed record BenchEngineRow( string Key, string Name, double Qps8, double? Qps8Min, double? Qps8Max, double? P50Ms, double? Recall, bool InMemory, IReadOnlyList<BenchFlag>? Flags = null, int? Band = null, IReadOnlyList<BenchEngineNote>? Notes = null );
+
+/// <summary>
+/// One note about an engine, as the consolidate command wrote it.
+/// </summary>
+/// <param name="Kind">"cpu-cap", "exact-by-design" or "scans-all-vectors" (an unknown kind is shown as written).</param>
+/// <param name="Text">The note, one or two sentences.</param>
+/// <param name="Source">"results" when the result files say it, "known" when it is a documented limit the run did not record.</param>
+public sealed record BenchEngineNote( string Kind, string Text, string Source );
 
 /// <summary>
 /// The ranked numbers behind a summary block: the leader first.
 /// Why one shape for both sources: the summary page (medians of several runs) and each run page
 /// (one run) must read the same way, so the chart, headline and table are built from this alone.
 /// </summary>
-/// <param name="Ranked">Engines with a result, fastest first by searches per second with 8 at once.</param>
+/// <param name="Ranked">Engines with a result, fastest first by searches per second with 8 at once (the median order; engines that share a band are not ranked against each other).</param>
 /// <param name="NoResult">Friendly names of engines that produced no throughput number.</param>
 /// <param name="Runs">How many runs each median covers (1 for a single run page).</param>
 /// <param name="Conditions">The machine conditions the numbers were measured under; null or <see cref="BenchConditions.None"/> when the result files did not record them.</param>
-public sealed record BenchSummary( IReadOnlyList<BenchEngineRow> Ranked, IReadOnlyList<string> NoResult, int Runs, BenchConditions? Conditions = null )
+/// <param name="Rows">Vectors in the collection that was searched; null when the result files did not record it.</param>
+public sealed record BenchSummary( IReadOnlyList<BenchEngineRow> Ranked, IReadOnlyList<string> NoResult, int Runs, BenchConditions? Conditions = null, int? Rows = null )
 {
-   /// <summary>True when the numbers are medians across runs, so the chart draws min to max lines.</summary>
+   /// <summary>True when the numbers are medians across runs, so the chart draws min to max lines and the engines are put in tie bands.</summary>
    public bool HasRanges => Runs > 1;
 }
 
@@ -125,7 +136,7 @@ public static class BenchSummaryReader
             Stat( e, "p50", "median" ), Stat( e, "recall", "median" ), IN_MEMORY.Contains( engine.Name ) ) );
       }
 
-      return new BenchSummary( Rank( rows ), missing, Math.Max( runs, 1 ) );
+      return new BenchSummary( WithBands( Rank( rows ), runs ), missing, Math.Max( runs, 1 ) );
    }
 
    /// <summary>
@@ -160,7 +171,7 @@ public static class BenchSummaryReader
             t.ValueKind == JsonValueKind.Object ? BenchFlagInfo.FromTarget( t ) : null ) );
       }
 
-      return new BenchSummary( Rank( rows ), missing, 1, BenchConditions.FromRun( doc.RootElement ) );
+      return new BenchSummary( Rank( rows ), missing, 1, BenchConditions.FromRun( doc.RootElement ), WholeNumber( doc.RootElement, "rows" ) );
    }
 
    #endregion Public Methods
@@ -194,11 +205,64 @@ public static class BenchSummaryReader
 
          JsonElement eight = qps.GetProperty( EIGHT_AT_ONCE );
          rows.Add( new BenchEngineRow( key, FriendlyName( key ), median.Value, Number( eight, "min" ), Number( eight, "max" ), Stat( t, "p50Ms", "median" ), Stat( t, "recall", "median" ),
-            IN_MEMORY.Contains( key ), flags.GetValueOrDefault( key ) ) );
+            IN_MEMORY.Contains( key ), flags.GetValueOrDefault( key ), null, EngineNotes( t ) ) );
       }
 
-      BenchConditions conditions = root.TryGetProperty( "settings", out JsonElement settings ) && settings.ValueKind == JsonValueKind.Object ? BenchConditions.FromSettings( settings ) : BenchConditions.None;
-      return new BenchSummary( Rank( rows ), missing, Math.Max( runs, 1 ), conditions );
+      bool hasSettings = root.TryGetProperty( "settings", out JsonElement settings ) && settings.ValueKind == JsonValueKind.Object;
+      BenchConditions conditions = hasSettings ? BenchConditions.FromSettings( settings ) : BenchConditions.None;
+      return new BenchSummary( WithBands( Rank( rows ), runs ), missing, Math.Max( runs, 1 ), conditions, hasSettings ? WholeNumber( settings, "rows" ) : null );
+   }
+
+   /// <summary>
+   /// Puts the engines in tie bands when the numbers come from two runs or more; one run has no
+   /// spread, so its engines get no band.
+   /// </summary>
+   /// <param name="ranked">Engines in median order.</param>
+   /// <param name="runs">Runs behind each median.</param>
+   /// <returns>The engines, with their band when there is a spread.</returns>
+   private static List<BenchEngineRow> WithBands( List<BenchEngineRow> ranked, int runs )
+   {
+      return runs > 1 ? BenchBands.Assign( ranked ) : ranked;
+   }
+
+   /// <summary>
+   /// The notes the consolidate command wrote for one target ("engineNotes"); none for an older file.
+   /// </summary>
+   /// <param name="target">One targetSummaries entry.</param>
+   /// <returns>The notes, or null when there are none.</returns>
+   private static List<BenchEngineNote>? EngineNotes( JsonElement target )
+   {
+      if( target.ValueKind != JsonValueKind.Object || !target.TryGetProperty( "engineNotes", out JsonElement notes ) || notes.ValueKind != JsonValueKind.Array )
+      {
+         return null;
+      }
+
+      List<BenchEngineNote> list = notes.EnumerateArray().Where( n => n.ValueKind == JsonValueKind.Object )
+         .Select( n => new BenchEngineNote( Text( n, "kind" ) ?? "note", Text( n, "text" ) ?? string.Empty, Text( n, "source" ) ?? "results" ) )
+         .Where( n => n.Text.Length > 0 ).ToList();
+      return list.Count == 0 ? null : list;
+   }
+
+   /// <summary>
+   /// A string property, or null.
+   /// </summary>
+   /// <param name="parent">Object.</param>
+   /// <param name="name">Property name.</param>
+   /// <returns>The text, or null.</returns>
+   private static string? Text( JsonElement parent, string name )
+   {
+      return parent.ValueKind == JsonValueKind.Object && parent.TryGetProperty( name, out JsonElement v ) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+   }
+
+   /// <summary>
+   /// A positive whole-number property, or null.
+   /// </summary>
+   /// <param name="parent">Object.</param>
+   /// <param name="name">Property name.</param>
+   /// <returns>The number, or null when absent, not a whole number or not positive.</returns>
+   private static int? WholeNumber( JsonElement parent, string name )
+   {
+      return parent.ValueKind == JsonValueKind.Object && parent.TryGetProperty( name, out JsonElement v ) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32( out int n ) && n > 0 ? n : null;
    }
 
    /// <summary>
@@ -238,7 +302,8 @@ public static class BenchSummaryReader
    }
 
    /// <summary>
-   /// Fastest first; equal numbers fall back to the name so the order never wobbles.
+   /// Fastest median first; equal numbers fall back to the name so the order never wobbles. This
+   /// is the order inside a band too; it is not a claim that a faster median is a faster engine.
    /// </summary>
    /// <param name="rows">Unordered rows.</param>
    /// <returns>Ranked rows.</returns>

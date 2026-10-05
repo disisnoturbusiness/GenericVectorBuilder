@@ -19,11 +19,18 @@ public interface IEngineHost
    Task<bool> IsRunningAsync( string composePath, CancellationToken ct );
 
    /// <summary>
-   /// Starts the engine and returns once it is healthy. Throws with a plain message on failure.
+   /// Starts the engine and returns once it is healthy, with every container created on
+   /// <paramref name="cpuset"/> when the host can do that. Throws with a plain message on failure.
+   /// Why at creation: an engine sizes its thread pools from the CPUs it sees when it starts
+   /// (Elasticsearch read 8 processors when started unpinned and 4 when started pinned, review
+   /// probe of 2026-10-04), so moving it with "docker update" afterwards leaves it with pools sized
+   /// for twice the CPUs it then runs on.
    /// </summary>
    /// <param name="composePath">Compose file.</param>
+   /// <param name="cpuset">Kernel CPU list such as "2-3,6-7" to create the containers on, or null for none.</param>
    /// <param name="ct">Cancellation.</param>
-   Task UpAsync( string composePath, CancellationToken ct );
+   /// <returns>What was started on which CPUs, read back from Docker, or null when the host did not apply a CPU set (none asked, or it cannot).</returns>
+   Task<string?> UpAsync( string composePath, string? cpuset, CancellationToken ct );
 
    /// <summary>
    /// Stops the engine, keeping its data.
@@ -36,7 +43,9 @@ public interface IEngineHost
 
 /// <summary>
 /// The real host: docker compose through <see cref="ComposeRunner"/>, which puts a time limit
-/// on every call (5 minutes to check or stop, 20 to start).
+/// on every call (5 minutes to check or stop, 20 to start). Creating the containers on a CPU set
+/// is the compose runner's job (a generated compose override, read back from Docker); this host
+/// hands it the CPU set.
 /// </summary>
 public sealed class ComposeEngineHost : IEngineHost
 {
@@ -54,13 +63,24 @@ public sealed class ComposeEngineHost : IEngineHost
    }
 
    /// <summary>
-   /// Starts the engine and waits until compose reports it healthy.
+   /// Starts the engine with every container created on the CPU set (when given), waits until
+   /// compose reports it healthy, and returns what Docker says each container got.
    /// </summary>
    /// <param name="composePath">Compose file.</param>
+   /// <param name="cpuset">CPU list, or null to start without one (the compose file decides).</param>
    /// <param name="ct">Cancellation.</param>
-   public Task UpAsync( string composePath, CancellationToken ct )
+   /// <returns>The compose runner's read-back line when a CPU set was given, else null.</returns>
+   /// <exception cref="ArgumentException">The CPU set is not a CPU list.</exception>
+   /// <exception cref="InvalidOperationException">Compose failed, the engine never became healthy, or a container came up on other CPUs.</exception>
+   public async Task<string?> UpAsync( string composePath, string? cpuset, CancellationToken ct )
    {
-      return ComposeRunner.UpAsync( composePath, ct );
+      if( cpuset == null )
+      {
+         await ComposeRunner.UpAsync( composePath, ct );
+         return null;
+      }
+
+      return await ComposeRunner.UpAsync( composePath, cpuset, ct );
    }
 
    /// <summary>

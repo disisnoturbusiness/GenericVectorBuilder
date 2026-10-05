@@ -6,6 +6,7 @@
 using System.Globalization;
 using System.Text.Json;
 using GenericVectorBuilder.Bench.Cli;
+using GenericVectorBuilder.Core.Contracts;
 using GenericVectorBuilder.Bench.Report;
 using GenericVectorBuilder.Bench.Running;
 using GenericVectorBuilder.Bench.Targets;
@@ -106,7 +107,7 @@ public static class MachineControlScenarios
    /// restore a new start does first.
    /// </summary>
    /// <param name="folder">Scratch folder.</param>
-   /// <param name="mode">"dead-owner", "live-owner", "docker-fails", "gone" or "sql-manual" (SQL Server had a manual affinity before).</param>
+   /// <param name="mode">"dead-owner", "live-owner", "docker-fails", "gone", "sql-manual" (SQL Server had a manual affinity before) or "pinned-start" (containers of a pinned start still exist).</param>
    /// <returns>Commands run, whether the file is left and what it holds, the error, governors after.</returns>
    public static async Task<RestoreResult> RestoreAfterCrashAsync( string folder, string mode )
    {
@@ -121,6 +122,10 @@ public static class MachineControlScenarios
       {
          machine.Fail = call => call.Contains( "docker update", StringComparison.Ordinal ) ? new ShellResult( 1, string.Empty, "permission denied" ) : null;
       }
+
+      machine.Containers["e5e5"] = new FakeContainer( "gvb-elasticsearch", "2-3,6-7", 950, mode == "pinned-start" );
+      machine.Containers["d0d0"] = new FakeContainer( "gvb-es-other", "1", 951, mode == "pinned-start" );
+      machine.ComposeRunning["/x/es.compose.yaml"] = mode == "pinned-start" ? new[] { "e5e5", "d0d0" } : Array.Empty<string>();
 
       var store = new MachineStateStore( Path.Combine( folder, "state.json" ) );
       MachineState crashed = FullState( 777, mode == "live-owner" ? 5000 : 4999 );
@@ -138,7 +143,7 @@ public static class MachineControlScenarios
 
       string[] governors = Enumerable.Range( 0, 8 ).Select( cpu => machine.ReadFile( GovernorControl.GovernorPath( cpu ) )!.Trim() ).ToArray();
       return new RestoreResult( machine.Calls.ToArray(), File.Exists( store.Path ), File.Exists( store.Path ) ? File.ReadAllText( store.Path ) : null, error, governors,
-         machine.Containers["c0ffee"].Cpuset, machine.SqlType, machine.ThreadAffinity( 1688 ) );
+         machine.Containers["c0ffee"].Cpuset, machine.SqlType, machine.ThreadAffinity( 1688 ), machine.Containers["e5e5"].Cpuset + "|" + machine.Containers["d0d0"].Cpuset );
    }
 
    /// <summary>
@@ -191,12 +196,16 @@ public static class MachineControlScenarios
    }
 
    /// <summary>
-   /// The busy-box rule on a fake machine whose outside work is switched on and off: a pass
-   /// that starts while 3 CPUs of outside work run waits its limit and is flagged; a pass that
-   /// starts on a quiet box starts at once.
+   /// The busy-box rule on a fake machine whose outside work is switched on and off. The check
+   /// is made at each pass's warm-up line: a warm-up announced while 3 CPUs of outside work run
+   /// waits its limit, and its pass is flagged even though the box goes quiet before the timing
+   /// line; a warm-up announced on a quiet box goes on at once, and outside work that starts
+   /// between the warm-up and the timing line does not hold the pass (no second wait there, not
+   /// even at the "warm-up stopped" line of a warm-up cut short); a pass announced with no
+   /// warm-up line is checked at its timing line instead.
    /// </summary>
    /// <param name="folder">Scratch folder.</param>
-   /// <returns>Each pass as "target pass busy waited endedBy", and the log.</returns>
+   /// <returns>Each pass as "target pass busy waited endedBy before", the log, and the busy reasons.</returns>
    public static async Task<GateResult> GateAsync( string folder )
    {
       FakeMachine machine = FakeMachine.Linus();
@@ -204,27 +213,182 @@ public static class MachineControlScenarios
       var options = new MachineControlOptions
       {
          StateFile = Path.Combine( folder, "state.json" ), PinClient = false, SampleInterval = TimeSpan.FromMilliseconds( 25 ),
-         BusyWindow = TimeSpan.FromSeconds( 1 ), BusyWait = TimeSpan.FromMilliseconds( 400 ), BusyPoll = TimeSpan.FromMilliseconds( 25 ),
+         BusyWindow = TimeSpan.FromSeconds( 1 ), RecentWindow = TimeSpan.FromMilliseconds( 300 ), BusyWait = TimeSpan.FromMilliseconds( 400 ), BusyPoll = TimeSpan.FromMilliseconds( 25 ),
       };
       var logs = new List<string>();
       MachineConditions conditions = MachineConditions.ForRun( BenchOptions.Parse( new[] { "bench", "--pipeline", "p", "--targets", "t" } ) );
       using MachineControl control = await MachineControl.StartAsync( conditions, options, machine, logs.Add, CancellationToken.None );
       Action<string> log = control.WrapLog( logs.Add );
       await Task.Delay( 900 );
+      log( "  t: warm-up before default@8, 20 searches" );
+      machine.OutsideCpus = 0;
       log( "  t: timing default@8" );
       await Task.Delay( 100 );
       log( "  t: 812.5 QPS at concurrency 8" );
-      machine.OutsideCpus = 0;
-      log( "  t: warm-up before exact, 20 searches" );
       await Task.Delay( 1300 );
+      log( "  t: warm-up before exact, 20 searches" );
+      machine.OutsideCpus = 3;
+      await Task.Delay( 200 );
+      log( "  t: warm-up before exact stopped after 3 searches (time budget)" );
       log( "  t: timing exact" );
       log( "  t: exact mode p50 0.80 ms over 20 queries, recall 1.000" );
-      log( "  t: warm-up before default@1, 20 searches" );
+      await Task.Delay( 600 );
       log( "  t: timing default@1" );
       await control.LeaveTargetAsync( "t" );
       await control.RestoreAsync();
-      string[] passes = control.Conditions.Passes.Select( p => string.Create( CultureInfo.InvariantCulture, $"{p.Target} {p.Pass} busy={p.BusyBox} waited={p.WaitedSeconds:0.0} by={p.EndedBy} load={MachineFlags.Load( p.OutsideLoadAtStart )}" ) ).ToArray();
+      string[] passes = control.Conditions.Passes.Select( p => string.Create( CultureInfo.InvariantCulture, $"{p.Target} {p.Pass} busy={p.BusyBox} waited={p.WaitedSeconds:0.0} by={p.EndedBy} before={p.QuietCheckBefore} load={MachineFlags.Load( p.OutsideLoadAtStart )}" ) ).ToArray();
       return new GateResult( passes, logs.ToArray(), control.Conditions.Passes.Select( p => p.BusyReason ?? string.Empty ).ToArray() );
+   }
+
+   /// <summary>
+   /// The deadline is per pass: a pass whose warm-up is announced twice (again after a settle
+   /// extension) while 3 CPUs of outside work run waits the deadline once in all, not once per
+   /// announcement, and is flagged.
+   /// </summary>
+   /// <param name="folder">Scratch folder.</param>
+   /// <returns>The pass as "pass busy waited", the wall seconds from the first warm-up line to the timing line, and the log.</returns>
+   public static async Task<RecheckResult> RecheckAsync( string folder )
+   {
+      FakeMachine machine = FakeMachine.Linus();
+      machine.OutsideCpus = 3;
+      var options = new MachineControlOptions
+      {
+         StateFile = Path.Combine( folder, "state.json" ), PinClient = false, SampleInterval = TimeSpan.FromMilliseconds( 25 ),
+         BusyWindow = TimeSpan.FromSeconds( 1 ), RecentWindow = TimeSpan.FromMilliseconds( 300 ), BusyWait = TimeSpan.FromMilliseconds( 600 ), BusyPoll = TimeSpan.FromMilliseconds( 25 ),
+      };
+      var logs = new List<string>();
+      MachineConditions conditions = MachineConditions.ForRun( BenchOptions.Parse( new[] { "bench", "--pipeline", "p", "--targets", "t" } ) );
+      using MachineControl control = await MachineControl.StartAsync( conditions, options, machine, logs.Add, CancellationToken.None );
+      Action<string> log = control.WrapLog( logs.Add );
+      await Task.Delay( 900 );
+      var wall = System.Diagnostics.Stopwatch.StartNew();
+      log( "  t: warm-up before default@1, 20 searches" );
+      log( "  t: warm-up before default@1, 20 searches (again, after the settle extension)" );
+      log( "  t: timing default@1" );
+      double seconds = wall.Elapsed.TotalSeconds;
+      log( "  t: p50 1.00 ms, p95 2.00 ms over 300 searches, 9.0 QPS with one searcher, recall@10 1.000" );
+      await control.LeaveTargetAsync( "t" );
+      await control.RestoreAsync();
+      string[] passes = control.Conditions.Passes.Select( p => string.Create( CultureInfo.InvariantCulture, $"{p.Pass} busy={p.BusyBox} waited={p.WaitedSeconds:0.0}" ) ).ToArray();
+      return new RecheckResult( passes, seconds, logs.ToArray() );
+   }
+
+   /// <summary>
+   /// An engine's own start-up is not outside work: run-all starts a compose engine through the
+   /// machine-control host while its containers burn 3 CPUs (before their cgroup is known, so the
+   /// kernel counters show it as outside work); the next warm-up goes on at once. The same burn
+   /// from a process outside the benchmark, during another target's turn, holds that target's
+   /// warm-up and flags its pass. Also shows the pinned start: recorded in the state file before
+   /// the start, the container created on the engine CPUs needs no docker update, and leaving the
+   /// target gives a container still on those CPUs every CPU back.
+   /// </summary>
+   /// <param name="folder">Scratch folder.</param>
+   /// <returns>The passes, the state during the start, the calls, the pinning record and the log.</returns>
+   public static async Task<StartupResult> StartupAsync( string folder )
+   {
+      FakeMachine machine = FakeMachine.Linus();
+      machine.AddProcess( 1680, "dockerd", 1000, 2, "0-7", "/system.slice/docker.service" );
+      var store = new MachineStateStore( Path.Combine( folder, "state.json" ) );
+      var options = new MachineControlOptions
+      {
+         StateFile = store.Path, PinClient = false, SampleInterval = TimeSpan.FromMilliseconds( 25 ),
+         BusyWindow = TimeSpan.FromSeconds( 2 ), RecentWindow = TimeSpan.FromMilliseconds( 300 ), BusyWait = TimeSpan.FromMilliseconds( 400 ), BusyPoll = TimeSpan.FromMilliseconds( 25 ),
+      };
+      var logs = new List<string>();
+      MachineConditions conditions = MachineConditions.ForRun( BenchOptions.Parse( new[] { "run-all", "--pipeline", "p" } ) );
+      MachineControl control = await MachineControl.StartAsync( conditions, options, machine, logs.Add, CancellationToken.None );
+      Action<string> log = control.WrapLog( logs.Add );
+      var inner = new StartingHost( machine, store.Path );
+      IEngineHost host = control.WrapHost( inner );
+      await control.EnterTargetAsync( "es", "compose", StartingHost.COMPOSE, CancellationToken.None );
+      await host.UpAsync( StartingHost.COMPOSE, "2-3,6-7", CancellationToken.None );
+      await TimedPassAsync( log, "es" );
+      await control.LeaveTargetAsync( "es" );
+      await control.EnterTargetAsync( "other", "embedded", null, CancellationToken.None );
+      machine.OutsideCpus = 3;
+      await Task.Delay( 600 );
+      machine.OutsideCpus = 0;
+      await TimedPassAsync( log, "other" );
+      await control.LeaveTargetAsync( "other" );
+      await control.RestoreAsync();
+      control.Dispose();
+      string[] passes = control.Conditions.Passes.Select( p => string.Create( CultureInfo.InvariantCulture, $"{p.Target} busy={p.BusyBox} waited={p.WaitedSeconds:0.0} load={MachineFlags.Load( p.OutsideLoadAtStart )}" ) ).ToArray();
+      TargetPinning es = control.Conditions.Engines.First( e => e.Target == "es" );
+      return new StartupResult( passes, inner.StateDuringUp ?? "no state read", machine.Calls.ToArray(), es.Method, es.Changes.ToArray(), control.Conditions.Restored.Concat( es.Restored ).ToArray(),
+         File.Exists( store.Path ), logs.ToArray() );
+   }
+
+   /// <summary>
+   /// The CPU idle settings with machine control on (or off): read at the start and the end,
+   /// never written; a change made under the run (someone disables C6 on CPU 5) is flagged.
+   /// </summary>
+   /// <param name="folder">Scratch folder.</param>
+   /// <param name="on">True with machine control on.</param>
+   /// <returns>The settings at start and end as text and JSON, the calls, and the flags.</returns>
+   public static async Task<IdleResult> IdleAsync( string folder, bool on )
+   {
+      FakeMachine machine = FakeMachine.Linus();
+      var options = new MachineControlOptions { Enabled = on, StateFile = Path.Combine( folder, "state.json" ), PinClient = false, SampleInterval = TimeSpan.FromMilliseconds( 25 ) };
+      MachineConditions conditions = MachineConditions.ForRun( BenchOptions.Parse( new[] { "bench", "--pipeline", "p", "--targets", "t" } ) );
+      MachineControl control = await MachineControl.StartAsync( conditions, options, machine, _ => { }, CancellationToken.None );
+      machine.Set( CpuIdleReader.StatePath( 5, 4, "disable" ), "1\n" );
+      await control.RestoreAsync();
+      control.Dispose();
+      var report = new BenchReport();
+      control.Annotate( report );
+      string json = JsonSerializer.Serialize( control.Conditions, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase } );
+      return new IdleResult( control.Conditions.CpuIdle?.Describe() ?? "null", control.Conditions.CpuIdleAtEnd?.Describe() ?? "null", json, machine.Calls.ToArray(), report.Notes.ToArray() );
+   }
+
+   /// <summary>
+   /// Connection records: /proc/net/tcp addresses decoded, this process's established sockets
+   /// found through its file descriptors, and the record of a container target (bound through a
+   /// fake docker inspect), the always-on SQL Server and an embedded engine, each with the
+   /// connections seen classified; the docker-proxy connection is flagged.
+   /// </summary>
+   /// <returns>Decoded addresses, peers, notes, the conditions JSON and the flags.</returns>
+   public static async Task<ConnectionResult> ConnectionsAsync()
+   {
+      string[] decoded = new[] { "0100007F:0599", "0000000000000000FFFF00000100007F:18BE", "020016AC:23F0", "00000000000000000000000001000000:1F90" }
+         .Select( h => { ( string a, int port ) = ConnectionRecorder.ParseEndpoint( h ); return $"{a}:{port}"; } ).ToArray();
+      FakeMachine machine = FakeMachine.Linus();
+      machine.AddSockets();
+      Dictionary<(string Address, int Port), int> peers = ConnectionRecorder.EstablishedPeers( machine, machine.ProcessId );
+      var recorder = new ConnectionRecorder( machine, "localhost", "localhost", 6334 );
+      Func<string, CancellationToken, Task<Measurement>> none = ( _, _ ) => Task.FromResult( Measurement.None( "fake" ) );
+      var es = new BenchTarget( new NullSink( "elasticsearch" ), "ES", "flat", "compose", "/x/es.compose.yaml", none, none )
+      {
+         Container = new ContainerBinding( new EngineRoute( new[] { "gvb-elasticsearch" }, router => { router.Address( "gvb-elasticsearch", 9200 ); return new NullSink( "elasticsearch" ); } ),
+            new JsonInspector(), TimeSpan.FromSeconds( 5 ), TimeSpan.FromMilliseconds( 50 ) ),
+      };
+      await es.BindAsync( CancellationToken.None );
+      var sql = new BenchTarget( new NullSink( "sql" ), "SQL Server", "flat", "always-on", null, none, none );
+      var duck = new BenchTarget( new NullSink( "duckdb" ), "DuckDB", "flat", "embedded", null, none, none );
+      var conditions = new MachineConditions();
+      foreach( BenchTarget target in new[] { es, sql, duck } )
+      {
+         if( target.Hosting != "embedded" )
+         {
+            recorder.Observe( target );
+         }
+
+         conditions.Connections.Add( recorder.Describe( target ) );
+      }
+
+      return new ConnectionResult( decoded, peers.OrderBy( p => p.Key.Address, StringComparer.Ordinal ).ThenBy( p => p.Key.Port ).Select( p => $"{p.Key.Address}:{p.Key.Port} x{p.Value}" ).ToArray(),
+         conditions.Connections.Select( ConnectionRecorder.Note ).ToArray(), JsonSerializer.Serialize( conditions.Connections, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase } ),
+         MachineFlags.Compute( conditions, Array.Empty<string>() ).ToArray(), ConnectionRecorder.SqlEndpoint( "tcp:db1,1500" ).ToString(), ConnectionRecorder.SqlEndpoint( @"db2\inst" ).ToString() );
+   }
+
+   /// <summary>
+   /// The busy-box defaults and the rule text a run records.
+   /// </summary>
+   /// <returns>Limit, deadline seconds, window seconds, recent window seconds, rule text.</returns>
+   public static string[] BusyDefaults()
+   {
+      var o = new MachineControlOptions();
+      return new[] { o.BusyThreshold.ToString( CultureInfo.InvariantCulture ), o.BusyWait.TotalSeconds.ToString( CultureInfo.InvariantCulture ),
+         o.BusyWindow.TotalSeconds.ToString( CultureInfo.InvariantCulture ), o.RecentWindow.TotalSeconds.ToString( CultureInfo.InvariantCulture ), RuleText().GetAwaiter().GetResult() };
    }
 
    /// <summary>
@@ -369,9 +533,217 @@ public static class MachineControlScenarios
       return new LiveGovernorResult( before, during, recordedGovernors, after, fileAfter, crashDuring, crashAfter, crashFileAfter, logs.Concat( crashLog ).ToArray(), samplesDuring );
    }
 
+   /// <summary>
+   /// Live: starts a throwaway compose project (one redis:8.10.2 container named
+   /// gvbbench-cpuset-live, no ports, no volumes, no cpuset of its own) through the real
+   /// <see cref="ComposeEngineHost"/> asking for the engine CPU set, reads what the host said, what
+   /// Docker and the kernel say the container got and how many CPUs the process inside sees, and
+   /// always stops and removes it again.
+   /// </summary>
+   /// <param name="folder">Scratch folder for the compose file.</param>
+   /// <returns>The host's read-back ("none" for null), the cpuset, the main process's allowed CPUs, nproc inside, and the containers left afterwards.</returns>
+   public static async Task<string[]> LivePinnedStartAsync( string folder )
+   {
+      string compose = Path.Combine( folder, "gvbbench-cpuset-live.compose.yaml" );
+      File.WriteAllText( compose, "name: gvbbench-cpuset-live\nservices:\n  probe:\n    image: redis:8.10.2\n    container_name: gvbbench-cpuset-live\n"
+         + "    command: [\"redis-server\", \"--save\", \"\", \"--appendonly\", \"no\"]\n    mem_limit: 256m\n    restart: \"no\"\n" );
+      var system = new LinuxMachineSystem( () => throw new InvalidOperationException( "the live start test must not touch SQL Server" ) );
+      var host = new ComposeEngineHost();
+      using var limit = new CancellationTokenSource( TimeSpan.FromMinutes( 5 ) );
+      try
+      {
+         string? readBack = await host.UpAsync( compose, "2-3,6-7", limit.Token );
+         string inspect = ( await ProcessInfo.SudoAsync( system, new[] { "docker", "inspect", "-f", "{{.HostConfig.CpusetCpus}}|{{.State.Pid}}", "gvbbench-cpuset-live" }, limit.Token ) ).Output.Trim();
+         int pid = int.Parse( inspect.Split( '|' )[1], CultureInfo.InvariantCulture );
+         string nproc = ( await ProcessInfo.SudoAsync( system, new[] { "docker", "exec", "gvbbench-cpuset-live", "nproc" }, limit.Token ) ).Output.Trim();
+         return new[] { readBack ?? "none", inspect.Split( '|' )[0], string.Join( ";", ProcessInfo.ThreadAffinities( system, pid ).Select( t => $"{t.Key} x{t.Value}" ) ), nproc, await LeftAsync( system, host, compose ) };
+      }
+      finally
+      {
+         await host.DownAsync( compose, CancellationToken.None );
+      }
+   }
+
+   /// <summary>
+   /// Live: the busy-box rule on the real machine with the real sampler (/proc/stat, this
+   /// process, cgroups) and the real gate, with a limit of 2 CPUs and short windows (10 s and 5 s)
+   /// so it runs in about a minute and a half. Why 2 CPUs and not the run's 0.3: the shared box's
+   /// own background (other sessions' engines and tests) was 0.5 to 1 CPU while this was written,
+   /// so a lower limit would never clear; the test first checks (for at most 30 s) that the
+   /// background is under 1.2 CPUs, and says what it was. Leg 1: 4 busy loops for 4 s start 3 s
+   /// before a warm-up line; the warm-up is held until the box is quiet again, then the pass
+   /// opens. Leg 2: 3 busy loops for 28 s start 4 s before a warm-up line; the warm-up is held
+   /// for the whole 20 s deadline and the pass runs flagged. The busy loops are started
+   /// detached (not children of this process), so their CPU time is outside work and never
+   /// folded into this process's own counters; each is stopped by its own timeout and by pid at
+   /// the end.
+   /// </summary>
+   /// <returns>Background, limit, both passes, the log and the governors before and after.</returns>
+   public static async Task<LiveGateResult> LiveBusyBoxAsync()
+   {
+      var system = new LinuxMachineSystem( () => throw new InvalidOperationException( "the live busy-box test must not touch SQL Server" ) );
+      IReadOnlyList<int> cpus = CpuList.Parse( MachineRestorer.OnlineCpus( system ) );
+      string[] before = cpus.Select( c => system.ReadFile( GovernorControl.GovernorPath( c ) )?.Trim() ?? "missing" ).ToArray();
+      double background = await QuietBackgroundAsync( system );
+      var options = new MachineControlOptions
+      {
+         PinClient = false, BusyThreshold = 2.0, BusyWindow = TimeSpan.FromSeconds( 10 ), RecentWindow = TimeSpan.FromSeconds( 5 ),
+         BusyWait = TimeSpan.FromSeconds( 20 ), BusyPoll = TimeSpan.FromMilliseconds( 500 ),
+      };
+      var logs = new List<string>();
+      var loops = new List<int>();
+      MachineConditions conditions = MachineConditions.ForRun( BenchOptions.Parse( new[] { "bench", "--pipeline", "p", "--targets", "live" } ) );
+      MachineControl control = await MachineControl.StartAsync( conditions, options, system, line => logs.Add( $"{DateTime.UtcNow:HH:mm:ss.f} {line}" ), CancellationToken.None );
+      try
+      {
+         Action<string> log = control.WrapLog( line => logs.Add( $"{DateTime.UtcNow:HH:mm:ss.f} {line}" ) );
+         await Task.Delay( TimeSpan.FromSeconds( 8 ) );
+         await LivePassAsync( system, log, logs, loops, "default@1", 4, 4, 3 );
+         await Task.Delay( TimeSpan.FromSeconds( 12 ) );
+         await LivePassAsync( system, log, logs, loops, "exact", 3, 28, 4 );
+      }
+      finally
+      {
+         await StopLoopsAsync( system, loops );
+         await control.RestoreAsync();
+         control.Dispose();
+      }
+
+      string[] after = cpus.Select( c => system.ReadFile( GovernorControl.GovernorPath( c ) )?.Trim() ?? "missing" ).ToArray();
+      string[] passes = control.Conditions.Passes.Select( p => string.Create( CultureInfo.InvariantCulture,
+         $"{p.Pass} before={p.QuietCheckBefore} waited={p.WaitedSeconds:0.0} busy={p.BusyBox} windowLoad={MachineFlags.Load( p.OutsideLoadAtStart )} recentLoad={MachineFlags.Load( p.OutsideLoadRecentAtStart )} checked={p.QuietCheckUtc} start={p.StartUtc} reason={p.BusyReason}" ) ).ToArray();
+      return new LiveGateResult( background, options.BusyThreshold, passes, logs.ToArray(), before, after, File.Exists( options.StateFile ) );
+   }
+
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// One live pass: starts detached busy loops, announces the warm-up a few seconds later (the
+   /// gate holds it while the box is busy), then the timing and a result line.
+   /// </summary>
+   /// <param name="system">The machine.</param>
+   /// <param name="log">The wrapped log.</param>
+   /// <param name="logs">The plain log, for the loop start time.</param>
+   /// <param name="loops">Receives the pids of the loops' timeout processes.</param>
+   /// <param name="pass">Pass name.</param>
+   /// <param name="count">Busy loops.</param>
+   /// <param name="seconds">How long the busy loops run.</param>
+   /// <param name="lead">Seconds between starting the loops and the warm-up line.</param>
+   private static async Task LivePassAsync( IMachineSystem system, Action<string> log, List<string> logs, List<int> loops, string pass, int count, int seconds, int lead )
+   {
+      string script = string.Create( CultureInfo.InvariantCulture, $"for i in $(seq {count}); do setsid timeout {seconds} bash -c 'while :; do :; done' >/dev/null 2>&1 < /dev/null & echo $!; done" );
+      ShellResult started = await system.RunAsync( "bash", new[] { "-c", script }, TimeSpan.FromSeconds( 10 ), CancellationToken.None );
+      loops.AddRange( started.Output.Split( '\n', StringSplitOptions.RemoveEmptyEntries ).Select( p => int.Parse( p.Trim(), CultureInfo.InvariantCulture ) ) );
+      logs.Add( $"{DateTime.UtcNow:HH:mm:ss.f} live: {count} busy loops started for {seconds} s (pids {started.Output.Replace( '\n', ' ' ).Trim()})" );
+      await Task.Delay( TimeSpan.FromSeconds( lead ) );
+      log( $"  live: warm-up before {pass}, 20 searches" );
+      log( $"  live: timing {pass}" );
+      await Task.Delay( TimeSpan.FromSeconds( 2 ) );
+      log( pass == "exact" ? "  live: exact mode p50 1.00 ms over 20 searches, recall 1.000" : "  live: p50 1.00 ms, p95 2.00 ms over 300 searches, 9.0 QPS with one searcher, recall@10 1.000" );
+   }
+
+   /// <summary>
+   /// Stops the busy loops this test started, by pid (they also end on their own timeout).
+   /// </summary>
+   /// <param name="system">The machine.</param>
+   /// <param name="loops">Pids of the loops' timeout processes.</param>
+   private static async Task StopLoopsAsync( IMachineSystem system, List<int> loops )
+   {
+      foreach( int pid in loops.Where( p => system.ReadFile( $"/proc/{p}/comm" )?.Trim() == "timeout" ) )
+      {
+         await system.RunAsync( "kill", new[] { pid.ToString( CultureInfo.InvariantCulture ) }, TimeSpan.FromSeconds( 10 ), CancellationToken.None );
+      }
+   }
+
+   /// <summary>
+   /// Waits, at most 30 s (three 10 s readings), until the box's busy CPUs over 10 s are under 1.2.
+   /// </summary>
+   /// <param name="system">The machine.</param>
+   /// <returns>The background that let the test go on.</returns>
+   /// <exception cref="TimeoutException">The box stayed busier than that for all three readings.</exception>
+   private static async Task<double> QuietBackgroundAsync( IMachineSystem system )
+   {
+      double background = 0;
+      for( int reading = 0; reading < 3; reading++ )
+      {
+         background = await BusyCpusAsync( system, TimeSpan.FromSeconds( 10 ) );
+         if( background < 1.2 )
+         {
+            return background;
+         }
+      }
+
+      throw new TimeoutException( $"the box was at {background} busy CPUs (1.2 or more in three 10 s readings); the live busy-box test needs it quieter" );
+   }
+
+   /// <summary>
+   /// CPUs busy on the whole box (user + nice + system) over a span, from /proc/stat.
+   /// </summary>
+   /// <param name="system">The machine.</param>
+   /// <param name="span">How long to measure.</param>
+   /// <returns>Busy CPUs.</returns>
+   private static async Task<double> BusyCpusAsync( IMachineSystem system, TimeSpan span )
+   {
+      static double Busy( IMachineSystem m )
+      {
+         string[] f = m.ReadFile( "/proc/stat" )!.Split( '\n' )[0].Split( ' ', StringSplitOptions.RemoveEmptyEntries );
+         return double.Parse( f[1], CultureInfo.InvariantCulture ) + double.Parse( f[2], CultureInfo.InvariantCulture ) + double.Parse( f[3], CultureInfo.InvariantCulture );
+      }
+
+      double first = Busy( system );
+      await Task.Delay( span );
+      return Math.Round( ( Busy( system ) - first ) / 100 / span.TotalSeconds, 2 );
+   }
+
+   /// <summary>
+   /// Stops the throwaway project and lists any gvbbench-cpuset-live container still there.
+   /// </summary>
+   /// <param name="system">The machine.</param>
+   /// <param name="host">The host.</param>
+   /// <param name="compose">Compose file.</param>
+   /// <returns>Containers left ("none" when gone).</returns>
+   private static async Task<string> LeftAsync( IMachineSystem system, ComposeEngineHost host, string compose )
+   {
+      string? problem = await host.DownAsync( compose, CancellationToken.None );
+      string left = ( await ProcessInfo.SudoAsync( system, new[] { "docker", "ps", "-a", "--filter", "name=gvbbench-cpuset-live", "--format", "{{.Names}}" }, CancellationToken.None ) ).Output.Trim();
+      return problem ?? ( left.Length == 0 ? "none" : left );
+   }
+
+   /// <summary>
+   /// The busy rule a run with default options records (started on a fake machine).
+   /// </summary>
+   /// <returns>The rule.</returns>
+   private static async Task<string> RuleText()
+   {
+      string folder = Path.Combine( AppContext.BaseDirectory, "machine-control-tests", Guid.NewGuid().ToString( "N" ) );
+      Directory.CreateDirectory( folder );
+      try
+      {
+         MachineConditions conditions = MachineConditions.ForRun( BenchOptions.Parse( new[] { "bench", "--pipeline", "p", "--targets", "t" } ) );
+         using MachineControl control = await MachineControl.StartAsync( conditions, new MachineControlOptions { StateFile = Path.Combine( folder, "state.json" ), PinClient = false }, FakeMachine.Linus(), _ => { }, CancellationToken.None );
+         return conditions.BusyRule ?? "none";
+      }
+      finally
+      {
+         Directory.Delete( folder, true );
+      }
+   }
+
+   /// <summary>
+   /// Sends a warm-up, a timing and a result line for one target's default@1 pass.
+   /// </summary>
+   /// <param name="log">The wrapped log.</param>
+   /// <param name="target">Target name.</param>
+   private static async Task TimedPassAsync( Action<string> log, string target )
+   {
+      await Task.Delay( 300 );
+      log( $"  {target}: warm-up before default@1, 20 searches" );
+      log( $"  {target}: timing default@1" );
+      await Task.Delay( 50 );
+      log( $"  {target}: p50 1.00 ms, p95 2.00 ms over 300 searches, 9.0 QPS with one searcher, recall@10 1.000" );
+   }
 
    /// <summary>
    /// The crash leg of the live test: records and sets the governors as a run would, then
@@ -423,6 +795,7 @@ public static class MachineControlScenarios
          Containers = { new ContainerPin( "c0ffee", "gvb-redis", string.Empty, "redis" ) },
          SqlServer = new SqlAffinityPin( "AUTO", null, "sql" ),
          Processes = { new ProcessPin( 1688, 3000, "qdrant", "0-7", "qdrant-hnsw" ) },
+         PinnedStarts = { new PinnedStart( "/x/es.compose.yaml", "2-3,6-7", "elasticsearch" ) },
       };
    }
 
@@ -454,8 +827,11 @@ public sealed class FakeMachine : IMachineSystem
    private static readonly int[] SQL_ORDER = { 0, 4, 1, 5, 2, 6, 3, 7 };
 
    private readonly Dictionary<string, Func<string>> _files = new( StringComparer.Ordinal );
+   private readonly Dictionary<string, string> _links = new( StringComparer.Ordinal );
    private readonly object _lock = new();
-   private readonly DateTime _born = DateTime.UtcNow;
+   private DateTime _lastChange = DateTime.UtcNow;
+   private double _outsideCpus;
+   private double _busyBase;
    private string _counters = string.Empty;
 
    #endregion Data Members
@@ -492,8 +868,24 @@ public sealed class FakeMachine : IMachineSystem
    /// <summary>True to bind SQL threads as if SQL's ids were the kernel's (a wrong mapping).</summary>
    public bool WrongSqlMapping { get; set; }
 
-   /// <summary>CPUs of outside work /proc/stat shows.</summary>
-   public double OutsideCpus { get; set; }
+   /// <summary>
+   /// CPUs of outside work /proc/stat shows from now on. The busy counter integrates over time,
+   /// so switching the work on and off gives a counter that only grows, as the kernel's does.
+   /// </summary>
+   public double OutsideCpus
+   {
+      get => _outsideCpus;
+      set
+      {
+         lock( _lock )
+         {
+            DateTime now = DateTime.UtcNow;
+            _busyBase += ( now - _lastChange ).TotalSeconds * 100 * _outsideCpus;
+            _lastChange = now;
+            _outsideCpus = value;
+         }
+      }
+   }
 
    /// <summary>True to make ALTER SERVER CONFIGURATION fail as a real SQL error would.</summary>
    public bool RejectSqlAlter { get; set; }
@@ -520,7 +912,57 @@ public sealed class FakeMachine : IMachineSystem
 
       machine.AddProcess( machine.ProcessId, "dotnet", 4242, 3, "0-7", "/user.slice/bench.scope" );
       machine.SetCounters( 0, 0, 0 );
+      machine.AddIdleStates();
       return machine;
+   }
+
+   /// <summary>
+   /// The idle states of linus7795 on every CPU: POLL, C1, C1E, C3 (disabled, its default), C6;
+   /// intel_idle with the menu governor and max_cstate 9.
+   /// </summary>
+   public void AddIdleStates()
+   {
+      Set( "/sys/devices/system/cpu/cpuidle/current_driver", "intel_idle\n" );
+      Set( "/sys/devices/system/cpu/cpuidle/current_governor", "menu\n" );
+      Set( "/sys/module/intel_idle/parameters/max_cstate", "9\n" );
+      (string Name, int Latency, int Residency, bool Off)[] states = { ( "POLL", 0, 0, false ), ( "C1", 2, 2, false ), ( "C1E", 10, 20, false ), ( "C3", 33, 100, true ), ( "C6", 133, 400, false ) };
+      for( int cpu = 0; cpu < 8; cpu++ )
+      {
+         for( int i = 0; i < states.Length; i++ )
+         {
+            Set( CpuIdleReader.StatePath( cpu, i, "name" ), states[i].Name + "\n" );
+            Set( CpuIdleReader.StatePath( cpu, i, "latency" ), states[i].Latency.ToString( CultureInfo.InvariantCulture ) + "\n" );
+            Set( CpuIdleReader.StatePath( cpu, i, "residency" ), states[i].Residency.ToString( CultureInfo.InvariantCulture ) + "\n" );
+            Set( CpuIdleReader.StatePath( cpu, i, "disable" ), states[i].Off ? "1\n" : "0\n" );
+            Set( CpuIdleReader.StatePath( cpu, i, "default_status" ), states[i].Off ? "disabled\n" : "enabled\n" );
+         }
+      }
+   }
+
+   /// <summary>
+   /// This process's sockets: fd 3 to the Elasticsearch container 172.22.0.2:9200 (twice, fds 3
+   /// and 8), fd 4 to SQL Server 127.0.0.1:1433, fd 7 over IPv6 to the published port
+   /// 127.0.0.1:9200 (docker-proxy), fd 5 a file, fd 6 a listening socket; and one socket of
+   /// another process to 127.0.0.1:9200 that must not count.
+   /// </summary>
+   public void AddSockets()
+   {
+      string fd = $"/proc/{ProcessId}/fd";
+      foreach( (string n, string link) in new[] { ( "3", "socket:[111]" ), ( "8", "socket:[112]" ), ( "4", "socket:[222]" ), ( "5", "/dev/null" ), ( "6", "socket:[333]" ), ( "7", "socket:[555]" ) } )
+      {
+         Set( $"{fd}/{n}", string.Empty );
+         _links[$"{fd}/{n}"] = link;
+      }
+
+      const string HEAD = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n";
+      Set( $"/proc/{ProcessId}/net/tcp", HEAD
+         + "   0: 0100007F:D431 020016AC:23F0 01 00000000:00000000 00:00000000 00000000  1000        0 111 1 0 20 4 30 10 -1\n"
+         + "   1: 0100007F:D432 020016AC:23F0 01 00000000:00000000 00:00000000 00000000  1000        0 112 1 0 20 4 30 10 -1\n"
+         + "   2: 0100007F:D433 0100007F:0599 01 00000000:00000000 00:00000000 00000000  1000        0 222 1 0 20 4 30 10 -1\n"
+         + "   3: 00000000:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 333 1 0 20 4 30 10 -1\n"
+         + "   4: 0100007F:D434 0100007F:23F0 01 00000000:00000000 00:00000000 00000000  1000        0 999 1 0 20 4 30 10 -1\n" );
+      Set( $"/proc/{ProcessId}/net/tcp6", HEAD
+         + "   0: 0000000000000000FFFF00000100007F:D435 0000000000000000FFFF00000100007F:23F0 01 00000000:00000000 00:00000000 00000000  1000        0 555 1 0 20 4 30 10 -1\n" );
    }
 
    /// <summary>
@@ -553,7 +995,7 @@ public sealed class FakeMachine : IMachineSystem
       {
          lock( _lock )
          {
-            _files["/proc/stat"] = () => string.Create( CultureInfo.InvariantCulture, $"cpu  {(long)( ( DateTime.UtcNow - _born ).TotalSeconds * 100 * OutsideCpus + Drift() )} 0 0 99999 0 0 0 0 0 0\n" );
+            _files["/proc/stat"] = () => string.Create( CultureInfo.InvariantCulture, $"cpu  {(long)( _busyBase + ( DateTime.UtcNow - _lastChange ).TotalSeconds * 100 * _outsideCpus + Drift() )} 0 0 99999 0 0 0 0 0 0\n" );
          }
       }
    }
@@ -631,6 +1073,19 @@ public sealed class FakeMachine : IMachineSystem
       {
          string prefix = path.TrimEnd( '/' ) + "/";
          return _files.Keys.Where( k => k.StartsWith( prefix, StringComparison.Ordinal ) ).Select( k => k[prefix.Length..].Split( '/' )[0] ).Distinct().ToList();
+      }
+   }
+
+   /// <summary>
+   /// Where a fake link points.
+   /// </summary>
+   /// <param name="path">Path.</param>
+   /// <returns>The target, or null.</returns>
+   public string? ReadLink( string path )
+   {
+      lock( _lock )
+      {
+         return _links.TryGetValue( path, out string? target ) ? target : null;
       }
    }
 
@@ -868,7 +1323,8 @@ public sealed record StateResult( bool Same, bool TmpLeft, bool MissingIsNull, s
 /// <param name="ContainerCpuset">Container cpuset after.</param>
 /// <param name="SqlType">SQL affinity after.</param>
 /// <param name="QdrantThreads">Qdrant thread affinities after.</param>
-public sealed record RestoreResult( string[] Calls, bool FileLeft, string? FileText, string? Error, string[] Governors, string ContainerCpuset, string SqlType, string QdrantThreads );
+/// <param name="PinnedStartCpusets">Cpusets after of the pinned start's two containers (one on the recorded CPUs, one changed by someone else).</param>
+public sealed record RestoreResult( string[] Calls, bool FileLeft, string? FileText, string? Error, string[] Governors, string ContainerCpuset, string SqlType, string QdrantThreads, string PinnedStartCpusets );
 
 /// <summary>Whole-run results on the fake machine.</summary>
 /// <param name="Calls">Commands and SQL, in order.</param>
@@ -890,6 +1346,208 @@ public sealed record RunResult( string[] Calls, string[] StateAtCall, string[] G
 /// <param name="Reasons">Busy reasons.</param>
 public sealed record GateResult( string[] Passes, string[] Log, string[] Reasons );
 
+/// <summary>What <see cref="MachineControlScenarios.RecheckAsync"/> saw.</summary>
+/// <param name="Passes">The pass as "pass busy waited".</param>
+/// <param name="Seconds">Wall seconds from the first warm-up line to the timing line.</param>
+/// <param name="Log">The log.</param>
+public sealed record RecheckResult( string[] Passes, double Seconds, string[] Log );
+
+/// <summary>Start-up exclusion and pinned start results.</summary>
+/// <param name="Passes">"target busy waited load" per pass.</param>
+/// <param name="StateDuringUp">The state file's pinned starts while compose was starting the engine.</param>
+/// <param name="Calls">Commands run.</param>
+/// <param name="Method">How the started engine was pinned.</param>
+/// <param name="Changes">What was changed on it.</param>
+/// <param name="Restored">What was put back.</param>
+/// <param name="FileAfter">The state file is left after the run.</param>
+/// <param name="Log">Progress output.</param>
+public sealed record StartupResult( string[] Passes, string StateDuringUp, string[] Calls, string Method, string[] Changes, string[] Restored, bool FileAfter, string[] Log );
+
+/// <summary>Idle settings results.</summary>
+/// <param name="Start">Settings at the start, as text.</param>
+/// <param name="End">Settings at the end, as text.</param>
+/// <param name="ConditionsJson">The conditions as JSON.</param>
+/// <param name="Calls">Commands run.</param>
+/// <param name="RunNotes">Run-level notes and flags.</param>
+public sealed record IdleResult( string Start, string End, string ConditionsJson, string[] Calls, string[] RunNotes );
+
+/// <summary>Connection record results.</summary>
+/// <param name="Decoded">Decoded /proc/net/tcp addresses.</param>
+/// <param name="Peers">This process's established peers with socket counts.</param>
+/// <param name="Notes">Per target, its connection note.</param>
+/// <param name="Json">The records as JSON.</param>
+/// <param name="Flags">Machine flags of conditions holding the records.</param>
+/// <param name="SqlWithPort">SqlEndpoint of "tcp:db1,1500".</param>
+/// <param name="SqlNamed">SqlEndpoint of a named instance.</param>
+public sealed record ConnectionResult( string[] Decoded, string[] Peers, string[] Notes, string Json, string[] Flags, string SqlWithPort, string SqlNamed );
+
+/// <summary>
+/// A fake compose host that, when asked to start the engine, records what the state file holds,
+/// burns 3 CPUs of (not yet attributable) start-up work for 600 ms, and then creates the
+/// container on the CPU set it was given.
+/// </summary>
+public sealed class StartingHost : IEngineHost
+{
+   #region Data Members
+
+   /// <summary>The compose file it starts.</summary>
+   public const string COMPOSE = "/x/es.compose.yaml";
+
+   private readonly FakeMachine _machine;
+   private readonly string _stateFile;
+
+   #endregion Data Members
+
+   #region Constructor
+
+   /// <summary>
+   /// Creates the host.
+   /// </summary>
+   /// <param name="machine">The fake machine.</param>
+   /// <param name="stateFile">The run's state file.</param>
+   public StartingHost( FakeMachine machine, string stateFile )
+   {
+      _machine = machine;
+      _stateFile = stateFile;
+   }
+
+   #endregion Constructor
+
+   #region Public Methods
+
+   /// <summary>The pinned starts the state file held when the start began.</summary>
+   public string? StateDuringUp { get; private set; }
+
+   /// <summary>
+   /// Running when the container exists.
+   /// </summary>
+   /// <param name="composePath">Compose file.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>True when running.</returns>
+   public Task<bool> IsRunningAsync( string composePath, CancellationToken ct )
+   {
+      return Task.FromResult( _machine.ComposeRunning.ContainsKey( composePath ) );
+   }
+
+   /// <summary>
+   /// Starts the fake engine as described on the class.
+   /// </summary>
+   /// <param name="composePath">Compose file.</param>
+   /// <param name="cpuset">CPU set.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The read-back line a host that applies the CPU set gives, or null without one.</returns>
+   public async Task<string?> UpAsync( string composePath, string? cpuset, CancellationToken ct )
+   {
+      MachineState? state = new MachineStateStore( _stateFile ).Load();
+      StateDuringUp = state == null ? "no file" : string.Join( ";", state.PinnedStarts.Select( p => $"{p.ComposePath} {p.Cpuset} {p.Target}" ) );
+      _machine.OutsideCpus = 3;
+      await Task.Delay( 600, ct );
+      _machine.OutsideCpus = 0;
+      _machine.Containers["e5e5"] = new FakeContainer( "gvb-elasticsearch", cpuset ?? string.Empty, 950, true );
+      _machine.AddProcess( 950, "java", 7000, 4, cpuset ?? "0-7", "/system.slice/docker-e5e5.scope" );
+      _machine.ComposeRunning[composePath] = new[] { "e5e5" };
+      return cpuset == null ? null : $"gvb-elasticsearch on CPUs {cpuset}";
+   }
+
+   /// <summary>
+   /// Not used.
+   /// </summary>
+   /// <param name="composePath">Compose file.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>Null.</returns>
+   public Task<string?> DownAsync( string composePath, CancellationToken ct )
+   {
+      return Task.FromResult<string?>( null );
+   }
+
+   #endregion Public Methods
+}
+
+/// <summary>
+/// A sink that only has a name; its calls are never made in these scenarios.
+/// </summary>
+public sealed class NullSink : ISink
+{
+   #region Constructor
+
+   /// <summary>
+   /// Creates the sink.
+   /// </summary>
+   /// <param name="name">Name.</param>
+   public NullSink( string name )
+   {
+      Name = name;
+   }
+
+   #endregion Constructor
+
+   #region Public Methods
+
+   /// <summary>Sink name.</summary>
+   public string Name { get; }
+
+   /// <summary>Not used.</summary>
+   /// <param name="collection">Collection.</param>
+   /// <param name="dimension">Dimension.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>True.</returns>
+   public Task<bool> EnsureCollectionAsync( string collection, int dimension, CancellationToken ct ) => Task.FromResult( true );
+
+   /// <summary>Not used.</summary>
+   /// <param name="collection">Collection.</param>
+   /// <param name="records">Records.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>A completed task.</returns>
+   public Task UpsertAsync( string collection, IReadOnlyList<VectorRecord> records, CancellationToken ct ) => Task.CompletedTask;
+
+   /// <summary>Not used.</summary>
+   /// <param name="collection">Collection.</param>
+   /// <param name="chunkIds">Ids.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>A completed task.</returns>
+   public Task DeleteAsync( string collection, IReadOnlyList<Guid> chunkIds, CancellationToken ct ) => Task.CompletedTask;
+
+   /// <summary>Not used.</summary>
+   /// <param name="collection">Collection.</param>
+   /// <param name="vector">Query.</param>
+   /// <param name="top">Hits.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>No hits.</returns>
+   public Task<IReadOnlyList<SearchHit>> SearchAsync( string collection, float[] vector, int top, CancellationToken ct ) => Task.FromResult<IReadOnlyList<SearchHit>>( Array.Empty<SearchHit>() );
+
+   /// <summary>Not used.</summary>
+   /// <param name="collection">Collection.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>A completed task.</returns>
+   public Task DropCollectionAsync( string collection, CancellationToken ct ) => Task.CompletedTask;
+
+   #endregion Public Methods
+}
+
+/// <summary>
+/// A docker inspect that knows one running container, gvb-elasticsearch at 172.22.0.2 on
+/// network engines_default, publishing 9200 on 127.0.0.1:9200.
+/// </summary>
+public sealed class JsonInspector : IContainerInspector
+{
+   #region Public Methods
+
+   /// <summary>
+   /// The inspect text of the known container, or null.
+   /// </summary>
+   /// <param name="container">Container name.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The JSON, or null.</returns>
+   public Task<string?> InspectAsync( string container, CancellationToken ct )
+   {
+      const string JSON = "[{\"Id\":\"e5e5e5e5e5e5e5e5\",\"Name\":\"/gvb-elasticsearch\",\"State\":{\"Status\":\"running\",\"Running\":true},"
+         + "\"NetworkSettings\":{\"Networks\":{\"engines_default\":{\"IPAddress\":\"172.22.0.2\"}},\"Ports\":{\"9200/tcp\":[{\"HostIp\":\"127.0.0.1\",\"HostPort\":\"9200\"}]}}}]";
+      return Task.FromResult( container == "gvb-elasticsearch" ? JSON : null );
+   }
+
+   #endregion Public Methods
+}
+
 /// <summary>Sampler arithmetic.</summary>
 /// <param name="Outside">Outside CPUs.</param>
 /// <param name="Cpus">"cpuN min/median/max".</param>
@@ -898,6 +1556,16 @@ public sealed record GateResult( string[] Passes, string[] Log, string[] Reasons
 /// <param name="Nearest">The nearest sample stood in for the short window.</param>
 /// <param name="Error">Sampling error.</param>
 public sealed record SamplerResult( double? Outside, string[] Cpus, int Samples, int ShortSamples, bool Nearest, string? Error );
+
+/// <summary>Live busy-box results.</summary>
+/// <param name="Background">Busy CPUs of the box before the test, over 10 s.</param>
+/// <param name="Limit">The limit used.</param>
+/// <param name="Passes">Each pass's quiet check, wait and flag.</param>
+/// <param name="Log">Progress output with times.</param>
+/// <param name="GovernorsBefore">Governors before.</param>
+/// <param name="GovernorsAfter">Governors after.</param>
+/// <param name="StateFileLeft">The state file is left.</param>
+public sealed record LiveGateResult( double Background, double Limit, string[] Passes, string[] Log, string[] GovernorsBefore, string[] GovernorsAfter, bool StateFileLeft );
 
 /// <summary>Live governor results.</summary>
 /// <param name="Before">Governors before.</param>

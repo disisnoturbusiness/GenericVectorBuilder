@@ -154,6 +154,38 @@ public class RunnerTests
    }
 
    /// <summary>
+   /// With the engine CPUs from machine control, run-all asks for an engine it starts (and stops)
+   /// to be created on those CPUs and notes the host's read-back, and starts an engine that was
+   /// running before the run but went down before its turn unrestricted, as it found it.
+   /// </summary>
+   [Fact]
+   public async Task RunAll_CreatesEnginesItStartsOnTheEngineCpus()
+   {
+      var targets = new (string, string)[] { ( "b", "b.yaml" ), ( "d", "d.yaml" ), ( "a", "a.yaml" ) };
+      dynamic result = await ScenarioAsync( "RunAllPinnedAsync", targets, new[] { "a.yaml", "d.yaml" }, new[] { "d.yaml" }, true );
+      Assert.Equal( new[] { "up b.yaml on 2-3,6-7", "down b.yaml", "up d.yaml" }, (string[])result.Calls );
+      string[] notes = result.Notes;
+      Assert.Contains( "with every container created on CPUs 2-3,6-7 (b.yaml: 1 container started on CPUs 2-3,6-7 (read back from Docker))", notes[0] );
+      Assert.Contains( "started it unrestricted (as it was)", notes[1] );
+      Assert.Contains( "already running before the run", notes[2] );
+   }
+
+   /// <summary>
+   /// A host that cannot create containers on a CPU set (it returns no read-back) is not taken at
+   /// its word: the note says the engine was moved there after the start instead.
+   /// </summary>
+   [Fact]
+   public async Task RunAll_SaysWhenTheHostDidNotApplyTheCpus()
+   {
+      var targets = new (string, string)[] { ( "b", "b.yaml" ) };
+      dynamic result = await ScenarioAsync( "RunAllPinnedAsync", targets, Array.Empty<string>(), Array.Empty<string>(), false );
+      Assert.Equal( new[] { "up b.yaml on 2-3,6-7", "down b.yaml" }, (string[])result.Calls );
+      string note = ( (string[])result.Notes )[0];
+      Assert.Contains( "the host did not apply a CPU set at creation, so machine control moved it there after the start", note );
+      Assert.DoesNotContain( "with every container created", note );
+   }
+
+   /// <summary>
    /// An engine whose start fails half-way is still stopped, and only that target fails.
    /// </summary>
    [Fact]

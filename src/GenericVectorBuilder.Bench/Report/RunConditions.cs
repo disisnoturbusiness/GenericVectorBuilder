@@ -45,6 +45,7 @@ public sealed class RunConditions
    private static readonly string[] WARMUP_NAMES = { "warmup", "warmupSearches", "warmupCount" };
    private static readonly string[] EXACT_NAMES = { "exactSeconds", "exactSecondsBudget" };
    private static readonly string[] CPU_NAMES = { "logicalCpus", "logicalCPUs", "cpus" };
+   private static readonly string[] CPU_CAP_NAMES = { "cpuCap", "cpuLimit", "engineCpuCap" };
    private static readonly Regex BUILD_IN_PATH = new( @"[/\\]bin[/\\](Debug|Release)[/\\]", RegexOptions.Compiled | RegexOptions.IgnoreCase );
    private static readonly Regex WARMUP_IN_NOTE = new( @"untimed warm-up of (\d+) searches", RegexOptions.Compiled );
    private static readonly Regex WARMUP_IN_COMMAND = new( @"--warmup[ =](\d+)", RegexOptions.Compiled );
@@ -294,8 +295,9 @@ public sealed class RunConditions
    /// <returns>The facts.</returns>
    private static EngineFacts ReadEngine( JsonElement engine )
    {
+      string? cap = CPU_CAP_NAMES.Select( name => ResultJson.Child( engine, name ) is JsonElement found ? AsText( found ) : null ).FirstOrDefault( text => text != null );
       return new EngineFacts( ResultJson.Text( engine, "target" ) ?? string.Empty, ResultJson.Text( engine, "hosting" ), CpuSet.Normalize( ResultJson.Text( engine, "cpus" ) ),
-         ResultJson.Texts( engine, "problems" ) ?? Array.Empty<string>() );
+         ResultJson.Texts( engine, "problems" ) ?? Array.Empty<string>(), cap );
    }
 
    /// <summary>
@@ -503,4 +505,5 @@ public sealed record PassFacts( string Target, string Pass, string? Governor, bo
 /// <param name="Hosting">compose, always-on or embedded.</param>
 /// <param name="Cpus">CPUs the engine was held to, canonical; null when it was not pinned.</param>
 /// <param name="Problems">What went wrong holding the engine to its CPUs; any entry means it was not fully pinned.</param>
-public sealed record EngineFacts( string Target, string? Hosting, string? Cpus, IReadOnlyList<string> Problems );
+/// <param name="CpuCap">A CPU limit the engine puts on itself (e.g. "cpu_count 2"), as the run recorded it; null when not recorded.</param>
+public sealed record EngineFacts( string Target, string? Hosting, string? Cpus, IReadOnlyList<string> Problems, string? CpuCap = null );

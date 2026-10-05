@@ -37,9 +37,12 @@ public sealed class MachineState
    /// <summary>Processes whose CPU affinity the run changed (Qdrant).</summary>
    public List<ProcessPin> Processes { get; set; } = new();
 
+   /// <summary>Compose engines the run started with their containers created on the engine CPUs (recorded before the start).</summary>
+   public List<PinnedStart> PinnedStarts { get; set; } = new();
+
    /// <summary>True when nothing needs putting back.</summary>
    [JsonIgnore]
-   public bool IsEmpty => Governors.Count == 0 && Containers.Count == 0 && SqlServer == null && Processes.Count == 0;
+   public bool IsEmpty => Governors.Count == 0 && Containers.Count == 0 && SqlServer == null && Processes.Count == 0 && PinnedStarts.Count == 0;
 
    /// <summary>
    /// What the state holds, for messages.
@@ -68,6 +71,11 @@ public sealed class MachineState
          parts.Add( $"affinity of {string.Join( ", ", Processes.Select( p => $"{p.Name} (pid {p.Pid})" ) )}" );
       }
 
+      if( PinnedStarts.Count > 0 )
+      {
+         parts.Add( $"cpuset of the containers created pinned from {string.Join( ", ", PinnedStarts.Select( p => System.IO.Path.GetFileName( p.ComposePath ) ) )}" );
+      }
+
       return parts.Count == 0 ? "nothing" : string.Join( "; ", parts );
    }
 
@@ -82,6 +90,18 @@ public sealed class MachineState
 /// <param name="PreviousCpuset">HostConfig.CpusetCpus before the change; empty means "no limit".</param>
 /// <param name="Target">Benchmark target it was pinned for.</param>
 public sealed record ContainerPin( string Id, string Name, string PreviousCpuset, string Target );
+
+/// <summary>
+/// A compose engine run-all started with its containers to be created already held to the
+/// engine CPUs. Recorded before the start: a run killed between the start
+/// and its own "compose down" leaves containers held to half the machine, and the next start
+/// (or restore-machine) gives any container of this compose file still on exactly these CPUs
+/// every CPU back.
+/// </summary>
+/// <param name="ComposePath">Compose file.</param>
+/// <param name="Cpuset">The CPUs the containers were created on, e.g. "2-3,6-7".</param>
+/// <param name="Target">Benchmark target it was started for.</param>
+public sealed record PinnedStart( string ComposePath, string Cpuset, string Target );
 
 /// <summary>
 /// SQL Server's process affinity before the run changed it.

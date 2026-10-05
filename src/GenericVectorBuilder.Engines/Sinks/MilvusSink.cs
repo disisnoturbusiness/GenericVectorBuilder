@@ -45,6 +45,18 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// segments, that none ran on a growing one, and that the same indexed segments were served the
 /// whole time. The index description must also name type HNSW. Every search this sink sends carries
 /// searchParams.params.ef (100 unless set), which only an HNSW index reads.
+/// Why <see cref="FinishLoadAsync"/> also compacts: measured 2026-10-04, a collection loaded with
+/// upserts (which write delete records) was compacted about 80 seconds after the load, in the middle
+/// of the timed passes (sealed and indexed 19 s after the load, level-zero compaction at 48 s, mix
+/// compaction at 98 s). For about 10 seconds the query node then served the old and the new segment
+/// together (2 sealed segments covering 1,048 rows for 524 stored), and a new segment can have no
+/// loaded index until its build runs, so searches in that window can scan instead of using HNSW. So
+/// after the flush and the index build the sink waits for Milvus to apply the delete records, then
+/// triggers a compaction itself, waits for the job, waits for the new segment to be indexed and
+/// served, and returns only when the layout has stayed unchanged for
+/// <see cref="MilvusSinkOptions.LayoutQuietSeconds"/> (see <see cref="SettleLayoutAsync"/>). "Ready"
+/// needs the rows covered by the served indexed segments to EQUAL the rows stored (more is as wrong
+/// as fewer), and the ledger flags any segment of the collection compacted away after that.
 /// Why errors are read from the body: Milvus answers HTTP 200 and reports failure in a "code"
 /// field, so a successful status alone proves nothing.
 /// </summary>
@@ -64,8 +76,8 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
    private const int NOT_LOADED_CODE = 106;
    private const int RATE_LIMITED_CODE = 1807;
    private const int STEADY_READS = 2;
+   private const long NO_COMPACTION_PLAN = -1;
    private static readonly TimeSpan FLUSH_INTERVAL = TimeSpan.FromSeconds( 10 );
-   private static readonly TimeSpan POLL_INTERVAL = TimeSpan.FromSeconds( 1 );
    private static readonly TimeSpan PROGRESS_INTERVAL = TimeSpan.FromSeconds( 15 );
    private static readonly TimeSpan CALL_LIMIT = TimeSpan.FromSeconds( 30 );
 
@@ -226,15 +238,16 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
    }
 
    /// <summary>
-   /// Flushes the collection, then waits until Milvus reports the HNSW index complete for every
-   /// stored vector and the query node serves it (see the class remarks for the four readings).
-   /// Throws a plain message when that does not happen within
-   /// <see cref="MilvusSinkOptions.IndexWaitMinutes"/>, or at once when the management port
-   /// cannot be read, because waiting longer cannot fix that.
+   /// Flushes the collection, waits until Milvus reports the HNSW index complete for every stored
+   /// vector and the query node serves it (see the class remarks for the readings), then compacts
+   /// and waits until the segment layout is final (see <see cref="SettleLayoutAsync"/>). Throws a
+   /// plain message when either step does not finish within its limit
+   /// (<see cref="MilvusSinkOptions.IndexWaitMinutes"/>, <see cref="MilvusSinkOptions.CompactionWaitSeconds"/>),
+   /// or at once when the management port cannot be read, because waiting longer cannot fix that.
    /// </summary>
    /// <param name="collection">Collection name as passed to the sink.</param>
    /// <param name="ct">Cancellation.</param>
-   /// <returns>The engine's own evidence, plus how long the wait took. Also starts the search ledger (see <see cref="GetIndexStateAsync"/>).</returns>
+   /// <returns>The engine's own evidence, plus how long each step took. Also starts the search ledger (see <see cref="GetIndexStateAsync"/>).</returns>
    public async Task<string> FinishLoadAsync( string collection, CancellationToken ct )
    {
       string name = CollectionName( collection );
@@ -245,15 +258,21 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
          throw new InvalidOperationException( $"Milvus did not finish indexing {name} within {_options.IndexWaitMinutes} minutes. Last reading: {readout.State.Detail}" );
       }
 
-      await StartLedgerAsync( name, readout, ct );
-      return $"{readout.State.Detail}; flush, index build and load took {clock.Elapsed.TotalSeconds:F1} s; search ledger started, later state reads count the searches against the query node's own counters";
+      double indexSeconds = clock.Elapsed.TotalSeconds;
+      Settled settled = await SettleLayoutAsync( name, ct );
+      await StartLedgerAsync( name, settled.Readout, ct );
+      return $"{settled.Readout.State.Detail}; flush, index build and load took {indexSeconds:F1} s, then {settled.Note}; search ledger started, later state reads count the searches against the query node's own counters";
    }
 
    /// <summary>
    /// Reads the index state once, from Milvus itself, without flushing or waiting. IndexedVectors
-   /// is the smaller of what the index description says is indexed and what the query node serves
-   /// from loaded indexes; TotalVectors is the Strong count(*). When the management port cannot be
-   /// read, Ready is false and Detail says why.
+   /// is what the query node serves from loaded indexes (the rows covered, which is more than the
+   /// rows stored while a compaction hands over from an old segment to a new one); TotalVectors is
+   /// the Strong count(*) (the rows stored).
+   /// Ready only when covered equals stored (see <see cref="MilvusLayout.Judge"/>). Detail names the
+   /// sealed segments the query node serves, the rows they cover against the rows stored, and what
+   /// the data coordinator lists. When the management port cannot be read, Ready is false and Detail
+   /// says why.
    /// Also reports the search ledger: how many searches this sink has sent since
    /// <see cref="FinishLoadAsync"/> (or, when it was never called on this sink, since the first
    /// ready read), what the query node counted for them, and whether the same indexed segments
@@ -267,12 +286,12 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
    {
       string name = CollectionName( collection );
       Readout readout = await ReadStateAsync( name, ct );
-      if( readout.Node is null )
+      if( readout.Node is null || readout.Datacoord is null )
       {
          return readout.State;
       }
 
-      MilvusSearchCounters? now = await TryReadCountersAsync( readout.CollectionId, ct );
+      MilvusSearchCounters? now = await TryReadCountersAsync( readout, ct );
       if( now is null )
       {
          return readout.State with { Ready = false, Detail = $"{readout.State.Detail}; the query node's search counters could not be read from {_options.ManagementUrl}/metrics" };
@@ -285,11 +304,11 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
             return readout.State;
          }
 
-         _ledgers[name] = new MilvusLedgerStart( now, _searchesSent.GetValueOrDefault( name ), readout.Node.Segments );
+         _ledgers[name] = new MilvusLedgerStart( now, _searchesSent.GetValueOrDefault( name ), readout.Layout );
          return readout.State with { Detail = $"{readout.State.Detail}; search ledger started by this read (FinishLoadAsync was not called on this sink)" };
       }
 
-      MilvusLedgerReading reading = MilvusSearchLedger.Evaluate( start, now, _searchesSent.GetValueOrDefault( name ), readout.Node.Segments, SearchParamsText() );
+      MilvusLedgerReading reading = MilvusSearchLedger.Evaluate( start, now, _searchesSent.GetValueOrDefault( name ), readout.Layout, SearchParamsText() );
       return readout.State with { Ready = readout.State.Ready && reading.Problems.Count == 0, Detail = $"{readout.State.Detail}; {reading.Detail}" };
    }
 
@@ -312,6 +331,11 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
    #region Private Methods
 
    /// <summary>
+   /// How long the wait loops sleep between readings (<see cref="MilvusSinkOptions.PollMilliseconds"/>).
+   /// </summary>
+   private TimeSpan Poll => TimeSpan.FromMilliseconds( _options.PollMilliseconds );
+
+   /// <summary>
    /// What one reading of the engine found, with the fact the wait loop acts on.
    /// </summary>
    /// <param name="State">The engine's account of its index.</param>
@@ -319,17 +343,49 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
    /// <param name="EvidenceMissing">True when a source of evidence could not be read, which waiting cannot fix.</param>
    /// <param name="Node">What the query node served at this reading, or null when it could not be read.</param>
    /// <param name="CollectionId">Milvus's internal id of the collection, 0 when not read.</param>
-   private sealed record Readout( IndexState State, bool Unsealed, bool EvidenceMissing, NodeView? Node = null, long CollectionId = 0 );
+   /// <param name="Datacoord">What the data coordinator listed at this reading, or null when it was not read.</param>
+   private sealed record Readout( IndexState State, bool Unsealed, bool EvidenceMissing, MilvusNodeView? Node = null, long CollectionId = 0, MilvusDatacoordView? Datacoord = null )
+   {
+      /// <summary>
+      /// One text for the whole layout (what the query node serves and which segments exist), so two
+      /// readings can be compared for "nothing changed".
+      /// </summary>
+      public string Layout => $"query node [{Node?.Segments ?? "unread"}] datacoord [{Datacoord?.Fingerprint ?? "unread"}]";
+   }
 
    /// <summary>
-   /// What the query node serves for one collection.
+   /// How far the compaction step has got, shared by the loop and its steps.
    /// </summary>
-   /// <param name="IndexedRows">Rows in sealed segments whose index is loaded.</param>
-   /// <param name="GrowingRows">Rows still served from growing segments (searches scan these).</param>
-   /// <param name="SealedWithIndex">Sealed segments with their index loaded.</param>
-   /// <param name="SealedWithoutIndex">Sealed segments without a loaded index.</param>
-   /// <param name="Segments">Fingerprint of every served segment and its index builds (see <see cref="MilvusSearchLedger.Fingerprint"/>).</param>
-   private sealed record NodeView( long IndexedRows, long GrowingRows, int SealedWithIndex, int SealedWithoutIndex, string Segments );
+   private sealed class SettleProgress
+   {
+      /// <summary>The latest reading.</summary>
+      public Readout? Last { get; set; }
+
+      /// <summary>What the step is waiting for, for the progress line and the failure message.</summary>
+      public string Stage { get; set; } = "starting";
+
+      /// <summary>The layout the last reading showed; a different one restarts the quiet window.</summary>
+      public string Seen { get; set; } = string.Empty;
+
+      /// <summary>True once Milvus was asked to compact since the delete-log segments were last live, so each generation of delete records is asked about once.</summary>
+      public bool Asked { get; set; }
+
+      /// <summary>When the layout last changed or last stopped being ready.</summary>
+      public DateTime StableSince { get; set; } = DateTime.UtcNow;
+
+      /// <summary>Compaction jobs this step triggered that Milvus accepted.</summary>
+      public int Jobs { get; set; }
+
+      /// <summary>When the next progress line is due.</summary>
+      public DateTime NextProgress { get; set; } = DateTime.UtcNow + PROGRESS_INTERVAL;
+   }
+
+   /// <summary>
+   /// The outcome of the compaction step.
+   /// </summary>
+   /// <param name="Readout">The final reading.</param>
+   /// <param name="Note">One plain sentence for the report: how many jobs ran and how long the layout then stayed unchanged.</param>
+   private sealed record Settled( Readout Readout, string Note );
 
    /// <summary>
    /// Flushes, then polls until the state is ready on <see cref="STEADY_READS"/> reads in a row or
@@ -381,7 +437,7 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
                nextFlush = now + FLUSH_INTERVAL;
             }
 
-            await Task.Delay( POLL_INTERVAL, limit.Token );
+            await Task.Delay( Poll, limit.Token );
          }
       }
       catch( OperationCanceledException ) when( !ct.IsCancellationRequested )
@@ -391,10 +447,169 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
    }
 
    /// <summary>
-   /// Reads the four pieces of evidence (see the class remarks), checks that the index is HNSW,
-   /// and decides whether searches now use the finished index. Segments without rows are left out
-   /// of the segment fingerprint, because an empty growing segment can come and go without
-   /// meaning anything.
+   /// Makes the segment layout final before any timed pass. Milvus compacts by itself after a load
+   /// that used upserts, in two steps and in the middle of the timed passes: a level-zero
+   /// compaction applies the delete records the upserts wrote (measured 2026-10-04, 48 s after the
+   /// load), and a mix compaction then rewrites the segment that received them (58 s to 98 s after
+   /// the load, the next 60-second check). So this step waits until no delete-log (L0) segment is
+   /// left, then triggers one compaction itself, waits for the job, waits for the new segment to be
+   /// indexed and served and the old one released, and returns only when the reading has been ready
+   /// with the same layout for <see cref="MilvusSinkOptions.LayoutQuietSeconds"/>.
+   /// Why only one request per generation of delete records: measured 2026-10-04, a manual
+   /// compaction of a collection with one finished segment and nothing to purge still returns a job
+   /// and rewrites that segment under a new id, so asking again after every layout change never ends.
+   /// Why the request waits until the reading is ready: the pinned Milvus compacts only segments
+   /// whose index build is finished (dataCoord.compaction.indexBasedCompaction), so a request made
+   /// while a new segment is still being indexed answers "nothing to compact" and proves nothing.
+   /// Throws a plain message naming what it was waiting for when
+   /// <see cref="MilvusSinkOptions.CompactionWaitSeconds"/> passes.
+   /// </summary>
+   /// <param name="name">Milvus collection name.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The final reading and a sentence for the report.</returns>
+   private async Task<Settled> SettleLayoutAsync( string name, CancellationToken ct )
+   {
+      var clock = Stopwatch.StartNew();
+      var progress = new SettleProgress();
+      using var limit = CancellationTokenSource.CreateLinkedTokenSource( ct );
+      limit.CancelAfter( TimeSpan.FromSeconds( _options.CompactionWaitSeconds ) );
+      try
+      {
+         while( true )
+         {
+            Readout readout = await ReadStateAsync( name, limit.Token );
+            progress.Last = readout;
+            if( readout.EvidenceMissing )
+            {
+               throw new InvalidOperationException( readout.State.Detail );
+            }
+
+            if( await SettleStepAsync( name, progress, readout, limit.Token ) )
+            {
+               return new Settled( readout, $"compaction: {progress.Jobs} job(s) accepted by Milvus, layout ready and unchanged for {_options.LayoutQuietSeconds} s, {clock.Elapsed.TotalSeconds:F1} s for the whole step" );
+            }
+
+            await Task.Delay( Poll, limit.Token );
+         }
+      }
+      catch( OperationCanceledException ) when( !ct.IsCancellationRequested )
+      {
+         throw new InvalidOperationException( $"Milvus did not finish compacting {name} within {_options.CompactionWaitSeconds} s. It was {progress.Stage}. Last reading: {progress.Last?.State.Detail ?? "none"}" );
+      }
+   }
+
+   /// <summary>
+   /// One turn of the compaction step: restarts the quiet window when the layout changed or is not
+   /// ready, waits while delete-log segments are still live, asks Milvus once to compact (and waits
+   /// for the job), and says whether the layout has now been ready and unchanged long enough.
+   /// </summary>
+   /// <param name="name">Milvus collection name.</param>
+   /// <param name="progress">The step's state.</param>
+   /// <param name="readout">The reading just taken.</param>
+   /// <param name="ct">Cancellation, which carries the step's deadline.</param>
+   /// <returns>True when the layout is final.</returns>
+   private async Task<bool> SettleStepAsync( string name, SettleProgress progress, Readout readout, CancellationToken ct )
+   {
+      DateTime now = DateTime.UtcNow;
+      int deleteLogs = readout.Datacoord?.DeleteLogSegments ?? 0;
+      if( readout.Layout != progress.Seen || !readout.State.Ready || deleteLogs > 0 )
+      {
+         progress.Seen = readout.Layout;
+         progress.StableSince = now;
+      }
+
+      if( !readout.State.Ready || deleteLogs > 0 )
+      {
+         progress.Asked = progress.Asked && deleteLogs == 0;
+         progress.Stage = readout.State.Ready
+            ? $"waiting for Milvus to apply {deleteLogs} delete-log (L0) segment(s) with its own level-zero compaction"
+            : "waiting for the layout to be ready again (the index of a new segment is built and served before it counts)";
+         ReportProgress( name, progress, readout, now );
+         return false;
+      }
+
+      if( !progress.Asked )
+      {
+         progress.Asked = true;
+         long job = await StartCompactionAsync( name, ct );
+         if( job != NO_COMPACTION_PLAN )
+         {
+            progress.Jobs++;
+            progress.Stage = $"waiting for compaction job {job} to complete";
+            await WaitForCompactionAsync( job, ct );
+            progress.StableSince = DateTime.UtcNow;
+            return false;
+         }
+      }
+
+      progress.Stage = $"waiting for the ready layout to stay unchanged for {_options.LayoutQuietSeconds} s";
+      ReportProgress( name, progress, readout, now );
+      return now - progress.StableSince >= TimeSpan.FromSeconds( _options.LayoutQuietSeconds );
+   }
+
+   /// <summary>
+   /// Sends a progress line when one is due (one every 15 seconds).
+   /// </summary>
+   /// <param name="name">Milvus collection name.</param>
+   /// <param name="progress">The step's state.</param>
+   /// <param name="readout">The latest reading.</param>
+   /// <param name="now">The time of the reading.</param>
+   private void ReportProgress( string name, SettleProgress progress, Readout readout, DateTime now )
+   {
+      if( now >= progress.NextProgress )
+      {
+         Progress?.Invoke( $"Milvus {name}: {progress.Stage}. {readout.State.Detail}" );
+         progress.NextProgress = now + PROGRESS_INTERVAL;
+      }
+   }
+
+   /// <summary>
+   /// Asks Milvus to compact the collection now (POST /v2/vectordb/collections/compact).
+   /// </summary>
+   /// <param name="name">Milvus collection name.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The job id, or <see cref="NO_COMPACTION_PLAN"/> (-1) when Milvus has nothing to compact.</returns>
+   private async Task<long> StartCompactionAsync( string name, CancellationToken ct )
+   {
+      using JsonDocument result = await PostAsync( "v2/vectordb/collections/compact", JsonSerializer.SerializeToUtf8Bytes( new { collectionName = name } ), ct, CALL_LIMIT );
+      return result.RootElement.GetProperty( "data" ).TryGetProperty( "compactionID", out JsonElement id ) ? id.GetInt64() : NO_COMPACTION_PLAN;
+   }
+
+   /// <summary>
+   /// Polls a compaction job until Milvus says Completed. Throws at once when Milvus reports a
+   /// failed or timed-out plan, because waiting longer cannot fix that. Runs until the caller's
+   /// deadline otherwise.
+   /// </summary>
+   /// <param name="jobId">The job id from <see cref="StartCompactionAsync"/>.</param>
+   /// <param name="ct">Cancellation, which carries the step's deadline.</param>
+   private async Task WaitForCompactionAsync( long jobId, CancellationToken ct )
+   {
+      byte[] body = JsonSerializer.SerializeToUtf8Bytes( new { jobId } );
+      while( true )
+      {
+         using JsonDocument result = await PostAsync( "v2/vectordb/collections/get_compaction_state", body, ct, CALL_LIMIT );
+         JsonElement data = result.RootElement.GetProperty( "data" );
+         long failed = Number( data, "failedPlanNumber" ) + Number( data, "timeoutPlanNumber" );
+         if( failed > 0 )
+         {
+            throw new InvalidOperationException( $"Milvus reports {failed} failed or timed-out plan(s) in compaction job {jobId}: {data.GetRawText()}" );
+         }
+
+         if( data.TryGetProperty( "state", out JsonElement state ) && state.GetString() == "Completed" )
+         {
+            return;
+         }
+
+         await Task.Delay( Poll, ct );
+      }
+   }
+
+   /// <summary>
+   /// Reads the evidence (see the class remarks): the index description, the stored row count, the
+   /// load state, what the query node serves and what the data coordinator lists, checks that the
+   /// index is HNSW, and decides with <see cref="MilvusLayout.Judge"/> whether searches now use the
+   /// finished index over exactly the stored rows. Segments without rows are left out of the segment
+   /// fingerprint, because an empty growing segment can come and go without meaning anything.
    /// </summary>
    /// <param name="name">Milvus collection name.</param>
    /// <param name="ct">Cancellation.</param>
@@ -417,18 +632,17 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
       long pendingRows = Number( index, "pendingRows" );
       string loadState = await LoadStateAsync( name, ct );
       long collectionId = await CollectionIdAsync( name, ct );
-      ( NodeView? node, string nodeDetail ) = await QueryNodeAsync( collectionId, ct );
-      string detail = $"index {indexState}, type {indexType} {DescribeIndexParams( index )}, indexedRows {indexedRows} of {sealedRows} sealed rows, pendingRows {pendingRows}; stored rows {stored}; {loadState}; query node: {nodeDetail}";
-      if( node is null )
+      ( MilvusNodeView? node, string nodeDetail ) = await QueryNodeAsync( collectionId, stored, ct );
+      ( MilvusDatacoordView? datacoord, string datacoordDetail ) = node is null ? ( null, "not read" ) : await DatacoordAsync( collectionId, ct );
+      string detail = $"index {indexState}, type {indexType} {DescribeIndexParams( index )}, indexedRows {indexedRows} of {sealedRows} sealed rows, pendingRows {pendingRows}; stored rows {stored}; {loadState}; query node: {nodeDetail}; datacoord: {datacoordDetail}";
+      if( node is null || datacoord is null )
       {
-         return new Readout( new IndexState( false, indexedRows, stored, detail ), Unsealed: false, EvidenceMissing: true );
+         return new Readout( new IndexState( false, indexedRows, stored, node is null ? detail : $"{detail}. Milvus's management port must be reachable; set MilvusSinkOptions.ManagementUrl" ), Unsealed: false, EvidenceMissing: true );
       }
 
-      bool ready = indexState == "Finished" && indexType == "HNSW" && pendingRows == 0 && indexedRows == sealedRows && sealedRows >= stored && loadState == "LoadStateLoaded"
-         && node.GrowingRows == 0 && node.SealedWithoutIndex == 0 && node.IndexedRows >= stored;
-      bool unsealed = sealedRows < stored || node.GrowingRows > 0;
-      return new Readout( new IndexState( ready, Math.Min( indexedRows, node.IndexedRows ), stored, indexType == "HNSW" ? detail : $"{detail}; the index type is {indexType}, not HNSW" ),
-         unsealed, EvidenceMissing: false, node, collectionId );
+      MilvusVerdict verdict = MilvusLayout.Judge( indexState, indexType, indexedRows, sealedRows, pendingRows, stored, loadState, node, datacoord );
+      string text = verdict.Ready ? detail : $"{detail}; not ready: {string.Join( "; ", verdict.Waiting )}";
+      return new Readout( new IndexState( verdict.Ready, node.IndexedRows, stored, text ), verdict.Unsealed, EvidenceMissing: false, node, collectionId, datacoord );
    }
 
    /// <summary>
@@ -456,7 +670,8 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
 
    /// <summary>
    /// Starts the search ledger of a collection from a ready reading: reads the query node's search
-   /// counters now and remembers them with the searches this sink has sent and the served segments.
+   /// counters now and remembers them with the searches this sink has sent, the served segments and
+   /// how many segments of the collection were already compacted away.
    /// </summary>
    /// <param name="name">Milvus collection name.</param>
    /// <param name="ready">The ready reading the ledger starts from.</param>
@@ -464,22 +679,24 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
    /// <exception cref="InvalidOperationException">The counters cannot be read, which no wait can fix.</exception>
    private async Task StartLedgerAsync( string name, Readout ready, CancellationToken ct )
    {
-      MilvusSearchCounters counters = await TryReadCountersAsync( ready.CollectionId, ct )
+      MilvusSearchCounters counters = await TryReadCountersAsync( ready, ct )
          ?? throw new InvalidOperationException( $"Milvus is ready for {name} but its search counters cannot be read from {_options.ManagementUrl}/metrics, so the searches cannot be shown to use the index. Set MilvusSinkOptions.ManagementUrl." );
-      _ledgers[name] = new MilvusLedgerStart( counters, _searchesSent.GetValueOrDefault( name ), ready.Node!.Segments );
+      _ledgers[name] = new MilvusLedgerStart( counters, _searchesSent.GetValueOrDefault( name ), ready.Layout );
    }
 
    /// <summary>
-   /// Reads the query node's search counters from the management port's /metrics page.
+   /// Reads the query node's search counters from the management port's /metrics page and adds the
+   /// per-collection count of compacted-away segments from the reading.
    /// </summary>
-   /// <param name="collectionId">Milvus's internal id of the collection.</param>
+   /// <param name="reading">A reading that has the collection id and the data coordinator's view.</param>
    /// <param name="ct">Cancellation.</param>
    /// <returns>The counters, or null when the page did not answer.</returns>
-   private async Task<MilvusSearchCounters?> TryReadCountersAsync( long collectionId, CancellationToken ct )
+   private async Task<MilvusSearchCounters?> TryReadCountersAsync( Readout reading, CancellationToken ct )
    {
       try
       {
-         return MilvusSearchLedger.Parse( await GetTextAsync( $"{_options.ManagementUrl.TrimEnd( '/' )}/metrics", ct ), collectionId );
+         MilvusSearchCounters counters = MilvusSearchLedger.Parse( await GetTextAsync( $"{_options.ManagementUrl.TrimEnd( '/' )}/metrics", ct ), reading.CollectionId );
+         return counters with { SegmentsCompactedAway = reading.Datacoord?.CompactedAway ?? 0 };
       }
       catch( Exception ex ) when( ex is HttpRequestException or TimeoutException )
       {
@@ -541,9 +758,10 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
    /// is loaded, because searches scan growing segments and use the index only on sealed ones.
    /// </summary>
    /// <param name="collectionId">Milvus collection id.</param>
+   /// <param name="stored">Rows stored, for the "covering X rows against Y stored rows" wording. Why that wording: the consolidated report reads the first "N sealed segment(s) with the index loaded covering R rows" out of this text (SegmentLayout), so that phrase stays intact and the stored rows follow it.</param>
    /// <param name="ct">Cancellation.</param>
    /// <returns>What the node serves (null when the port did not answer) and a short description.</returns>
-   private async Task<( NodeView? Node, string Detail )> QueryNodeAsync( long collectionId, CancellationToken ct )
+   private async Task<( MilvusNodeView? Node, string Detail )> QueryNodeAsync( long collectionId, long stored, CancellationToken ct )
    {
       string url = $"{_options.ManagementUrl.TrimEnd( '/' )}/api/v1/_qn/segments?collection_id={collectionId}&in=qn";
       string text;
@@ -588,8 +806,32 @@ public sealed class MilvusSink : ISink, IEngineDescription, IIndexFinisher, IDis
          }
       }
 
-      return ( new NodeView( indexedRows, growingRows, withIndex, withoutIndex, MilvusSearchLedger.Fingerprint( served ) ),
-         $"{withIndex} sealed segment(s) with the index loaded covering {indexedRows} rows, {withoutIndex} sealed without it, {growingRows} rows in growing segments" );
+      return ( new MilvusNodeView( indexedRows, growingRows, withIndex, withoutIndex, MilvusSearchLedger.Fingerprint( served ) ),
+         $"{withIndex} sealed segment(s) with the index loaded covering {indexedRows} rows against {stored} stored rows, {withoutIndex} sealed without it, {growingRows} rows in growing segments" );
+   }
+
+   /// <summary>
+   /// Asks the data coordinator (through the management port) which segments of the collection
+   /// exist, which are level-zero delete logs, and how many were compacted away.
+   /// </summary>
+   /// <param name="collectionId">Milvus collection id.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The view (null when the port did not answer) and a short description.</returns>
+   private async Task<( MilvusDatacoordView? View, string Detail )> DatacoordAsync( long collectionId, CancellationToken ct )
+   {
+      string url = $"{_options.ManagementUrl.TrimEnd( '/' )}/api/v1/_dc/segments?collection_id={collectionId}&in=dc";
+      string text;
+      try
+      {
+         text = await GetTextAsync( url, ct );
+      }
+      catch( Exception ex ) when( ex is HttpRequestException or TimeoutException )
+      {
+         return ( null, $"unreadable ({url} did not answer: {ex.Message})" );
+      }
+
+      MilvusDatacoordView view = MilvusLayout.ParseDatacoord( text );
+      return ( view, $"{view.LiveSegments} live segment(s), {view.FlushedIndexedSegments} flushed and indexed covering {view.FlushedRows} rows, {view.DeleteLogSegments} delete-log (L0) segment(s) waiting for a compaction, {view.CompactedAway} segment(s) compacted away so far" );
    }
 
    /// <summary>

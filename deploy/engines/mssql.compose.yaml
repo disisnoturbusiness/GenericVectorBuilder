@@ -1,0 +1,64 @@
+# SQL Server 2025 RTM-CU9 (17.0.5005.3, KB5122048) for the vector benchmark: the same build as the
+# native SQL Server on this box (mssql-server.service), in a container so it gets the same CPU split
+# and the same kind of network route as every other engine. The benchmark's "sql" and "sql-diskann"
+# targets use it; the native server stays measurable as the comparison target "sql-native".
+# Why not the native server: its search work runs on SQLPAL host threads that stay on all 8 CPUs
+# whatever ALTER SERVER CONFIGURATION SET PROCESS AFFINITY says, so it could not be held to the engine
+# CPUs. In a container created with a cpuset the kernel holds every thread to those CPUs, and SQL
+# Server makes one scheduler per CPU it can really use.
+# Image pinned by digest (mcr.microsoft.com, verified 2026-10-04; the image's own label
+# com.microsoft.version says 17.0.5005.3). MSSQL_PID Developer is the free Enterprise Developer
+# edition, the native server's edition.
+# Port 1433 is published on 127.0.0.1:14330 only (1433 is the native server's); the benchmark itself
+# connects to the container's own bridge address and port 1433, never through docker-proxy.
+# The sa password comes from secrets.env (MSSQL_SA_PASSWORD) through env_file; SQL Server applies it
+# only when the data folder is first set up, so changing it later means wiping
+# /home/dan/gvb-data/engines/mssql (owned by uid 10001, the image's mssql user).
+# Settings, and why:
+#   cpuset ${GVB_ENGINE_CPUS:-2-3,6-7}  held to the engine CPUs from creation. 2-3,6-7 is the split the
+#                                        benchmark's machine control picks on linus7795 (physical cores 2
+#                                        and 3 with their hyperthreads); when run-all starts this file it
+#                                        passes the split it chose through a compose override, so the
+#                                        default only matters for a start by hand.
+#   MSSQL_MEMORY_LIMIT_MB 6144           stated, not left to the default of 80% of mem_limit.
+#   MSSQL_AGENT_ENABLED false            as on the native server (mssql.conf [sqlagent] enabled = false).
+#   init + entrypoint                    the image's launcher (launch_sqlservr.sh) starts sqlservr in the
+#                                        background and waits, so a stop never reaches SQL Server: measured
+#                                        2026-10-04, "compose stop" waited the full grace period and killed it
+#                                        (exit 137, no shutdown in the log). Here the same permission check
+#                                        runs and then sqlservr replaces the shell, under Docker's init, so a
+#                                        stop is SQL Server's own clean shutdown. The launcher's custom setup
+#                                        step is left out: it only acts on MSSQL_DB or setup scripts, which
+#                                        this file does not use.
+# Durability is SQL Server's own default (no [control] or trace flag settings), as on the native server.
+# Start: sudo docker compose -f deploy/engines/mssql.compose.yaml up -d   (first start about 30 s)
+# Stop (data kept): sudo docker compose -f deploy/engines/mssql.compose.yaml down
+# Own project name so this file never sees (or removes) the other engines' containers.
+name: gvb-mssql
+services:
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2025-CU9-ubuntu-24.04@sha256:2b5b581621126574f3d1f75e78d3eebe8d05aedb59ad0cfdf9aa42cb0634d726
+    container_name: gvb-mssql
+    init: true
+    entrypoint: ["/bin/bash", "-c", "/opt/mssql/bin/permissions_check.sh; exec /opt/mssql/bin/sqlservr"]
+    env_file:
+      - /home/dan/gvb-data/engines/secrets.env
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "Developer"
+      MSSQL_MEMORY_LIMIT_MB: "6144"
+      MSSQL_AGENT_ENABLED: "false"
+    cpuset: "${GVB_ENGINE_CPUS:-2-3,6-7}"
+    ports:
+      - "127.0.0.1:14330:1433"
+    volumes:
+      - /home/dan/gvb-data/engines/mssql:/var/opt/mssql
+    mem_limit: 8g
+    stop_grace_period: 60s
+    restart: "no"
+    healthcheck:
+      test: ["CMD-SHELL", "SQLCMDPASSWORD=\"$$MSSQL_SA_PASSWORD\" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -l 5 -Q \"SELECT 1\" -o /dev/null || exit 1"]
+      interval: 5s
+      timeout: 15s
+      retries: 60
+      start_period: 20s

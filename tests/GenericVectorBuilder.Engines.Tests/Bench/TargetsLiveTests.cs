@@ -5,8 +5,10 @@ using Xunit.Abstractions;
 namespace GenericVectorBuilder.Engines.Tests.Bench;
 
 /// <summary>
-/// The four built-in benchmark targets against the real SQL Server and Qdrant on this box,
-/// loaded with 524 random 1024-dimension vectors (the size of the eShopOnWeb corpus).
+/// The target code against the real native SQL Server and Qdrant on this box (the sinks behind the
+/// four built-in targets, and the native comparison targets), loaded with 524 random 1024-dimension
+/// vectors (the size of the eShopOnWeb corpus). The built-in targets themselves run in the
+/// benchmark's own containers and are checked end to end by <see cref="TargetsPinnedLiveTests"/>.
 /// Every Qdrant collection starts with gvbbench_ and every SQL database is a throwaway named
 /// GvbBenchTgt*, dropped when the test ends; nothing else on either server is read or written.
 /// Why live: the verdict code is tested with hand-made facts elsewhere, but only the real
@@ -152,10 +154,11 @@ public class TargetsLiveTests
    }
 
    /// <summary>
-   /// The factory gives each built-in target its proof and its durability text from the real
-   /// settings: both Qdrant targets and both SQL targets state durability, the finisher targets
-   /// carry no extra reader, the builder's own sinks carry one, and loading the two Qdrant
-   /// targets through the target's own members gives ready states before and after searching.
+   /// The factory gives each native comparison target ("sql-native", "qdrant-native": the builder's own
+   /// sinks on the native servers) its proof and its durability text from the real settings, labels it
+   /// as a comparison target off the container CPU split, and loading the Qdrant one through the
+   /// target's own members gives ready states before and after searching. The four default targets now
+   /// run in the benchmark's own containers; TargetsPinnedLiveTests checks them end to end.
    /// </summary>
    [Fact]
    public async Task Wiring_EachTargetCarriesItsProofAndDurability()
@@ -167,23 +170,21 @@ public class TargetsLiveTests
       }
 
       string Line( string prefix ) => lines.Single( l => l.StartsWith( prefix, StringComparison.Ordinal ) );
-      Assert.DoesNotContain( lines, l => l.StartsWith( "factory note:", StringComparison.Ordinal ) );
-      Assert.Contains( "finisher False|settle False|reader True|durability A commit returns after", Line( "target sql|" ) );
-      Assert.Contains( "finisher True|settle False|reader False|durability A commit returns after", Line( "target sql-diskann|" ) );
-      Assert.Contains( "finisher False|settle True|reader True|durability What was measured (strace -f on the Qdrant server process", Line( "target qdrant|" ) );
-      Assert.Contains( "finisher True|settle False|reader False|durability What was measured (strace -f on the Qdrant server process", Line( "target qdrant-hnsw|" ) );
+      Assert.DoesNotContain( lines, l => l.StartsWith( "factory note:", StringComparison.Ordinal ) && !l.Contains( "Container gvb-", StringComparison.Ordinal ) );
+      Assert.Contains( "hosting always-on|finisher False|settle False|reader True|durability A commit returns after", Line( "target sql-native|" ) );
+      Assert.Contains( "hosting always-on|finisher False|settle True|reader True|durability What was measured (strace -f on the Qdrant server process", Line( "target qdrant-native|" ) );
       Assert.All( lines.Where( l => l.StartsWith( "target ", StringComparison.Ordinal ) ), l => Assert.DoesNotContain( "not stated", l ) );
       Assert.All( lines.Where( l => l.StartsWith( "target ", StringComparison.Ordinal ) ), l => Assert.DoesNotContain( "durability not read", l ) );
-      Assert.Contains( "|pair default@1 vs exact|", Line( "target sql-diskann|" ) );
-      Assert.All( new[] { "target sql|", "target qdrant|", "target qdrant-hnsw|" }, p => Assert.Contains( "|pair none|", Line( p ) ) );
-      Assert.Contains( "connection always-on SQL Server at ", Line( "target sql|" ) );
-      Assert.Contains( "connection always-on Qdrant at ", Line( "target qdrant|" ) );
+      Assert.All( lines.Where( l => l.StartsWith( "target ", StringComparison.Ordinal ) ), l => Assert.Contains( "|pair none|", l ) );
+      Assert.All( lines.Where( l => l.StartsWith( "target ", StringComparison.Ordinal ) ), l => Assert.Contains( "(native service on this host, a COMPARISON target: not the container CPU split, reached over loopback)", l ) );
+      Assert.Contains( "|engine Microsoft SQL Server 2025 (RTM-CU9) (KB5122048) - 17.0.5005.3 (X64) (native service", Line( "target sql-native|" ) );
+      Assert.Contains( "|engine Qdrant 1.17.0 (native service", Line( "target qdrant-native|" ) );
+      Assert.Contains( "connection always-on native SQL Server at ", Line( "target sql-native|" ) );
+      Assert.Contains( "connection always-on native Qdrant at ", Line( "target qdrant-native|" ) );
       Assert.All( lines.Where( l => l.StartsWith( "target ", StringComparison.Ordinal ) ), l => Assert.Contains( "not a container port published through docker-proxy", l ) );
-      Assert.Contains( "ready False", Line( "sql target, table absent|" ) );
-      Assert.Contains( "ready True|0/524|", Line( "qdrant state before searches|" ) );
-      Assert.Contains( "ready True|524/524|", Line( "qdrant-hnsw state before searches|" ) );
-      Assert.Contains( "ready True|524/524|", Line( "qdrant-hnsw state after searches|" ) );
-      Assert.Contains( "ready True|0/524|", Line( "qdrant state after searches|" ) );
+      Assert.Contains( "ready False", Line( "sql-native target, table absent|" ) );
+      Assert.Contains( "ready True|0/524|", Line( "qdrant-native state before searches|" ) );
+      Assert.Contains( "ready True|0/524|", Line( "qdrant-native state after searches|" ) );
    }
 
    /// <summary>

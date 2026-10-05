@@ -111,7 +111,7 @@ public sealed class EnginePinner
                pinning.Cpus = CpuList.Format( _partition.ClientCpus );
                break;
             case "compose":
-               pinning.Method = "docker update --cpuset-cpus";
+               pinning.Method = "cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which)";
                pinning.Cpus = _engineCpus;
                await PinContainersAsync( pinning, composePath!, ct );
                break;
@@ -140,7 +140,13 @@ public sealed class EnginePinner
    }
 
    /// <summary>
-   /// Pins every running container of a compose file that is not pinned yet.
+   /// Pins every running container of a compose file that is not pinned yet. A container that
+   /// is already on exactly the engine CPUs (run-all had it created there) is left alone and not
+   /// recorded: nothing was changed on it, so nothing needs putting back (the pinned start itself
+   /// is recorded before the start, see <see cref="PinnedStart"/>). One moved with "docker update"
+   /// says in its change line that it sized its thread pools for the CPUs it had before.
+   /// Why "--orphans=false": four engine files (elasticsearch, opensearch, typesense, vespa) share
+   /// one compose project, and without it compose lists the other three engines' containers too.
    /// </summary>
    /// <param name="pinning">The target's record.</param>
    /// <param name="composePath">Compose file.</param>
@@ -152,7 +158,7 @@ public sealed class EnginePinner
          AddGroup( dockerd );
       }
 
-      ShellResult ps = await ProcessInfo.SudoAsync( _system, new[] { "docker", "compose", "-f", composePath, "ps", "-q", "--status", "running" }, ct );
+      ShellResult ps = await ProcessInfo.SudoAsync( _system, new[] { "docker", "compose", "-f", composePath, "ps", "-q", "--status", "running", "--orphans=false" }, ct );
       ProcessInfo.Require( ps, $"list the running containers of {Path.GetFileName( composePath )}" );
       foreach( string id in ps.Output.Split( '\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries ) )
       {
@@ -171,11 +177,19 @@ public sealed class EnginePinner
 
          string name = parts[0].TrimStart( '/' );
          AddGroup( pid );
+         if( parts[1].Length > 0 && CpuList.Same( parts[1], _engineCpus ) )
+         {
+            pinning.Changes.Add( $"container {name}: already on CPUs {_engineCpus} (its cpuset since creation), not changed" );
+            pinning.Verified.Add( $"container {name}: {ContainerThreads( pid )}" );
+            continue;
+         }
+
          _keeper.Record( s => s.Containers.Add( new ContainerPin( id, name, parts[1], pinning.Target ) ) );
          ShellResult update = await ProcessInfo.SudoAsync( _system, new[] { "docker", "update", "--cpuset-cpus", _engineCpus, id }, ct );
          ProcessInfo.Require( update, $"pin container {name} to CPUs {_engineCpus}" );
-         pinning.Changes.Add( $"container {name}: cpuset '{parts[1]}' -> {_engineCpus}" );
-         pinning.Verified.Add( $"container {name} main process {pid}: {Describe( ProcessInfo.ThreadAffinities( _system, pid ) )}" );
+         pinning.Changes.Add( $"container {name}: cpuset '{parts[1]}' -> {_engineCpus} with docker update after it had started, so it sized its thread pools for "
+            + $"{( parts[1].Length == 0 ? "every CPU" : "CPUs " + parts[1] )}" );
+         pinning.Verified.Add( $"container {name}: {ContainerThreads( pid )}" );
       }
    }
 
@@ -237,7 +251,7 @@ public sealed class EnginePinner
    /// <param name="ct">Cancellation.</param>
    private async Task PinSqlServerAsync( TargetPinning pinning, CancellationToken ct )
    {
-      IReadOnlyList<int> sqlservr = ProcessInfo.FindByName( _system, "sqlservr" );
+      IReadOnlyList<int> sqlservr = ProcessInfo.FindNativeByName( _system, "sqlservr" );
       sqlservr.ToList().ForEach( AddGroup );
       string type = ( await _system.SqlQueryAsync( "SELECT affinity_type_desc FROM sys.dm_os_sys_info;", ct ) ).Select( r => r[0] ).FirstOrDefault() ?? "unknown";
       string? ids = type == "MANUAL" ? CpuList.Format( ( await _system.SqlQueryAsync( SQL_ONLINE_IDS, ct ) ).Select( r => int.Parse( r[0], CultureInfo.InvariantCulture ) ) ) : null;
@@ -279,7 +293,7 @@ public sealed class EnginePinner
    /// <param name="ct">Cancellation.</param>
    private async Task PinProcessAsync( TargetPinning pinning, string name, CancellationToken ct )
    {
-      IReadOnlyList<int> pids = ProcessInfo.FindByName( _system, name );
+      IReadOnlyList<int> pids = ProcessInfo.FindNativeByName( _system, name );
       if( pids.Count != 1 )
       {
          throw new InvalidOperationException( $"expected one {name} process, found {pids.Count}" );
@@ -326,6 +340,35 @@ public sealed class EnginePinner
       string[] arguments = { "taskset", "-a", "-c", "-p", cpus, pid.ToString( CultureInfo.InvariantCulture ) };
       ShellResult result = root ? await ProcessInfo.SudoAsync( _system, arguments, ct ) : await _system.RunAsync( arguments[0], arguments[1..], ProcessInfo.COMMAND_TIMEOUT, ct );
       ProcessInfo.Require( result, $"set the affinity of pid {pid} to {cpus}" );
+   }
+
+   /// <summary>
+   /// The affinity of every thread in a container (from its cgroup's cgroup.threads), so the
+   /// record covers the engine's own threads and not only the container's first process (which
+   /// is Docker's init or a launcher script for several engines). Falls back to the main
+   /// process's threads when the cgroup cannot be read.
+   /// </summary>
+   /// <param name="pid">The container's main process.</param>
+   /// <returns>For example "83 thread(s) on CPUs 2-3,6-7 (every thread of the container)".</returns>
+   private string ContainerThreads( int pid )
+   {
+      string? group = ProcessInfo.CgroupFolder( _system, pid );
+      string[] tids = ( group != null ? _system.ReadFile( $"{group}/cgroup.threads" ) : null )?
+         .Split( '\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries ) ?? Array.Empty<string>();
+      var counts = new Dictionary<string, int>( StringComparer.Ordinal );
+      foreach( string tid in tids )
+      {
+         string? line = _system.ReadFile( $"/proc/{tid}/status" )?.Split( '\n' ).FirstOrDefault( l => l.StartsWith( "Cpus_allowed_list:", StringComparison.Ordinal ) );
+         if( line != null )
+         {
+            string list = CpuList.Format( CpuList.Parse( line["Cpus_allowed_list:".Length..].Trim() ) );
+            counts[list] = counts.GetValueOrDefault( list ) + 1;
+         }
+      }
+
+      return counts.Count > 0
+         ? $"{Describe( counts )} (every thread of the container)"
+         : $"main process {pid}: {Describe( ProcessInfo.ThreadAffinities( _system, pid ) )}";
    }
 
    /// <summary>

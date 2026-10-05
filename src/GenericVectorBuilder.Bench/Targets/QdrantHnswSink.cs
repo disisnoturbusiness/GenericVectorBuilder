@@ -59,13 +59,17 @@ public sealed class QdrantHnswSink : ISink, IExactSearchSink, IEngineDescription
    /// <param name="ef">Search beam width (hnsw_ef), or null for the server default.</param>
    /// <param name="serverVersion">Qdrant server version, for the report.</param>
    /// <param name="durability">What a crash can lose, read from the server's config (see <see cref="QdrantServer.ReadDurabilityAsync"/>).</param>
-   public QdrantHnswSink( QdrantClient client, QdrantServer server, int? ef, string serverVersion, string durability )
+   /// <param name="engine">Engine text for the report, or null for the native server's ("Qdrant VERSION (systemd, local)").
+   /// The benchmark's own Qdrant container passes its own, which names the container and its CPUs.</param>
+   /// <param name="composeFile">Compose file that starts the server, or "always-on" for the native service.</param>
+   public QdrantHnswSink( QdrantClient client, QdrantServer server, int? ef, string serverVersion, string durability, string? engine = null, string composeFile = "always-on" )
    {
       _client = client;
       _server = server;
       _ef = ef.HasValue ? (ulong)ef.Value : null;
       _durability = durability;
-      Engine = $"Qdrant {serverVersion} (systemd, local)";
+      Engine = engine ?? $"Qdrant {serverVersion} (systemd, local)";
+      ComposeFile = composeFile;
    }
 
    #endregion Constructor
@@ -79,14 +83,13 @@ public sealed class QdrantHnswSink : ISink, IExactSearchSink, IEngineDescription
    public string Engine { get; }
 
    /// <inheritdoc />
-   public string IndexDescription => $"HNSW m={HNSW_M} ef_construct={HNSW_EF_CONSTRUCT}, hnsw_ef={( _ef.HasValue ? _ef.Value.ToString() : "server default" )}, cosine; "
-      + $"indexing_threshold_kb {INDEXING_THRESHOLD_KB} and full_scan_threshold_kb {FULL_SCAN_THRESHOLD_KB} (server defaults are 10,000 each) so a small collection builds and walks its graph";
+   public string IndexDescription => DescribeIndex( _ef.HasValue ? (int)_ef.Value : null );
 
    /// <inheritdoc />
    public string Durability => _durability;
 
    /// <inheritdoc />
-   public string ComposeFile => "always-on";
+   public string ComposeFile { get; }
 
    /// <inheritdoc />
    public async Task<bool> EnsureCollectionAsync( string collection, int dimension, CancellationToken ct )
@@ -196,6 +199,18 @@ public sealed class QdrantHnswSink : ISink, IExactSearchSink, IEngineDescription
    public Task<IndexState> GetIndexStateAsync( string collection, CancellationToken ct )
    {
       return _server.StateAsync( CollectionName( collection ), SearchExpectation.WalkGraph, ct );
+   }
+
+   /// <summary>
+   /// The index text for a search beam, the same whether or not the sink exists yet (a container
+   /// target shows it before its container is reached).
+   /// </summary>
+   /// <param name="ef">Search beam width (hnsw_ef), or null for the server default.</param>
+   /// <returns>The description.</returns>
+   public static string DescribeIndex( int? ef )
+   {
+      return $"HNSW m={HNSW_M} ef_construct={HNSW_EF_CONSTRUCT}, hnsw_ef={( ef.HasValue ? ef.Value.ToString() : "server default" )}, cosine; "
+         + $"indexing_threshold_kb {INDEXING_THRESHOLD_KB} and full_scan_threshold_kb {FULL_SCAN_THRESHOLD_KB} (server defaults are 10,000 each) so a small collection builds and walks its graph";
    }
 
    /// <summary>

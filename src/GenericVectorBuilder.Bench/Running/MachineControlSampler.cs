@@ -15,7 +15,8 @@ public sealed record FrequencySample( DateTime At, int?[] Mhz );
 /// <param name="At">End of the interval (UTC).</param>
 /// <param name="Seconds">Wall seconds the interval lasted.</param>
 /// <param name="OutsideCpuSeconds">CPU seconds used by processes outside the benchmark in it.</param>
-public sealed record OutsideSample( DateTime At, double Seconds, double OutsideCpuSeconds );
+/// <param name="Start">Start of the interval (UTC).</param>
+public sealed record OutsideSample( DateTime At, double Seconds, double OutsideCpuSeconds, DateTime Start );
 
 /// <summary>
 /// Cumulative CPU counters at one moment, in seconds.
@@ -181,7 +182,9 @@ public sealed class MachineSampler : IDisposable
    }
 
    /// <summary>
-   /// Mean CPUs busy outside the benchmark between two times (intervals that end inside).
+   /// Mean CPUs busy outside the benchmark between two times, over the sampled intervals that lie
+   /// wholly inside. Why wholly: an interval that began before the window (before a target or
+   /// its engine started, say) would bring work from before the window into it.
    /// </summary>
    /// <param name="from">Start (UTC).</param>
    /// <param name="to">End (UTC).</param>
@@ -190,7 +193,7 @@ public sealed class MachineSampler : IDisposable
    {
       lock( _lock )
       {
-         List<OutsideSample> inside = _outside.Where( s => s.At > from && s.At <= to ).ToList();
+         List<OutsideSample> inside = _outside.Where( s => s.Start >= from && s.At <= to ).ToList();
          double seconds = inside.Sum( s => s.Seconds );
          double needed = Math.Min( MIN_HISTORY_SECONDS, ( to - from ).TotalSeconds / 2 );
          return seconds <= 0 || seconds < needed ? null : inside.Sum( s => s.OutsideCpuSeconds ) / seconds;
@@ -306,17 +309,19 @@ public sealed class MachineSampler : IDisposable
    }
 
    /// <summary>
-   /// Turns a reading into the outside CPU time since the previous one. A group missing from
-   /// either reading (the engine changed in between) adds nothing for that interval.
+   /// Turns a reading into the outside CPU time since the previous one. An interval in which the
+   /// engine's groups changed (a target began, its engine finished starting, or it ended) is
+   /// left out: the engine's CPU time in it cannot be told apart, and counting it as outside work
+   /// would hold the next pass for the engine's own start-up.
    /// </summary>
    /// <param name="reading">The new reading.</param>
    private void AddLoad( CpuReading reading )
    {
-      if( _last != null && reading.At > _last.At )
+      if( _last != null && reading.At > _last.At && reading.Groups.Keys.ToHashSet( StringComparer.Ordinal ).SetEquals( _last.Groups.Keys ) )
       {
          double engine = reading.Groups.Where( g => _last.Groups.ContainsKey( g.Key ) ).Sum( g => g.Value - _last.Groups[g.Key] );
          double outside = ( reading.Busy - _last.Busy ) - ( reading.Self - _last.Self ) - engine;
-         _outside.Add( new OutsideSample( reading.At, ( reading.At - _last.At ).TotalSeconds, Math.Max( 0, outside ) ) );
+         _outside.Add( new OutsideSample( reading.At, ( reading.At - _last.At ).TotalSeconds, Math.Max( 0, outside ), _last.At ) );
          _outside.RemoveAll( s => s.At < reading.At - KEEP_LOAD );
       }
 

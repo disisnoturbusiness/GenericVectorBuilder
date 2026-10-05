@@ -26,6 +26,7 @@ public sealed class BenchTarget : IDisposable
    private const string NOT_STATED = "not stated";
 
    private readonly string _fallbackIndex;
+   private readonly string _engine;
    private readonly SemaphoreSlim _bindLock = new( 1, 1 );
    private volatile ISink? _bound;
    private IReadOnlyList<ContainerAddress> _connections = Array.Empty<ContainerAddress>();
@@ -49,7 +50,7 @@ public sealed class BenchTarget : IDisposable
       Func<string, CancellationToken, Task<Measurement>> ram, Func<string, CancellationToken, Task<Measurement>> disk )
    {
       _template = sink;
-      Engine = engine;
+      _engine = engine;
       _fallbackIndex = index;
       Hosting = hosting;
       ComposePath = composePath;
@@ -111,12 +112,16 @@ public sealed class BenchTarget : IDisposable
 
    /// <summary>
    /// What to say in <see cref="ConnectionText"/> for a target that is not a container, when the
-   /// factory knows (for example the address of the always-on SQL Server).
+   /// factory knows (for example the address of the native SQL Server of the "sql-native" target).
    /// </summary>
    public string? DirectNote { get; init; }
 
-   /// <summary>Engine name and version.</summary>
-   public string Engine { get; }
+   /// <summary>
+   /// Engine name and version, read live from the sink when it describes itself (the benchmark's own
+   /// SQL Server and Qdrant containers state their build and CPUs only once they have been reached),
+   /// else the text given at construction.
+   /// </summary>
+   public string Engine => Current is IEngineDescription description && !string.IsNullOrWhiteSpace( description.Engine ) ? description.Engine : _engine;
 
    /// <summary>Index description, read live so settings learned during the load (build parameters) show.</summary>
    public string Index => Current is IEngineDescription description ? description.IndexDescription : _fallbackIndex;
@@ -162,8 +167,15 @@ public sealed class BenchTarget : IDisposable
       }
    }
 
+   /// <summary>
+   /// Says whether the target has a separate index step when its template sink cannot (a container
+   /// target's template is only a name and a description until the container is reached), or null
+   /// to read it from the template.
+   /// </summary>
+   public bool? IndexStep { get; init; }
+
    /// <summary>True when the sink builds or waits for its index in a separate, timed step after loading.</summary>
-   public bool HasIndexFinisher => _template is IIndexFinisher;
+   public bool HasIndexFinisher => IndexStep ?? _template is IIndexFinisher;
 
    /// <summary>
    /// Reads the engine's own account of its index, within <paramref name="timeout"/>. Never
@@ -231,7 +243,7 @@ public sealed class BenchTarget : IDisposable
          }
 
          var router = await ContainerRouter.ResolveAsync( Container.Inspector, Container.Route.Containers, Container.Deadline, Container.Poll, ct );
-         ISink sink = Container.Route.Build( router );
+         ISink sink = Container.Route.BuildAsync is { } build ? await build( router, ct ) : Container.Route.Build( router );
          _connections = router.Used.ToList();
          _bound = sink;
          return sink;

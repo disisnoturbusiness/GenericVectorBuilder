@@ -57,8 +57,10 @@ public sealed class SqlDiskAnnSink : ISink, IExactSearchSink, IEngineDescription
    /// <param name="serverVersion">First line of @@VERSION, for the report.</param>
    /// <param name="durability">What a crash can lose (see <see cref="SqlDurability.ReadAsync"/>), or null for "not stated".</param>
    /// <param name="database">Database to write to; tests pass their own so they never share the benchmark's.</param>
-   public SqlDiskAnnSink( string serverConnectionString, string serverVersion, string? durability = null, string database = DATABASE )
+   /// <param name="composeFile">Compose file that starts the server, or "always-on" for the native service.</param>
+   public SqlDiskAnnSink( string serverConnectionString, string serverVersion, string? durability = null, string database = DATABASE, string composeFile = "always-on" )
    {
+      ComposeFile = composeFile;
       _serverConnectionString = serverConnectionString;
       _database = database;
       _connectionString = new SqlConnectionStringBuilder( serverConnectionString ) { InitialCatalog = database }.ConnectionString;
@@ -84,7 +86,7 @@ public sealed class SqlDiskAnnSink : ISink, IExactSearchSink, IEngineDescription
    public string Durability => _durability;
 
    /// <inheritdoc />
-   public string ComposeFile => "always-on";
+   public string ComposeFile { get; }
 
    /// <inheritdoc />
    public async Task<bool> EnsureCollectionAsync( string collection, int dimension, CancellationToken ct )

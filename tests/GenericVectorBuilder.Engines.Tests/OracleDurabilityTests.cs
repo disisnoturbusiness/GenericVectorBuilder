@@ -40,5 +40,30 @@ public sealed class OracleDurabilityTests
       Assert.Contains( "NOARCHIVELOG", text );
    }
 
+   /// <summary>
+   /// The durability text, which the report reads before any connection exists, carries the CPU cap
+   /// as the value measured on this box, and says it is not a live reading.
+   /// </summary>
+   [Fact]
+   public void Durability_StatesTheCpuCap()
+   {
+      string text = ( (IEngineDescription)new OracleSink() ).Durability;
+      Assert.Contains( "Oracle Free caps itself at 2 CPUs", text );
+      Assert.Contains( "cpu_count 2", text );
+      Assert.Contains( "measured 2026-10-04", text );
+   }
+
+   /// <summary>
+   /// The index description, which the report prints next to every Oracle timing, carries the CPU
+   /// cap before the sink has read the database.
+   /// </summary>
+   [Fact]
+   public void IndexDescription_StatesTheCpuCap()
+   {
+      string text = ( (IEngineDescription)new OracleSink() ).IndexDescription;
+      Assert.Contains( "Oracle Free caps itself at 2 CPUs", text );
+      Assert.Contains( "HNSW", text );
+   }
+
    #endregion Public Methods
 }

@@ -63,5 +63,77 @@ public class MachineControlLiveTests
       Assert.Contains( (string[])r.Log, l => l.Contains( "did not finish", StringComparison.Ordinal ) );
    }
 
+   /// <summary>
+   /// The busy-box rule on the real machine with a synthetic outside load (limit 2 CPUs above
+   /// which the shared box's background stays, windows 10 s and 5 s, deadline 20 s, so it runs
+   /// in about a minute and a half): a warm-up announced while 4
+   /// busy loops run is held until they end and the box is quiet, and only then does the pass
+   /// open (the check is at the warm-up line); a load that outlasts the deadline holds the
+   /// warm-up for the deadline and the pass is flagged busy. The governor is back afterwards and
+   /// no state file is left.
+   /// </summary>
+   [Fact]
+   public async Task BusyBox_HoldsTheWarmupOnTheRealMachine()
+   {
+      dynamic r = await MachineControlCompiler.CallAsync( "LiveBusyBoxAsync" );
+      _output.WriteLine( $"background {r.Background} CPUs, limit {r.Limit} CPUs" );
+      ( (string[])r.Passes ).ToList().ForEach( _output.WriteLine );
+      ( (string[])r.Log ).ToList().ForEach( _output.WriteLine );
+      string[] passes = r.Passes;
+      Assert.Equal( 2, passes.Length );
+      Assert.Contains( "before=warm-up", passes[0] );
+      Assert.Contains( "busy=False", passes[0] );
+      Assert.DoesNotContain( "waited=0.0 ", passes[0] );
+      Assert.Contains( "before=warm-up", passes[1] );
+      Assert.Contains( "busy=True", passes[1] );
+      Assert.Contains( (string[])r.Log, l => l.Contains( "box busy before live default@1 (warm-up)", StringComparison.Ordinal ) );
+      Assert.Contains( (string[])r.Log, l => l.Contains( "box quiet after", StringComparison.Ordinal ) );
+      Assert.Contains( (string[])r.Log, l => l.Contains( "BUSY BOX", StringComparison.Ordinal ) );
+      Assert.Equal( (string[])r.GovernorsBefore, (string[])r.GovernorsAfter );
+      Assert.False( (bool)r.StateFileLeft );
+   }
+
+   /// <summary>
+   /// The real host's answer about a start on the engine CPUs matches Docker: when it returns a
+   /// read-back line, the throwaway container has cpuset 2-3,6-7, every thread of its main process
+   /// is allowed only those CPUs and the process inside sees 4 CPUs (so an engine sizes its pools
+   /// for them); when it returns nothing (a compose runner that cannot create containers on a CPU
+   /// set), the container has no cpuset, so machine control must move it and say so. Either way
+   /// it is removed afterwards.
+   /// </summary>
+   [Fact]
+   public async Task EngineHost_ReadBackMatchesDocker()
+   {
+      string folder = Path.Combine( AppContext.BaseDirectory, "machine-control-live", Guid.NewGuid().ToString( "N" ) );
+      Directory.CreateDirectory( folder );
+      try
+      {
+         string[] r = await MachineControlCompiler.CallAsync( "LivePinnedStartAsync", folder );
+         _output.WriteLine( "host said: " + r[0] );
+         _output.WriteLine( "cpuset: '" + r[1] + "'" );
+         _output.WriteLine( "main process threads: " + r[2] );
+         _output.WriteLine( "nproc inside: " + r[3] );
+         _output.WriteLine( "left after down: " + r[4] );
+         if( r[0] == "none" )
+         {
+            Assert.Equal( string.Empty, r[1] );
+            Assert.DoesNotMatch( "^2-3,6-7 x[0-9]+$", r[2] );
+         }
+         else
+         {
+            Assert.Contains( "2-3,6-7", r[0] );
+            Assert.Equal( "2-3,6-7", r[1] );
+            Assert.Matches( "^2-3,6-7 x[0-9]+$", r[2] );
+            Assert.Equal( "4", r[3] );
+         }
+
+         Assert.Equal( "none", r[4] );
+      }
+      finally
+      {
+         Directory.Delete( folder, true );
+      }
+   }
+
    #endregion Public Methods
 }

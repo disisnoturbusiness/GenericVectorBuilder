@@ -6,9 +6,11 @@ namespace GenericVectorBuilder.Bench.Targets;
 /// host port it replaces kept beside it so a report shows what was avoided.
 /// Why this is recorded with every compose-hosted target: a connection through the published
 /// 127.0.0.1 port goes through the userland docker-proxy, an extra copy of every byte in user
-/// space that the review's probe found adds measurable latency and costs throughput. The
-/// always-on SQL Server and Qdrant have no such hop, so a number is only comparable with theirs
-/// when the address it was measured through is on record.
+/// space that the review's probe found adds measurable latency and costs throughput. Every
+/// built-in and engine container target now goes over the same kind of bridge route (SQL Server
+/// and Qdrant included, in the benchmark's own containers), so numbers are comparable only when
+/// the address each was measured through is on record; the native comparison targets
+/// (sql-native, qdrant-native) are reached over loopback and say so.
 /// </summary>
 /// <param name="Container">Container name, e.g. "gvb-mariadb".</param>
 /// <param name="ContainerId">First 12 characters of the container id.</param>

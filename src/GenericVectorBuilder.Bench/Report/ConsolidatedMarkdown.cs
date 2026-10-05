@@ -6,10 +6,14 @@ namespace GenericVectorBuilder.Bench.Report;
 
 /// <summary>
 /// Renders a <see cref="ConsolidatedReport"/> as consolidated.md: tables of numbers and
-/// recorded facts only, no prose and no causes.
-/// Why numbers only: the dead draft mixed measured gaps with guessed reasons; this file is the
-/// evidence a writeup cites, and any explanation belongs in the writeup, tagged as such.
+/// recorded facts, plus the fixed framing sentences and the per-engine notes (each tagged with
+/// where it came from); no causes.
+/// Why numbers and tagged facts only: the dead draft mixed measured gaps with guessed reasons; this
+/// file is the evidence a writeup cites, and any explanation belongs in the writeup, tagged as such.
 /// A field a run did not record prints as "missing"; a metric that does not apply prints "-".
+/// The speed ranking is printed as tie bands under a title that says it is request speed on a
+/// small collection (see <see cref="ConsolidateFraming"/>); no ranking table shows a strict rank
+/// across runs. The rank-per-run tables show each run's own order, with the band beside them.
 /// </summary>
 public static class ConsolidatedMarkdown
 {
@@ -34,6 +38,8 @@ public static class ConsolidatedMarkdown
       AppendSettings( md, report );
       AppendRuns( md, report );
       AppendTargets( md, report );
+      AppendRanking( md, report );
+      AppendEngineNotes( md, report );
       AppendSummary( md, report );
       AppendPerRun( md, report );
       AppendRanks( md, report );
@@ -65,6 +71,7 @@ public static class ConsolidatedMarkdown
          new[] { "runs used", report.Runs.Count.ToString( CultureInfo.InvariantCulture ) },
          new[] { "runs dropped", report.Dropped.Count.ToString( CultureInfo.InvariantCulture ) },
          new[] { "pipeline", s.Pipeline ?? MISSING },
+         new[] { "benchmark command (every run)", s.Command ?? MISSING },
          new[] { "host", s.Host ?? MISSING },
          new[] { "rows x dimension", $"{Int( s.Rows )} x {Int( s.Dimension )}" },
          new[] { "queries", $"{s.QueryKind ?? MISSING}, {Int( s.QueryCount )}" },
@@ -161,7 +168,9 @@ public static class ConsolidatedMarkdown
    }
 
    /// <summary>
-   /// Rank per run and median rank for latency and each QPS level.
+   /// Rank per run and, in place of a median rank, the tie band for latency and each QPS level.
+   /// Why the band and not the median rank: the median of three per-run ranks reads as a strict
+   /// rank, and targets whose ranges overlap cannot be ranked from these runs.
    /// </summary>
    /// <param name="md">Output.</param>
    /// <param name="report">The report.</param>
@@ -174,13 +183,13 @@ public static class ConsolidatedMarkdown
          md.AppendLine( $"## Rank per run: {title}" ).AppendLine();
          var header = new List<string> { "target" };
          header.AddRange( report.Runs.Select( r => r.Name ) );
-         header.Add( "median rank" );
+         header.Add( "band" );
          Table( md, header, report.TargetSummaries.Select( t =>
          {
             RankSpread? ranks = t.Ranks.TryGetValue( key, out RankSpread? r ) ? r : null;
             var cells = new List<string> { t.Name };
             cells.AddRange( report.Runs.Select( ( _, i ) => ranks != null && i < ranks.PerRun.Count ? Int( ranks.PerRun[i] ) : "-" ) );
-            cells.Add( Number( ranks?.Median, "0.#" ) );
+            cells.Add( BandOf( report, key, t.Name ) );
             return cells.ToArray();
          } ) );
       }
@@ -266,15 +275,119 @@ public static class ConsolidatedMarkdown
    private static void AppendFacts( StringBuilder md, ConsolidatedReport report )
    {
       md.AppendLine( "## Recorded per run: order, passes, index state, durability" ).AppendLine();
-      Table( md, new[] { "target", "run", "order", "passOrder", "warm-up errors", "errors", "afterLoad ready", "afterLoad indexed/total", "afterLoad detail", "afterSearch ready", "afterSearch indexed/total", "durability", "load indexNote", "settled", "mean ms" },
+      Table( md, new[] { "target", "run", "order", "passOrder", "warm-up errors", "errors", "afterLoad ready", "afterLoad indexed/total", "afterLoad detail", "afterSearch ready", "afterSearch indexed/total", "segments after load / after search", "durability", "load indexNote", "settled", "mean ms" },
          report.TargetSummaries.SelectMany( t => t.PerRun.Select( r => new[]
          {
             t.Name, r.Run, Int( r.OrderInRun ), r.PassOrder == null ? MISSING : string.Join( ", ", r.PassOrder ), Int( r.WarmupErrors ), Int( r.Errors ),
             Ready( r.AfterLoad ), Counts( r.AfterLoad ), r.AfterLoad == null ? MISSING : r.AfterLoad.Detail ?? MISSING,
-            Ready( r.AfterSearch ), Counts( r.AfterSearch ), r.Durability ?? MISSING, r.LoadIndexNote ?? "-",
+            Ready( r.AfterSearch ), Counts( r.AfterSearch ), Layouts( r ), r.Durability ?? MISSING, r.LoadIndexNote ?? "-",
             r.Settled.HasValue ? ( r.Settled.Value ? "yes" : "no" + ( r.SettleDetail == null ? string.Empty : ": " + r.SettleDetail ) ) : MISSING,
             r.MeanMs.HasValue ? $"{Number( r.MeanMs, MsFormat( r.MeanMs.Value ) )} ({r.MeanSource})" : "-",
          } ) ) );
+   }
+
+   /// <summary>
+   /// The speed ranking: a title that says what was ranked and on how big a collection, the one
+   /// line that says what the numbers do not measure, what a band is, then one table per metric
+   /// in band order. A table never shows a strict rank.
+   /// </summary>
+   /// <param name="md">Output.</param>
+   /// <param name="report">The report.</param>
+   private static void AppendRanking( StringBuilder md, ConsolidatedReport report )
+   {
+      int? rows = report.Settings.Rows;
+      md.AppendLine( $"## {ConsolidateFraming.Title( rows )}" ).AppendLine();
+      md.AppendLine( ConsolidateFraming.Line( rows ) ).AppendLine();
+      md.AppendLine( report.Runs.Count >= 2 ? ConsolidateFraming.BANDS_LINE : ConsolidateFraming.ONE_RUN_LINE ).AppendLine();
+      foreach( MetricBands metric in report.Bands )
+      {
+         md.AppendLine( $"### {metric.Title}" ).AppendLine();
+         string[] header = { metric.Banded ? "band" : "order in this run", "target", metric.Banded ? "median [min, max]" : "value", "runs", "engine notes" };
+         Table( md, header, metric.Entries.Select( e => RankingRow( report, metric, e ) ) );
+      }
+   }
+
+   /// <summary>
+   /// One row of a ranking table: band (or order in a one-run report), target, value, runs, note kinds.
+   /// </summary>
+   /// <param name="report">The report.</param>
+   /// <param name="metric">The metric's bands.</param>
+   /// <param name="entry">The target's place.</param>
+   /// <returns>The cells.</returns>
+   private static string[] RankingRow( ConsolidatedReport report, MetricBands metric, BandEntry entry )
+   {
+      bool higher = metric.HigherIsBetter;
+      string value = entry.Median.HasValue ? ( metric.Banded ? $"{Speed( entry.Median, higher )} [{Speed( entry.Min, higher )}, {Speed( entry.Max, higher )}]" : Speed( entry.Median, higher ) ) : "-";
+      return new[] { metric.Banded ? Int( entry.Band, "-" ) : Int( entry.OrderInBand, "-" ), entry.Target, value, entry.N.ToString( CultureInfo.InvariantCulture ), NoteKinds( report, entry.Target ) };
+   }
+
+   /// <summary>
+   /// A speed value: one decimal for QPS, the millisecond format for latency, "-" when missing.
+   /// </summary>
+   /// <param name="value">Value.</param>
+   /// <param name="higherIsBetter">True for QPS.</param>
+   /// <returns>Text.</returns>
+   private static string Speed( double? value, bool higherIsBetter )
+   {
+      return value.HasValue ? Number( value, higherIsBetter ? "0.0" : MsFormat( value.Value ) ) : "-";
+   }
+
+   /// <summary>
+   /// The per-engine notes: what a reader needs to know about an engine to read its speed, each
+   /// with where it came from, and the flags the engine carries (their evidence is under Flags).
+   /// </summary>
+   /// <param name="md">Output.</param>
+   /// <param name="report">The report.</param>
+   private static void AppendEngineNotes( StringBuilder md, ConsolidatedReport report )
+   {
+      md.AppendLine( "## Per-engine notes" ).AppendLine();
+      var rows = new List<string[]>();
+      foreach( TargetSummary t in report.TargetSummaries )
+      {
+         rows.AddRange( t.EngineNotes.Select( n => new[] { t.Name, n.Kind, n.Text, n.Source } ) );
+         string[] kinds = report.Flags.Where( f => f.Target == t.Name ).Select( f => f.Kind ).ToArray();
+         if( kinds.Length > 0 )
+         {
+            rows.Add( new[] { t.Name, "flags", string.Join( ", ", kinds ) + " (evidence under Flags)", ConsolidateEngineNotes.SOURCE_RESULTS } );
+         }
+      }
+
+      Table( md, new[] { "target", "kind", "note", "source" }, rows );
+   }
+
+   /// <summary>
+   /// The band of a target for a metric, "-" when the metric has no bands (one run) or no value.
+   /// </summary>
+   /// <param name="report">The report.</param>
+   /// <param name="metric">Metric key ("p50Ms", "qps@8").</param>
+   /// <param name="target">Target name.</param>
+   /// <returns>The band number as text, or "-".</returns>
+   private static string BandOf( ConsolidatedReport report, string metric, string target )
+   {
+      BandEntry? entry = report.Bands.FirstOrDefault( b => b.Metric == metric )?.Entries.FirstOrDefault( e => e.Target == target );
+      return Int( entry?.Band, "-" );
+   }
+
+   /// <summary>
+   /// The kinds of a target's engine notes, joined, or "-" when it has none.
+   /// </summary>
+   /// <param name="report">The report.</param>
+   /// <param name="target">Target name.</param>
+   /// <returns>E.g. "cpu-cap, exact-by-design".</returns>
+   private static string NoteKinds( ConsolidatedReport report, string target )
+   {
+      string[] kinds = report.TargetSummaries.FirstOrDefault( t => t.Name == target )?.EngineNotes.Select( n => n.Kind ).ToArray() ?? Array.Empty<string>();
+      return kinds.Length == 0 ? "-" : string.Join( ", ", kinds );
+   }
+
+   /// <summary>
+   /// The segment layouts a run reported for a target, "after load / after search", "-" for one not reported.
+   /// </summary>
+   /// <param name="facts">The target's facts in one run.</param>
+   /// <returns>Text such as "2 segments / 2 segments".</returns>
+   private static string Layouts( TargetRunFacts facts )
+   {
+      return facts.SegmentLayoutAfterLoad == null && facts.SegmentLayoutAfterSearch == null ? "-" : $"{facts.SegmentLayoutAfterLoad ?? "-"} / {facts.SegmentLayoutAfterSearch ?? "-"}";
    }
 
    /// <summary>
@@ -452,6 +565,17 @@ public static class ConsolidatedMarkdown
    private static string Int( int? value )
    {
       return value.HasValue ? value.Value.ToString( CultureInfo.InvariantCulture ) : MISSING;
+   }
+
+   /// <summary>
+   /// A whole number, or the given text when it is missing.
+   /// </summary>
+   /// <param name="value">Value.</param>
+   /// <param name="missing">Text for a missing value.</param>
+   /// <returns>Text.</returns>
+   private static string Int( int? value, string missing )
+   {
+      return value.HasValue ? value.Value.ToString( CultureInfo.InvariantCulture ) : missing;
    }
 
    /// <summary>

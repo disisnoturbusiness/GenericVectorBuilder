@@ -160,6 +160,44 @@ milvus_other_metric{query_type=""search""} 77
       Assert.Equal( "none", MilvusSearchLedger.Fingerprint( [] ) );
    }
 
+   /// <summary>
+   /// A segment of this collection compacted away since the start is a problem even when no search
+   /// was sent and the same segment text is passed: a compaction ran while the window was open.
+   /// </summary>
+   [Fact]
+   public void Evaluate_SegmentCompactedAwaySinceTheStart_IsAProblem()
+   {
+      MilvusLedgerStart start = new( new MilvusSearchCounters( 30, 0, 20, SegmentsCompactedAway: 3 ), 100, "seg1" );
+      MilvusLedgerReading reading = MilvusSearchLedger.Evaluate( start, new MilvusSearchCounters( 30, 0, 20, SegmentsCompactedAway: 4 ), 100, "seg1", "p" );
+      Assert.Contains( reading.Problems, p => p.Contains( "1 segment(s) of this collection were compacted away" ) );
+      Assert.Contains( "segments compacted away +1", reading.Detail );
+   }
+
+   /// <summary>
+   /// An unchanged compacted-away count is clean and the detail says so.
+   /// </summary>
+   [Fact]
+   public void Evaluate_NoCompactionSinceTheStart_IsClean()
+   {
+      MilvusLedgerStart start = new( new MilvusSearchCounters( 30, 0, 20, SegmentsCompactedAway: 3 ), 100, "seg1" );
+      MilvusLedgerReading reading = MilvusSearchLedger.Evaluate( start, new MilvusSearchCounters( 130, 0, 120, SegmentsCompactedAway: 3 ), 200, "seg1", "p" );
+      Assert.Empty( reading.Problems );
+      Assert.Contains( "segments compacted away +0", reading.Detail );
+   }
+
+   /// <summary>
+   /// The data coordinator forgets dropped segments after an hour, so the count can go down. That
+   /// is not a compaction and must not be a problem.
+   /// </summary>
+   [Fact]
+   public void Evaluate_CompactedAwayCountGoingDown_IsNotAProblem()
+   {
+      MilvusLedgerStart start = new( new MilvusSearchCounters( 30, 0, 20, SegmentsCompactedAway: 5 ), 100, "seg1" );
+      MilvusLedgerReading reading = MilvusSearchLedger.Evaluate( start, new MilvusSearchCounters( 30, 0, 20, SegmentsCompactedAway: 2 ), 100, "seg1", "p" );
+      Assert.Empty( reading.Problems );
+      Assert.Contains( "segments compacted away +0", reading.Detail );
+   }
+
    #endregion Public Methods
 
    #region Private Methods

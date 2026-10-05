@@ -111,6 +111,82 @@ public static class MeasurementScenarios
    }
 
    /// <summary>
+   /// The preparation and every timed pass of one target with short rehearsal, settle, trial and
+   /// extension times, on a sink whose latency script restarts when the settle begins: shows what
+   /// the settle check saw and did, the progress lines in order, the settle note TargetRunner
+   /// writes, and whether the consolidation's reader (TargetResult) reads that note as settled.
+   /// </summary>
+   /// <param name="script">Latency script of default searches.</param>
+   /// <param name="trialSeconds">Trial length.</param>
+   /// <param name="extensionMinimum">Shortest extension, seconds.</param>
+   /// <param name="extensionCap">Longest extension, seconds.</param>
+   /// <param name="settleCap">Cap of the first settle, seconds.</param>
+   /// <returns>What the check did.</returns>
+   public static async Task<CheckScenario> SettleCheckAsync( string script, double trialSeconds, double extensionMinimum, double extensionCap, double settleCap )
+   {
+      ( BenchOptions options, PipelineData data, QuerySet queries ) = Setup( new[] { "--seconds", "1", "--concurrency", "1", "--queries", "random:5", "--exact-seconds", "0" } );
+      var trace = new MeasureTrace();
+      var sink = new ScriptedSink( trace, script );
+      await sink.UpsertAsync( COLLECTION, data.Records( 0, data.Count ), CancellationToken.None );
+      var runner = new SearchRunner( data, queries, BruteForce.Compute( data, queries, options.Top ), options, 3 )
+      {
+         RehearsalTime = TimeSpan.FromSeconds( 0.2 ),
+         SettleCap = TimeSpan.FromSeconds( settleCap ),
+         TrialTime = TimeSpan.FromSeconds( trialSeconds ),
+         ExtensionMinimum = TimeSpan.FromSeconds( extensionMinimum ),
+         ExtensionCap = TimeSpan.FromSeconds( extensionCap ),
+      };
+      Action<string> log = line => Log( trace, sink, line );
+      Preparation p = await runner.PrepareAsync( Target( sink ), COLLECTION, log, CancellationToken.None );
+      SearchOutcome outcome = await runner.RunAsync( Target( sink ), COLLECTION, log, CancellationToken.None, p );
+      SettleCheck? c = p.Check;
+      string note = TargetRunner.DescribeSettle( p.Settle, c );
+      using var doc = System.Text.Json.JsonDocument.Parse( System.Text.Json.JsonSerializer.Serialize( new { name = "fake", notes = new[] { note } } ) );
+      TargetResult read = TargetResult.Parse( doc.RootElement );
+      return new CheckScenario( trace.Events().Where( e => e.StartsWith( "LOG ", StringComparison.Ordinal ) ).ToArray(), p.Settle!.Settled, SearchRunner.SettledP50( p.Settle.WindowP50s ),
+         c?.Trial.P50, c?.Trial.Agrees ?? false, c?.Extension != null, c?.Extension?.Seconds ?? 0, c?.Retrial?.P50, c?.Retrial?.Agrees ?? false, c?.Confirmed ?? false,
+         note, read.Settled, outcome.PassOrder.ToArray(), p.Searches, c?.Searches ?? 0 );
+   }
+
+   /// <summary>
+   /// The settle note for hand-made settle checks, each with how the consolidation's reader
+   /// (TargetResult) reads it: "agreed", "extended-ok", "extended-bad", "gave-up", "unchecked".
+   /// </summary>
+   /// <param name="mode">Which case.</param>
+   /// <returns>The note and whether the reader calls it settled (null when it says nothing).</returns>
+   public static NoteScenario SettleNote( string mode )
+   {
+      var settled = new SettleResult( true, 0.4, 300, 0, null, new[] { 2.91, 2.92, 2.82 }, null );
+      var unsettled = new SettleResult( false, 120, 9000, 20, "x", new[] { 1.0, 4.0, 1.0 }, "20 searches in a row failed", true );
+      var trialBad = new TrialRecord( 2.91, 1.34, 1490, 0, 2.0 );
+      var trialOk = new TrialRecord( 1.33, 1.34, 1500, 0, 2.0 );
+      var extension = new SettleResult( true, 30.1, 22000, 0, null, new[] { 1.33, 1.32, 1.34 }, null );
+      ( SettleResult s, SettleCheck? c ) = mode switch
+      {
+         "agreed" => ( settled, new SettleCheck( trialOk with { SettledP50 = 1.35 }, null, null, true ) ),
+         "extended-ok" => ( settled, new SettleCheck( trialBad, extension, trialOk, true ) ),
+         "extended-bad" => ( settled, new SettleCheck( trialBad, extension, trialBad with { SettledP50 = 1.33, P50 = 0.9 }, false ) ),
+         "gave-up" => ( unsettled, new SettleCheck( trialBad, null, null, false ) ),
+         _ => ( settled, (SettleCheck?)null ),
+      };
+      string note = TargetRunner.DescribeSettle( s, c );
+      using var doc = System.Text.Json.JsonDocument.Parse( System.Text.Json.JsonSerializer.Serialize( new { name = "fake", notes = new[] { note } } ) );
+      return new NoteScenario( note, TargetResult.Parse( doc.RootElement ).Settled );
+   }
+
+   /// <summary>
+   /// <see cref="SearchRunner.SettledP50"/> and <see cref="SearchRunner.TrialAgrees"/> on given numbers.
+   /// </summary>
+   /// <param name="p50s">Window p50s.</param>
+   /// <param name="settled">Settled p50 for the agreement check.</param>
+   /// <param name="trial">Trial p50 for the agreement check.</param>
+   /// <returns>The settled p50 (NaN for none) and whether they agree.</returns>
+   public static double[] TrialRules( double[] p50s, double settled, double trial )
+   {
+      return new[] { SearchRunner.SettledP50( p50s ) ?? double.NaN, SearchRunner.TrialAgrees( settled, trial ) ? 1 : 0 };
+   }
+
+   /// <summary>
    /// The flags <see cref="SearchRunner.ShapeFlags"/> raises for a set of latencies.
    /// </summary>
    /// <param name="latencies">Latencies, ms.</param>
@@ -130,11 +206,12 @@ public static class MeasurementScenarios
       return SearchRunner.IsSettled( p50s );
    }
 
-   /// <summary>The benchmark's default rehearsal length and settle cap, in seconds.</summary>
-   /// <returns>Rehearsal seconds and cap seconds.</returns>
+   /// <summary>The benchmark's default rehearsal length, settle cap, trial length and tolerance, and extension minimum and cap.</summary>
+   /// <returns>Rehearsal s, cap s, trial s, tolerance, extension minimum s, extension cap s.</returns>
    public static double[] Defaults()
    {
-      return new[] { SearchRunner.REHEARSAL_TIME.TotalSeconds, SearchRunner.SETTLE_CAP.TotalSeconds };
+      return new[] { SearchRunner.REHEARSAL_TIME.TotalSeconds, SearchRunner.SETTLE_CAP.TotalSeconds, SearchRunner.TRIAL_TIME.TotalSeconds, SearchRunner.TRIAL_TOLERANCE,
+         SearchRunner.EXTENSION_MINIMUM.TotalSeconds, SearchRunner.EXTENSION_CAP.TotalSeconds };
    }
 
    #endregion Public Methods
@@ -142,8 +219,9 @@ public static class MeasurementScenarios
    #region Private Methods
 
    /// <summary>
-   /// Records a progress line, and restarts the sink's latency script when the settle begins,
-   /// so a script like "decay" plays out inside the settle and not inside the rehearsal.
+   /// Records a progress line, restarts the sink's latency script when the settle begins, so a
+   /// script like "decay" plays out inside the settle and not inside the rehearsal, and drops a
+   /// "drop" script to its low latency as soon as the settle reports that it settled.
    /// </summary>
    /// <param name="trace">Trace.</param>
    /// <param name="sink">The sink.</param>
@@ -154,6 +232,11 @@ public static class MeasurementScenarios
       if( line.Contains( ": settling,", StringComparison.Ordinal ) )
       {
          sink.Restart();
+      }
+
+      if( line.Contains( ": settled after", StringComparison.Ordinal ) )
+      {
+         sink.Drop();
       }
    }
 
@@ -244,6 +327,30 @@ public sealed record PassScenario( string[] Events, string[] PassOrder, string[]
 public sealed record PrepareScenario( string[] Events, string[] Rehearsals, bool Settled, double SettleSeconds, int SettleSearches, double[] WindowP50s,
    string? StoppedBecause, string SettleNote, string? Error );
 
+/// <summary>What <see cref="MeasurementScenarios.SettleCheckAsync"/> saw.</summary>
+/// <param name="Log">Progress lines in order.</param>
+/// <param name="FirstSettled">The first settle settled.</param>
+/// <param name="SettledP50">Its settled p50.</param>
+/// <param name="TrialP50">The trial's p50.</param>
+/// <param name="TrialAgreed">The trial agreed.</param>
+/// <param name="Extended">The settle was extended.</param>
+/// <param name="ExtensionSeconds">How long the extension ran.</param>
+/// <param name="RetrialP50">The second trial's p50.</param>
+/// <param name="RetrialAgreed">The second trial agreed.</param>
+/// <param name="Confirmed">The check's verdict.</param>
+/// <param name="Note">The settle note.</param>
+/// <param name="ReadSettled">How the consolidation's reader reads the note.</param>
+/// <param name="PassOrder">Passes as run.</param>
+/// <param name="PreparationSearches">Untimed searches of the preparation, check included.</param>
+/// <param name="CheckSearches">Searches of the check alone.</param>
+public sealed record CheckScenario( string[] Log, bool FirstSettled, double? SettledP50, double? TrialP50, bool TrialAgreed, bool Extended, double ExtensionSeconds,
+   double? RetrialP50, bool RetrialAgreed, bool Confirmed, string Note, bool? ReadSettled, string[] PassOrder, int PreparationSearches, int CheckSearches );
+
+/// <summary>A settle note and how the consolidation reads it.</summary>
+/// <param name="Note">The note.</param>
+/// <param name="ReadSettled">Settled as TargetResult reads it.</param>
+public sealed record NoteScenario( string Note, bool? ReadSettled );
+
 /// <summary>What <see cref="MeasurementScenarios.MeasureAsync"/> saw.</summary>
 /// <param name="Events">Trace.</param>
 /// <param name="Notes">Target notes.</param>
@@ -298,7 +405,11 @@ public sealed class MeasureTrace
 /// "fixed:MS" waits MS every time; "bimodal:MS" answers 2 of 5 searches at once and waits MS for
 /// the rest; "stall:MS:AT:STALLMS" waits MS except search number AT, which waits STALLMS;
 /// "decay" waits 6, 5, 4 and 3 ms for 150 searches each and 2 ms after that; "alternate" waits
-/// 1 ms and 4 ms in turns of 100 searches; "fail" throws every time.
+/// 1 ms and 4 ms in turns of 100 searches;
+/// "drop:HIGH:LOW" waits HIGH ms until <see cref="ScriptedSink.Drop"/> and LOW after (an engine
+/// that is still getting faster after it "settled"); "climb"
+/// waits 1 ms more every 100 searches (it never settles);
+/// "fail" throws every time.
 /// </summary>
 public class ScriptedSink : ISink
 {
@@ -307,6 +418,7 @@ public class ScriptedSink : ISink
    private readonly Dictionary<Guid, float[]> _rows = new();
    private readonly string _script;
    private int _searches = -1;
+   private volatile bool _dropped;
 
    #endregion Data Members
 
@@ -404,7 +516,8 @@ public class ScriptedSink : ISink
    public async Task<IReadOnlyList<SearchHit>> SearchAsync( string collection, float[] vector, int top, CancellationToken ct )
    {
       Trace.Add( "S" );
-      await WaitAsync( _script, Interlocked.Increment( ref _searches ), ct );
+      string script = _dropped && _script.StartsWith( "drop:", StringComparison.Ordinal ) ? "fixed:" + _script.Split( ':' )[2] : _script;
+      await WaitAsync( script, Interlocked.Increment( ref _searches ), ct );
       return Nearest( vector, top );
    }
 
@@ -414,6 +527,14 @@ public class ScriptedSink : ISink
    public void Restart()
    {
       Interlocked.Exchange( ref _searches, -1 );
+   }
+
+   /// <summary>
+   /// Switches a "drop" script to its low latency from now on.
+   /// </summary>
+   public void Drop()
+   {
+      _dropped = true;
    }
 
    /// <summary>
@@ -453,6 +574,8 @@ public class ScriptedSink : ISink
          "stall" => n == int.Parse( parts[2] ) ? double.Parse( parts[3] ) : double.Parse( parts[1] ),
          "decay" => n < 600 ? 6 - n / 150 : 2,
          "alternate" => n / 100 % 2 == 0 ? 1 : 4,
+         "drop" => double.Parse( parts[1] ),
+         "climb" => 1 + n / 100,
          "fail" => throw new InvalidOperationException( "scripted failure" ),
          _ => throw new ArgumentException( $"unknown script {script}" ),
       };
@@ -553,9 +676,10 @@ public sealed class NoHost : IEngineHost
    /// Never called for an embedded target.
    /// </summary>
    /// <param name="composePath">Compose file.</param>
+   /// <param name="cpuset">CPU set.</param>
    /// <param name="ct">Cancellation.</param>
    /// <returns>Never returns.</returns>
-   public Task UpAsync( string composePath, CancellationToken ct )
+   public Task<string?> UpAsync( string composePath, string? cpuset, CancellationToken ct )
    {
       throw new InvalidOperationException( "embedded target reached the engine host" );
    }

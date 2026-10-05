@@ -13,6 +13,9 @@ namespace GenericVectorBuilder.Web.BenchPages;
 /// to any width, 375 px phones included, while the names stay readable instead of shrinking
 /// with a viewBox. Names sit above their bar for the same reason: a left label column would eat
 /// a phone screen. Colors come from style.css tokens, so light and dark both work.
+/// When the numbers are medians of several runs each name carries its tie band ("band 2"):
+/// engines whose min to max lines overlap share a band, and the bars are in median order, which
+/// is not a ranking inside a band.
 /// </summary>
 public static class BenchChart
 {
@@ -67,7 +70,7 @@ public static class BenchChart
 
    /// <summary>
    /// The hover text for one engine's row, e.g. "MariaDB: 4,558 searches/s with 8 at once,
-   /// median of 3 runs (4,132 to 4,559)".
+   /// median (4,132 to 4,559 across runs), band 1".
    /// </summary>
    /// <param name="row">Engine.</param>
    /// <param name="ranges">True when the numbers are medians with min and max.</param>
@@ -78,6 +81,11 @@ public static class BenchChart
       if( ranges && row.Qps8Min != null && row.Qps8Max != null )
       {
          text += $", median ({Count( row.Qps8Min.Value )} to {Count( row.Qps8Max.Value )} across runs)";
+      }
+
+      if( ranges && row.Band != null )
+      {
+         text += $", band {row.Band}";
       }
 
       return row.InMemory ? text + ". Holds everything in memory." : text;
@@ -114,7 +122,8 @@ public static class BenchChart
       int barMid = y + BAR_TOP + BAR_HEIGHT / 2;
       svg.Append( $"<g class=\"bc-row\" data-engine=\"{Enc( row.Key )}\"><title>{Enc( Tooltip( row, ranges ) )}</title>" );
       svg.Append( $"<text class=\"bc-name\" x=\"0\" y=\"{y + NAME_BASELINE}\">{Enc( row.Name )}" );
-      svg.Append( row.InMemory ? "<tspan class=\"bc-note\" dx=\"8\">in memory</tspan></text>" : "</text>" );
+      svg.Append( row.InMemory ? "<tspan class=\"bc-note\" dx=\"8\">in memory</tspan>" : string.Empty );
+      svg.Append( ranges && row.Band != null ? $"<tspan class=\"bc-note\" dx=\"8\">band {row.Band}</tspan></text>" : "</text>" );
       svg.Append( $"<rect class=\"{bar}\" x=\"0\" y=\"{y + BAR_TOP}\" width=\"{Pct( width )}\" height=\"{BAR_HEIGHT}\" rx=\"{CORNER}\"/>" );
       if( width >= MIN_SQUARE_PERCENT )
       {
@@ -142,7 +151,8 @@ public static class BenchChart
    private static string AriaLabel( BenchSummary summary )
    {
       string what = summary.HasRanges ? $"median of {summary.Runs} runs" : "one run";
-      return $"Bar chart of searches per second with 8 at once for {summary.Ranked.Count} engines, {what}, fastest first. The same numbers are in the table below.";
+      string bands = summary.HasRanges ? " Engines with the same band number have overlapping ranges, so their order is not a ranking." : string.Empty;
+      return $"Bar chart of searches per second with 8 at once for {summary.Ranked.Count} engines, {what}, in median order.{bands} The same numbers are in the table below.";
    }
 
    /// <summary>

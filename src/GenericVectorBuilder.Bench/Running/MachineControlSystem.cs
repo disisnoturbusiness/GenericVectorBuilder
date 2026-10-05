@@ -31,6 +31,13 @@ public interface IMachineSystem
    IReadOnlyList<string> ListDirectory( string path );
 
    /// <summary>
+   /// Where a symbolic link points, as the link holds it (for /proc/PID/fd/N, "socket:[INODE]").
+   /// </summary>
+   /// <param name="path">Absolute path of the link.</param>
+   /// <returns>The target text, or null when it is not a link or cannot be read.</returns>
+   string? ReadLink( string path );
+
+   /// <summary>
    /// Runs a program with a time limit.
    /// </summary>
    /// <param name="program">Program.</param>
@@ -112,6 +119,24 @@ public sealed class LinuxMachineSystem : IMachineSystem
       catch( Exception ex ) when( ex is IOException or UnauthorizedAccessException )
       {
          return Array.Empty<string>();
+      }
+   }
+
+   /// <summary>
+   /// A link's target text; null when missing, not a link, or unreadable (a descriptor can close
+   /// between list and read).
+   /// </summary>
+   /// <param name="path">Absolute path.</param>
+   /// <returns>Target text or null.</returns>
+   public string? ReadLink( string path )
+   {
+      try
+      {
+         return new FileInfo( path ).LinkTarget;
+      }
+      catch( Exception ex ) when( ex is IOException or UnauthorizedAccessException )
+      {
+         return null;
       }
    }
 
@@ -247,6 +272,20 @@ public static class ProcessInfo
          .Select( e => int.TryParse( e, NumberStyles.None, CultureInfo.InvariantCulture, out int pid ) ? pid : -1 )
          .Where( pid => pid > 0 && Name( system, pid ) == name )
          .OrderBy( pid => pid ).ToList();
+   }
+
+   /// <summary>
+   /// Like <see cref="FindByName"/>, leaving out processes inside a container (their cgroup runs
+   /// through a Docker or containerd scope). Why: the benchmark's own SQL Server and Qdrant
+   /// containers run processes named "sqlservr" and "qdrant" beside the native services, and the
+   /// native comparison targets must pin and read only the native ones.
+   /// </summary>
+   /// <param name="system">The machine.</param>
+   /// <param name="name">Command name.</param>
+   /// <returns>Ids, ascending.</returns>
+   public static IReadOnlyList<int> FindNativeByName( IMachineSystem system, string name )
+   {
+      return FindByName( system, name ).Where( pid => system.ReadFile( $"/proc/{pid}/cgroup" ) is not string cgroup || !HostProcess.IsContainer( cgroup ) ).ToList();
    }
 
    /// <summary>

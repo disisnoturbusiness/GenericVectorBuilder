@@ -71,7 +71,53 @@ public static class MachineRestorer
          await AttemptAsync( problems, log, $"{pin.Name} (pid {pin.Pid}) affinity", () => RestoreProcessAsync( system, pin, ct ), () => keeper.Record( s => s.Processes.Remove( pin ) ) );
       }
 
+      foreach( PinnedStart start in keeper.Read( s => s.PinnedStarts.Where( p => target == null || p.Target == target ).ToList() ) )
+      {
+         await AttemptAsync( problems, log, $"containers of {Path.GetFileName( start.ComposePath )} created on CPUs {start.Cpuset}", () => RestorePinnedStartAsync( system, start, ct ), () => keeper.Record( s => s.PinnedStarts.Remove( start ) ) );
+      }
+
       return problems;
+   }
+
+   /// <summary>
+   /// Gives every container of a compose file the run started pinned, that still exists and is
+   /// still on exactly the recorded CPUs, every online CPU back. After the run's own "compose
+   /// down" nothing is left and nothing is sent. A container on other CPUs was changed by
+   /// someone else since, and is left alone. "--orphans=false" keeps the listing to this file's
+   /// own services (four engine files share one compose project).
+   /// </summary>
+   /// <param name="system">The machine.</param>
+   /// <param name="start">The record.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>What was done.</returns>
+   /// <exception cref="InvalidOperationException">Docker could not list or change the containers.</exception>
+   public static async Task<string> RestorePinnedStartAsync( IMachineSystem system, PinnedStart start, CancellationToken ct )
+   {
+      string file = Path.GetFileName( start.ComposePath );
+      ShellResult ps = await ProcessInfo.SudoAsync( system, new[] { "docker", "compose", "-f", start.ComposePath, "ps", "-a", "-q", "--orphans=false" }, ct );
+      ProcessInfo.Require( ps, $"list the containers of {file}" );
+      var changed = new List<string>();
+      foreach( string id in ps.Output.Split( '\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries ) )
+      {
+         ShellResult inspect = await ProcessInfo.SudoAsync( system, new[] { "docker", "inspect", "-f", "{{.HostConfig.CpusetCpus}}", id }, ct );
+         if( IsGone( inspect ) || ( inspect.ExitCode == 0 && ( inspect.Output.Trim().Length == 0 || !CpuList.Same( inspect.Output.Trim(), start.Cpuset ) ) ) )
+         {
+            continue;
+         }
+
+         ProcessInfo.Require( inspect, $"read the cpuset of container {id}" );
+         string all = OnlineCpus( system );
+         ShellResult update = await ProcessInfo.SudoAsync( system, new[] { "docker", "update", "--cpuset-cpus", all, id }, ct );
+         if( !IsGone( update ) )
+         {
+            ProcessInfo.Require( update, $"give container {id} every CPU ({all}) back" );
+            changed.Add( id );
+         }
+      }
+
+      return changed.Count == 0
+         ? $"no container of {file} is left on CPUs {start.Cpuset}; nothing to put back"
+         : $"containers {string.Join( ", ", changed )} of {file} were still on CPUs {start.Cpuset} from their pinned start; given every CPU ({OnlineCpus( system )}) back";
    }
 
    /// <summary>

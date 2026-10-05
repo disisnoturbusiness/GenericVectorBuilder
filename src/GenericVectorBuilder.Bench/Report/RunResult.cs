@@ -1,4 +1,5 @@
 using System.Text.Json;
+using GenericVectorBuilder.Bench.Stats;
 
 namespace GenericVectorBuilder.Bench.Report;
 
@@ -25,6 +26,9 @@ public sealed class RunResult
 
    /// <summary>The exact command line of the run.</summary>
    public string? CommandLine { get; init; }
+
+   /// <summary>The benchmark command the run was made with ("run-all", "bench" or "replicate"); null when the run did not record it. Why: a bench run searches a copy an earlier replicate loaded, a run-all loads its own, and the two end with different segment layouts.</summary>
+   public string? Command { get; init; }
 
    /// <summary>Source pipeline.</summary>
    public string? Pipeline { get; init; }
@@ -116,6 +120,7 @@ public sealed class RunResult
          Folder = folder,
          StartedUtc = ResultJson.Text( root, "startedUtc" ),
          CommandLine = commandLine,
+         Command = ResultJson.Text( root, "command" ),
          Pipeline = ResultJson.Text( root, "pipeline" ),
          Host = machine is JsonElement m ? ResultJson.Text( m, "host" ) : null,
          LoadAverage = machine is JsonElement l ? ResultJson.Text( l, "loadAverage" ) : null,
@@ -157,6 +162,7 @@ public sealed class TargetResult
 
    private static readonly string[] SETTING_NAMES = { "searchSettings", "searchSetting", "searchParams", "searchEffort", "effort", "settings" };
    private static readonly string[] SETTLED_NAMES = { "settled", "isSettled", "indexSettled" };
+   private static readonly string[] CPU_CAP_NAMES = { "cpuCap", "cpuLimit", "engineCpuCap" };
 
    #endregion Data Members
 
@@ -247,6 +253,9 @@ public sealed class TargetResult
    /// <summary>Mean latency of one search at a time, ms, as recorded; null when not recorded (the consolidator then derives it from QPS at one searcher).</summary>
    public double? MeanMs { get; init; }
 
+   /// <summary>A CPU limit the engine puts on itself (e.g. "cpu_count 2"), as the run recorded it on the target; null when not recorded.</summary>
+   public string? CpuCap { get; init; }
+
    /// <summary>
    /// Reads one target object.
    /// Why passOrder and warmupErrors are also looked for inside "search": the contract puts them
@@ -289,12 +298,23 @@ public sealed class TargetResult
          SettleDetail = ReadSettleDetail( t, search ) ?? notedDetail,
          PairHint = PairHintValue.Parse( ResultJson.Child( t, "pairHint" ) ),
          MeanMs = Search( search, "meanMs" ) ?? Search( search, "latencyMeanMs" ),
+         CpuCap = CpuCapText( t ),
       };
    }
 
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// The engine's own CPU limit as text, from the accepted spellings on the target object.
+   /// </summary>
+   /// <param name="target">The target object.</param>
+   /// <returns>The text, or null when none is recorded.</returns>
+   private static string? CpuCapText( JsonElement target )
+   {
+      return CPU_CAP_NAMES.Select( name => ResultJson.Child( target, name ) is JsonElement found ? RunConditions.AsText( found ) : null ).FirstOrDefault( text => text != null );
+   }
 
    /// <summary>
    /// The search-effort settings as sorted text, looked for on the target and in its search section.
@@ -421,7 +441,8 @@ public sealed class TargetResult
 /// <param name="IndexedVectors">Vectors covered by the index, when the engine said.</param>
 /// <param name="TotalVectors">Vectors stored, when the engine said.</param>
 /// <param name="Detail">The engine's evidence text.</param>
-public sealed record IndexStateValue( bool? Ready, long? IndexedVectors, long? TotalVectors, string? Detail )
+/// <param name="Layout">The segment layout the engine reported ("2 segments"), or null when it reported none.</param>
+public sealed record IndexStateValue( bool? Ready, long? IndexedVectors, long? TotalVectors, string? Detail, string? Layout = null )
 {
    #region Public Methods
 
@@ -437,7 +458,8 @@ public sealed record IndexStateValue( bool? Ready, long? IndexedVectors, long? T
          return null;
       }
 
-      return new IndexStateValue( ResultJson.Bool( e, "ready" ), ResultJson.Long( e, "indexedVectors" ), ResultJson.Long( e, "totalVectors" ), ResultJson.Text( e, "detail" ) );
+      string? detail = ResultJson.Text( e, "detail" );
+      return new IndexStateValue( ResultJson.Bool( e, "ready" ), ResultJson.Long( e, "indexedVectors" ), ResultJson.Long( e, "totalVectors" ), detail, SegmentLayout.Read( e, detail ) );
    }
 
    #endregion Public Methods

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace GenericVectorBuilder.Web.BenchPages;
 
@@ -10,6 +11,10 @@ namespace GenericVectorBuilder.Web.BenchPages;
 /// Why: the full report is a wide table plus a page of per-engine detail that nobody reads, so
 /// the answer has to be readable in about ten seconds before any of that starts.
 /// Every piece of data is HTML-escaped; only the fixed text in this class is trusted markup.
+/// The ranking is titled as request speed on a small collection and put in tie bands instead of
+/// strict ranks: engines whose min to max ranges over the runs overlap share a band, because at
+/// 524 vectors the numbers measure the cost of each request and engines a few percent apart swap
+/// places from run to run.
 /// </summary>
 public static class BenchSummaryHtml
 {
@@ -20,6 +25,33 @@ public static class BenchSummaryHtml
 
    /// <summary>What the published medians were measured on, from that folder's consolidated.md.</summary>
    public const string PUBLISHED_DATA = "Data: eShopOnWeb, 254 C# files cut into 524 chunks, 1024-dimension vectors, 20 labelled questions, top 10.";
+
+   /// <summary>Largest collection, in vectors, that is called small (same value as the Bench tool's ConsolidateFraming).</summary>
+   public const int SMALL_COLLECTION_MAX_ROWS = 10000;
+
+   /// <summary>Title for a small collection; {0} is the vector count (same text as the Bench tool's ConsolidateFraming).</summary>
+   public const string TITLE_SMALL = "Request speed on a small collection ({0} vectors)";
+
+   /// <summary>Title for a larger collection; {0} is the vector count.</summary>
+   public const string TITLE_LARGE = "Request speed at {0} vectors";
+
+   /// <summary>Title when the results did not record the collection size.</summary>
+   public const string TITLE_UNKNOWN = "Request speed (collection size not recorded)";
+
+   /// <summary>The one line under a small-collection title.</summary>
+   public const string LINE_SMALL = "At this size the numbers measure per-request cost, not index scaling.";
+
+   /// <summary>The one line under a larger-collection title; {0} is the vector count.</summary>
+   public const string LINE_LARGE = "Measured at {0} vectors; the order applies to this size only.";
+
+   /// <summary>The one line when the collection size is unknown.</summary>
+   public const string LINE_UNKNOWN = "The collection size was not recorded in these results.";
+
+   /// <summary>What a band is, printed under the table when the numbers are medians of several runs.</summary>
+   public const string BANDS_LINE = "Engines in different bands never overlap: every run of an engine in a faster band beat every run of an engine in a slower band. Engines in one band are linked by overlapping slowest-to-fastest ranges, so these runs do not separate them cleanly. Inside a band they are listed by median, and that order is not a ranking.";
+
+   /// <summary>Printed under the table of a single run, which has no spread and so no bands.</summary>
+   public const string ONE_RUN_LINE = "One run: no spread is known, so no band can be drawn. The order shows this run only.";
 
    /// <summary>The known problems with the published runs, one plain sentence each.</summary>
    public static readonly IReadOnlyList<string> CAVEATS = new[]
@@ -35,6 +67,8 @@ public static class BenchSummaryHtml
    };
 
    /// <summary>Inline style of a flag marker (the page's stylesheet is shared and not owned here); colors are its tokens, so light and dark both work.</summary>
+   private static readonly Regex ROWS_IN_TEXT = new( @"(\d[\d,]*)\s+(?:chunks|vectors|rows)\b", RegexOptions.Compiled );
+
    private const string MARK_STYLE = "display:inline-block;margin-left:4px;padding:0 5px;border:1px solid var(--warn);border-radius:8px;color:var(--warn);font-size:11px;font-weight:700;line-height:16px;cursor:help;text-decoration:none;vertical-align:1px";
 
    #endregion Data Members
@@ -42,8 +76,9 @@ public static class BenchSummaryHtml
    #region Public Methods
 
    /// <summary>
-   /// The one-sentence headline: the leader and its number, plus a warning when the leader did
-   /// not return the same answers as exact search.
+   /// The one-sentence headline. A fastest band of one engine names it and its number; a fastest
+   /// band of several names them all and says they were fastest together, with each one's median.
+   /// A warning is added for any of them that did not return the same answers as exact search.
    /// </summary>
    /// <param name="summary">Ranked engines.</param>
    /// <returns>Plain text, not yet escaped.</returns>
@@ -54,7 +89,13 @@ public static class BenchSummaryHtml
          return "No engine finished a search.";
       }
 
-      BenchEngineRow leader = summary.Ranked[0];
+      List<BenchEngineRow> top = summary.HasRanges ? summary.Ranked.Where( r => r.Band == summary.Ranked[0].Band ).ToList() : new List<BenchEngineRow> { summary.Ranked[0] };
+      if( top.Count > 1 )
+      {
+         return TiedHeadline( summary, top );
+      }
+
+      BenchEngineRow leader = top[0];
       string where = summary.HasRanges ? string.Empty : " in this run";
       string text = $"{leader.Name} was fastest{where}: {BenchChart.Count( leader.Qps8 )} searches per second with 8 at once";
       if( summary.HasRanges )
@@ -71,8 +112,41 @@ public static class BenchSummaryHtml
    }
 
    /// <summary>
-   /// The whole block: headline, a "not final" line, an optional data line, the chart with its
-   /// caption, and the compact table.
+   /// The title of the ranking: request speed on a small collection, with the vector count; for a
+   /// larger collection the count only; for an unknown size, that it was not recorded.
+   /// </summary>
+   /// <param name="rows">Vectors in the collection, or null when not recorded.</param>
+   /// <returns>Plain text, not yet escaped.</returns>
+   public static string FramingTitle( int? rows )
+   {
+      if( rows is not > 0 )
+      {
+         return TITLE_UNKNOWN;
+      }
+
+      return string.Format( CultureInfo.InvariantCulture, rows.Value <= SMALL_COLLECTION_MAX_ROWS ? TITLE_SMALL : TITLE_LARGE, rows.Value.ToString( "N0", CultureInfo.InvariantCulture ) );
+   }
+
+   /// <summary>
+   /// The one line under the title: what the numbers measure at this size.
+   /// </summary>
+   /// <param name="rows">Vectors in the collection, or null when not recorded.</param>
+   /// <returns>Plain text, not yet escaped.</returns>
+   public static string FramingLine( int? rows )
+   {
+      if( rows is not > 0 )
+      {
+         return LINE_UNKNOWN;
+      }
+
+      return rows.Value <= SMALL_COLLECTION_MAX_ROWS ? LINE_SMALL : string.Format( CultureInfo.InvariantCulture, LINE_LARGE, rows.Value.ToString( "N0", CultureInfo.InvariantCulture ) );
+   }
+
+   /// <summary>
+   /// The whole block: the title that says what is ranked and on how big a collection, the one
+   /// line about what the numbers measure at this size, the headline, a "not final" line, an
+   /// optional data line, the machine conditions, the chart with its caption, the compact table,
+   /// what a band is, the notes on individual engines and the legend of the warning markers.
    /// </summary>
    /// <param name="summary">Ranked engines.</param>
    /// <param name="noteHtml">Trusted fixed markup for the "not final" line (never data).</param>
@@ -80,7 +154,9 @@ public static class BenchSummaryHtml
    /// <returns>HTML fragment.</returns>
    public static string Block( BenchSummary summary, string noteHtml, string? dataLine )
    {
+      int? rows = summary.Rows ?? RowsIn( dataLine );
       var html = new StringBuilder( "<section class=\"bench-summary\">" );
+      html.Append( $"<h2 class=\"bench-title\">{Enc( FramingTitle( rows ) )}</h2><p class=\"bench-framing muted\">{Enc( FramingLine( rows ) )}</p>" );
       html.Append( $"<p class=\"bench-lead\">{Enc( Headline( summary ) )}</p>" );
       html.Append( $"<p class=\"bench-sub\"><span class=\"bench-flag\">Not final</span> {noteHtml}</p>" );
       if( !string.IsNullOrWhiteSpace( dataLine ) )
@@ -96,19 +172,21 @@ public static class BenchSummaryHtml
          html.Append( $"<figure class=\"bench-figure\">{svg}<figcaption>{Enc( Caption( summary ) )}</figcaption></figure>" );
       }
 
-      html.Append( Table( summary ) ).Append( Legend( summary ) ).Append( "</section>" );
+      html.Append( Table( summary ) ).Append( BandsNote( summary ) ).Append( EngineNotes( summary ) ).Append( Legend( summary ) ).Append( "</section>" );
       return html.ToString();
    }
 
    /// <summary>
-   /// The compact table: rank, engine, searches per second with 8 at once, single search p50,
-   /// and whether the answers matched exact search. Same order as the chart.
+   /// The compact table: band (or the order in this run when only one run was used), engine,
+   /// searches per second with 8 at once, single search p50, and whether the answers matched exact
+   /// search. Same order as the chart. A band is shared by engines whose ranges overlap, so the
+   /// first column is never a strict rank when there are several runs.
    /// </summary>
    /// <param name="summary">Ranked engines.</param>
    /// <returns>HTML fragment.</returns>
    public static string Table( BenchSummary summary )
    {
-      var html = new StringBuilder( "<div class=\"preview\"><table class=\"bench-table\"><thead><tr><th class=\"n\">Rank</th><th>Engine</th>" );
+      var html = new StringBuilder( $"<div class=\"preview\"><table class=\"bench-table\"><thead><tr><th class=\"n\">{( summary.HasRanges ? "Band" : "Order" )}</th><th>Engine</th>" );
       html.Append( "<th class=\"n\">Searches/s, 8 at once</th><th class=\"n\">Single search p50 ms</th><th>Same answers as exact search</th></tr></thead><tbody>" );
       for( int i = 0; i < summary.Ranked.Count; i++ )
       {
@@ -116,7 +194,8 @@ public static class BenchSummaryHtml
          string memory = row.InMemory ? " <span class=\"muted\">(in memory)</span>" : string.Empty;
          string same = SameAnswers( row.Recall );
          string sameClass = same.StartsWith( "no", StringComparison.Ordinal ) ? " class=\"bench-no\"" : string.Empty;
-         html.Append( $"<tr><td class=\"n\">{i + 1}</td><td>{Enc( row.Name )}{memory}{Markers( row )}</td><td class=\"n\">{Enc( BenchChart.Count( row.Qps8 ) )}</td>" );
+         int place = summary.HasRanges ? row.Band ?? i + 1 : i + 1;
+         html.Append( $"<tr><td class=\"n\">{place}</td><td>{Enc( row.Name )}{memory}{Markers( row )}</td><td class=\"n\">{Enc( BenchChart.Count( row.Qps8 ) )}</td>" );
          html.Append( $"<td class=\"n\">{Enc( Ms( row.P50Ms ) )}</td><td{sameClass}>{Enc( same )}</td></tr>" );
       }
 
@@ -221,6 +300,51 @@ public static class BenchSummaryHtml
    }
 
    /// <summary>
+   /// The line under the table that says what the first column means: what a band is and that the
+   /// order inside it is not a ranking, or that one run has no spread and so no bands.
+   /// </summary>
+   /// <param name="summary">Ranked engines.</param>
+   /// <returns>HTML fragment; empty when no engine has a result.</returns>
+   public static string BandsNote( BenchSummary summary )
+   {
+      if( summary.Ranked.Count == 0 )
+      {
+         return string.Empty;
+      }
+
+      return $"<p class=\"bench-bands muted\">{Enc( summary.HasRanges ? BANDS_LINE : ONE_RUN_LINE )}</p>";
+   }
+
+   /// <summary>
+   /// The notes on individual engines that the consolidate command wrote: a CPU cap, an
+   /// exact-by-design search, a scan where an index was meant. Each says where it came from: the
+   /// results, or a known limit the run did not record. Empty when no engine has a note (older
+   /// files carry none).
+   /// </summary>
+   /// <param name="summary">Ranked engines.</param>
+   /// <returns>HTML fragment.</returns>
+   public static string EngineNotes( BenchSummary summary )
+   {
+      List<BenchEngineRow> withNotes = summary.Ranked.Where( r => r.Notes is { Count: > 0 } ).ToList();
+      if( withNotes.Count == 0 )
+      {
+         return string.Empty;
+      }
+
+      var html = new StringBuilder( "<div class=\"bench-engine-notes\"><p class=\"muted\">Notes on individual engines:</p><ul>" );
+      foreach( BenchEngineRow row in withNotes )
+      {
+         foreach( BenchEngineNote note in row.Notes! )
+         {
+            string source = note.Source == "known" ? "known limit, not recorded in these results" : "from the results";
+            html.Append( $"<li><strong>{Enc( row.Name )}</strong> {Enc( note.Text )} <span class=\"muted\">({Enc( source )})</span></li>" );
+         }
+      }
+
+      return html.Append( "</ul></div>" ).ToString();
+   }
+
+   /// <summary>
    /// The boxed list of known problems, shown under the summary table.
    /// </summary>
    /// <returns>HTML fragment.</returns>
@@ -272,9 +396,53 @@ public static class BenchSummaryHtml
    private static string Caption( BenchSummary summary )
    {
       string text = summary.HasRanges
-         ? $"Searches per second with 8 at once; longer is faster. Bar: median of {summary.Runs} runs. Thin line: slowest to fastest run."
+         ? $"Searches per second with 8 at once; longer is faster. Bar: median of {summary.Runs} runs. Thin line: slowest to fastest run. Engines with the same band number have overlapping lines."
          : "Searches per second with 8 at once in this run; longer is faster.";
       return summary.Ranked.Any( r => r.InMemory ) ? text + " Hatched: holds everything in memory." : text;
+   }
+
+   /// <summary>
+   /// The headline when several engines share the fastest band: all of them, their medians, and
+   /// that their runs are linked by overlap; plus a warning for each one that missed exact answers.
+   /// </summary>
+   /// <param name="summary">Ranked engines.</param>
+   /// <param name="top">The engines of the fastest band, in median order.</param>
+   /// <returns>Plain text, not yet escaped.</returns>
+   private static string TiedHeadline( BenchSummary summary, List<BenchEngineRow> top )
+   {
+      string names = JoinWords( top.Select( r => r.Name ).ToList() );
+      string medians = JoinWords( top.Select( r => BenchChart.Count( r.Qps8 ) ).ToList() );
+      string text = $"{names} were fastest together, linked by overlapping runs: {medians} searches per second with 8 at once (median of {summary.Runs} runs)";
+      foreach( BenchEngineRow row in top.Where( r => r.Recall != null && r.Recall.Value < SAME_ANSWERS ) )
+      {
+         text += $", {row.Name} returned {Percent( row.Recall!.Value )} of the exact top 10";
+      }
+
+      return text + ".";
+   }
+
+   /// <summary>
+   /// "a", "a and b" or "a, b and c".
+   /// </summary>
+   /// <param name="items">Items.</param>
+   /// <returns>The joined text.</returns>
+   private static string JoinWords( List<string> items )
+   {
+      return items.Count <= 1 ? string.Join( string.Empty, items ) : string.Join( ", ", items.Take( items.Count - 1 ) ) + " and " + items[^1];
+   }
+
+   /// <summary>
+   /// The vector count in a data line such as "254 C# files cut into 524 chunks" or "524 vectors":
+   /// the first number followed by chunks, vectors or rows.
+   /// Why from the text: the old published file records no row count, and the title must agree
+   /// with the data line printed next to it.
+   /// </summary>
+   /// <param name="dataLine">The data line, or null.</param>
+   /// <returns>The count, or null when the line names none.</returns>
+   private static int? RowsIn( string? dataLine )
+   {
+      Match m = dataLine == null ? Match.Empty : ROWS_IN_TEXT.Match( dataLine );
+      return m.Success && int.TryParse( m.Groups[1].Value.Replace( ",", string.Empty ), NumberStyles.Integer, CultureInfo.InvariantCulture, out int rows ) && rows > 0 ? rows : null;
    }
 
    /// <summary>

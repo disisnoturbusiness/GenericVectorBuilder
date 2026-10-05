@@ -11,8 +11,9 @@ namespace GenericVectorBuilder.Bench.Running;
 
 /// <summary>
 /// The conditions a run was measured under, written into results.json as "conditions": build,
-/// runtime, governor, CPU split and how each engine was pinned, every search setting, and per
-/// timed pass the clock of every CPU and how busy the box was.
+/// runtime, governor, CPU split and how each engine was pinned, the CPU idle settings, how each
+/// target was reached, every search setting, and per timed pass the clock of every CPU and how
+/// busy the box was.
 /// Why in the results: two runs can only be averaged or compared when these match, and the
 /// consolidation reads them from here (the names match what it accepts: buildConfiguration,
 /// governor, governorAtEnd, clientCpus, engineCpus, threadSiblings, warmupSearches, exactSeconds).
@@ -86,6 +87,15 @@ public sealed class MachineConditions
 
    /// <summary>Every timed pass with its clock and load.</summary>
    public List<PassConditions> Passes { get; set; } = new();
+
+   /// <summary>CPU idle (C-state) settings when the run started; recorded only, never changed.</summary>
+   public CpuIdleSettings? CpuIdle { get; set; }
+
+   /// <summary>CPU idle settings read at the end of the run, to show they did not change under it.</summary>
+   public CpuIdleSettings? CpuIdleAtEnd { get; set; }
+
+   /// <summary>How each target was reached: route, configured addresses and ports, connections seen.</summary>
+   public List<TargetConnection> Connections { get; set; } = new();
 
    /// <summary>The first sampling failure, or null.</summary>
    public string? SamplingError { get; set; }
@@ -235,8 +245,23 @@ public sealed class PassConditions
    /// <summary>Lowest, median and highest MHz of every CPU.</summary>
    public List<CpuMhz> CpuMhz { get; set; } = new();
 
-   /// <summary>CPUs busy outside the benchmark (1-minute mean) when the pass was allowed to start.</summary>
+   /// <summary>What the quiet check came right before: "warm-up" (the rule), or the timed pass when no warm-up line was seen.</summary>
+   public string? QuietCheckBefore { get; set; }
+
+   /// <summary>When the quiet check let the pass go on (UTC).</summary>
+   public string? QuietCheckUtc { get; set; }
+
+   /// <summary>Seconds from the quiet check to the start of the timed window (the warm-up, plus the settle trial before a target's first pass).</summary>
+   public double? QuietCheckLeadSeconds { get; set; }
+
+   /// <summary>Start of the window the quiet check averaged over (UTC): a full window back, or the target's or its engine's start if later.</summary>
+   public string? OutsideWindowFromUtc { get; set; }
+
+   /// <summary>CPUs busy outside the benchmark (mean over the busy window) at the quiet check before the pass's warm-up.</summary>
    public double? OutsideLoadAtStart { get; set; }
+
+   /// <summary>CPUs busy outside the benchmark over the last few seconds at that check.</summary>
+   public double? OutsideLoadRecentAtStart { get; set; }
 
    /// <summary>CPUs busy outside the benchmark during the pass (mean).</summary>
    public double? OutsideLoadDuring { get; set; }
@@ -307,6 +332,9 @@ public static class MachineFlags
       flags.AddRange( c.Engines.Where( e => e.Problems.Count > 0 ).Select( e => $"WARNING: {e.Target} not fully pinned to its CPUs: {string.Join( "; ", e.Problems ).TrimEnd( '.' )}." ) );
       flags.AddRange( c.Engines.Where( e => e.Hosting == "embedded" ).Select( e => $"{e.Target} is embedded: it ran inside the client process on the client CPUs {e.Cpus ?? "(all)"}, sharing them with the client." ) );
       flags.AddRange( c.Passes.Where( p => p.BusyBox ).Select( p => $"WARNING: busy box during {p.Target} {p.Pass}: {p.BusyReason?.TrimEnd( '.' )}." ) );
+      flags.AddRange( IdleFlags( c ) );
+      flags.AddRange( c.Connections.SelectMany( t => t.Observed.Where( p => p.Kind.StartsWith( "docker-proxy", StringComparison.Ordinal ) )
+         .Select( p => $"WARNING: {t.Target} had {p.Sockets} connection(s) open to its published port {p.Address}:{p.Port}, which goes through docker-proxy, not the container address it was meant to use." ) ) );
       List<string> unseen = on ? searchedTargets.Where( t => c.Passes.All( p => p.Target != t ) ).ToList() : new List<string>();
       if( unseen.Count > 0 )
       {
@@ -330,6 +358,25 @@ public static class MachineFlags
       }
 
       return flags;
+   }
+
+   /// <summary>
+   /// Flags about the CPU idle settings: unreadable, or changed between the start and the end of
+   /// the run (someone changed them under it; this tool never does).
+   /// </summary>
+   /// <param name="c">The run's conditions.</param>
+   /// <returns>Flags.</returns>
+   public static IEnumerable<string> IdleFlags( MachineConditions c )
+   {
+      if( c.CpuIdle is { States.Count: 0 } idle )
+      {
+         yield return $"CPU idle states could not be read ({idle.Problem}); latency at one searcher depends on them.";
+      }
+
+      if( c.CpuIdle != null && c.CpuIdleAtEnd != null && c.CpuIdle.Key() != c.CpuIdleAtEnd.Key() )
+      {
+         yield return $"WARNING: the CPU idle settings changed during the run (start: {c.CpuIdle.Describe()}; end: {c.CpuIdleAtEnd.Describe()}). This tool only reads them, so something else changed them; passes on either side are not comparable.";
+      }
    }
 
    /// <summary>
@@ -358,7 +405,7 @@ public static class MachineFlags
    public static string? ClockLine( IEnumerable<PassConditions> passes )
    {
       List<string> parts = passes.Select( p => string.Create( CultureInfo.InvariantCulture,
-         $"{p.Pass} {p.EngineMhzMedian?.ToString( CultureInfo.InvariantCulture ) ?? "?"}/{p.ClientMhzMedian?.ToString( CultureInfo.InvariantCulture ) ?? "?"} MHz, {p.Governor ?? "?"}, outside load {Load( p.OutsideLoadAtStart )} at start{( p.WaitedSeconds > 0 ? $" after waiting {p.WaitedSeconds:0} s" : string.Empty )}{( p.BusyBox ? ", BUSY BOX" : string.Empty )}" ) ).ToList();
+         $"{p.Pass} {p.EngineMhzMedian?.ToString( CultureInfo.InvariantCulture ) ?? "?"}/{p.ClientMhzMedian?.ToString( CultureInfo.InvariantCulture ) ?? "?"} MHz, {p.Governor ?? "?"}, outside load {Load( p.OutsideLoadAtStart )} before the warm-up{( p.WaitedSeconds > 0 ? $" after waiting {p.WaitedSeconds:0} s" : string.Empty )}, {Load( p.OutsideLoadDuring )} during{( p.BusyBox ? ", BUSY BOX" : string.Empty )}" ) ).ToList();
       return parts.Count == 0 ? null : "Clock per pass (median MHz of engine CPUs / client CPUs, governor, CPUs busy outside the benchmark): " + string.Join( "; ", parts ) + ".";
    }
 

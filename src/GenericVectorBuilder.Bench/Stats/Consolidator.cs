@@ -17,6 +17,11 @@ namespace GenericVectorBuilder.Bench.Stats;
 /// the two targets of an obvious pair hold separate copies of the data; and the flags (spread,
 /// p50 against mean, unsettled engine, busy box, governor, shared cores) are computed here once
 /// so the markdown and the web page show the same warnings.
+/// Rules added after the third review: targets whose min-max ranges overlap on a speed metric
+/// share a tie band and no strict rank is shown; runs of different commands (run-all against
+/// bench), different engine hosting (container against native) or different segment layouts are
+/// refused, not merged; and each target carries notes a reader needs next to its speed (a CPU
+/// cap, an exact-by-design search, a scan where an index was meant).
 /// </summary>
 public static class Consolidator
 {
@@ -62,11 +67,19 @@ public static class Consolidator
             + string.Join( " ", report.Dropped.Select( d => $"[{d.Name}: {d.Reason}]" ) ) );
       }
 
+      string? refusal = ConsolidateIdentity.Refusal( used, targets );
+      if( refusal != null )
+      {
+         throw new InvalidOperationException( refusal );
+      }
+
       report.Settings = SettingsOf( used[0], targets );
       report.Runs = used.Select( ToRunUsed ).ToList();
       IReadOnlyList<int> levels = Levels( used, targets );
       report.TargetSummaries = targets.Select( t => Summarize( t, used, levels ) ).ToList();
       AddRanks( report.TargetSummaries, used, levels );
+      report.Bands = ConsolidateBands.Build( report.TargetSummaries, levels, used.Count );
+      report.TargetSummaries.ForEach( t => t.EngineNotes = ConsolidateEngineNotes.For( t, used ) );
       report.Pairs = pairs.Where( p => targets.Contains( p.A ) && targets.Contains( p.B ) && p.A != p.B )
          .Select( p => Pair( p.A, p.B, used, levels ) ).ToList();
       report.ExactVsDefault = targets.Select( t => Exact( t, used ) ).OfType<ExactVsDefault>().ToList();
@@ -221,6 +234,7 @@ public static class Consolidator
       return new RunSettings
       {
          Pipeline = run.Pipeline,
+         Command = run.Command,
          Host = run.Host,
          Rows = run.Rows,
          Dimension = run.Dimension,
@@ -332,6 +346,8 @@ public static class Consolidator
          ExactRecall = target.ExactRecall,
          AfterLoad = ToFacts( target.AfterLoad ),
          AfterSearch = ToFacts( target.AfterSearch ),
+         SegmentLayoutAfterLoad = target.AfterLoad?.Layout,
+         SegmentLayoutAfterSearch = target.AfterSearch?.Layout,
          Durability = target.Durability,
          LoadIndexNote = target.LoadIndexNote,
          SearchSettings = target.SearchSettings,
@@ -545,6 +561,8 @@ public static class Consolidator
          $"Load rows/s is reported but not ranked and does not feed any comparison: each load wrote {rows}, which is too few to separate engines from connection set-up and first-call cost.",
          $"Runs were used together only when their build configuration, CPU governor, CPU partition, warm-up count, exact-mode seconds, seconds per level and every listed target's search settings matched; runs that differed are listed under Runs dropped. Spread is flagged when the largest value is more than {ConsolidateFlags.SPREAD_RATIO.ToString( "0.00", System.Globalization.CultureInfo.InvariantCulture )} times the smallest across runs.",
       };
+      notes.Add( ConsolidateFraming.BANDS_LINE + " Bands are drawn only from two runs or more." );
+      notes.Add( "Runs of different commands (run-all against bench), a different engine hosting (container against native) or a different segment layout reported by an engine are refused, never merged: the largest-group rule does not apply to them." );
       if( report.Pairs.Count > 0 )
       {
          notes.Add( "Each pair compares two targets that hold their own copy of the data (a separate database, table or collection), so a difference mixes the engine setting with the copy. The exact-versus-default tables compare the two search methods inside one target." );

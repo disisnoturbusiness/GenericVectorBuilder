@@ -17,7 +17,12 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// milvus_querynode_sq_req_count with query_type "search", scope "OnLeader" and status "success" for
 /// this collection's id: how many search requests the query node answered for it.
 /// </param>
-public sealed record MilvusSearchCounters( double SealedSegmentSearches, double GrowingSegmentSearches, double CollectionRequests );
+/// <param name="SegmentsCompactedAway">
+/// How many segments of this collection the data coordinator lists as compacted away (a compaction
+/// replaced them). Not a /metrics counter: those are node-wide, so another collection's compaction
+/// moves them too, while this count is per collection. 0 when not read.
+/// </param>
+public sealed record MilvusSearchCounters( double SealedSegmentSearches, double GrowingSegmentSearches, double CollectionRequests, long SegmentsCompactedAway = 0 );
 
 /// <summary>
 /// Where the search ledger of one collection started: the counters, how many searches the sink had
@@ -48,7 +53,9 @@ public sealed record MilvusLedgerReading( IReadOnlyList<string> Problems, string
 /// with its index loaded (the sink's readiness check). (2) Between the two readings every search
 /// the sink sent shows up as a search request for this collection, some segment searches show up
 /// as Sealed, and no Growing segment search appears. (3) At the end the same sealed segments with
-/// the same index builds are still served. Why Sealed is only required to move and not to equal the
+/// the same index builds are still served, and the data coordinator lists no new compacted-away
+/// segment for this collection (a compaction while the searches run swaps the segment under them,
+/// and the new one has no loaded index until its build is done). Why Sealed is only required to move and not to equal the
 /// number of searches: measured 2026-10-04, 200 searches from one thread raised the Sealed counter
 /// by exactly 200, but from 8 threads by 170 to 175 and from 16 threads by 175 of 192, while the
 /// request counter rose by exactly the number sent every time. The query node merges searches that
@@ -166,9 +173,16 @@ public static class MilvusSearchLedger
          problems.Add( $"the sealed segments or their index builds changed since the index finished (then {start.Segments}; now {segmentsNow})" );
       }
 
+      long compacted = now.SegmentsCompactedAway - start.Counters.SegmentsCompactedAway;
+      if( compacted > 0 )
+      {
+         problems.Add( $"{compacted} segment(s) of this collection were compacted away since the index finished, so a compaction ran while the searches were timed" );
+      }
+
       string detail = $"search ledger since the index finished: the sink sent {sent} searches ({searchParams}), the query node counted {requestDelta:0} search requests for this collection, "
          + $"segment searches Sealed +{sealedDelta:0} and Growing +{growingDelta:0}, "
-         + ( segmentsNow == start.Segments ? "the same sealed segments with the same loaded index builds at both readings" : "the served segments differ between the readings" );
+         + ( segmentsNow == start.Segments ? "the same sealed segments with the same loaded index builds at both readings" : "the served segments differ between the readings" )
+         + $", segments compacted away +{Math.Max( compacted, 0 )}";
       return new MilvusLedgerReading( problems, problems.Count == 0 ? detail : $"{detail}; PROBLEM: {string.Join( "; ", problems )}" );
    }
 

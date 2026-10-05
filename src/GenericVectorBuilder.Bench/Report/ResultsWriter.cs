@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using GenericVectorBuilder.Bench.Stats;
 using GenericVectorBuilder.Bench.Targets;
 
 namespace GenericVectorBuilder.Bench.Report;
@@ -55,6 +56,11 @@ public static class ResultsWriter
       md.AppendLine( $"- Machine: {m.Host}, {m.Cpu} ({m.LogicalCpus} logical CPUs), {m.RamGiB} GiB RAM, GPU {m.Gpu}, {m.Os}, {m.DotNet}, load average at start {m.LoadAverage}" );
       md.AppendLine( $"- Data: {report.Rows:N0} vectors x {report.Dimension} dims, collection `{report.Collection}`. {report.Source}" );
       md.AppendLine( $"- Queries: {report.Queries}. Top {report.Top}. Throughput at concurrency {string.Join( ", ", report.Concurrency )} for {report.SecondsPerLevel} s each." );
+      if( report.Targets.Any( t => t.Search != null ) )
+      {
+         md.AppendLine( $"- {ConsolidateFraming.Title( report.Rows )}: {ConsolidateFraming.Line( report.Rows )}" );
+      }
+
       if( report.TruthSeconds.HasValue )
       {
          md.AppendLine( $"- Ground truth: brute force over every vector in memory, {report.TruthSeconds:0.0} s for all {report.QueryCount} queries." );

@@ -26,6 +26,7 @@ public sealed partial class ConsolidateTests : IDisposable
    {
       "Report/RunResult.cs", "Report/RunConditions.cs", "Report/ResultJson.cs", "Report/ConsolidatedMarkdown.cs", "Report/ConsolidateCommand.cs",
       "Stats/ConsolidateMath.cs", "Stats/ConsolidatedReport.cs", "Stats/Consolidator.cs", "Stats/ConsolidateFlags.cs", "Stats/CpuSet.cs", "Stats/BenchMath.cs",
+      "Stats/ConsolidateBands.cs", "Stats/ConsolidateFraming.cs", "Stats/ConsolidateIdentity.cs", "Stats/ConsolidateEngineNotes.cs", "Stats/SegmentLayout.cs",
    };
 
    private readonly string _root;
@@ -265,7 +266,7 @@ public sealed partial class ConsolidateTests : IDisposable
          + "conditions.buildConfiguration, conditions.governor, conditions.clientCpus, conditions.engineCpus, conditions.warmupSearches, conditions.exactSeconds", flag.GetProperty( "detail" ).GetString() );
       Assert.Equal( 5.5, json.GetProperty( "targetSummaries" )[0].GetProperty( "p50Ms" ).GetProperty( "median" ).GetDouble(), 9 );
       string md = File.ReadAllText( Path.Combine( _root, "out", "consolidated.md" ) );
-      Assert.Contains( "| sql | old | missing | missing | missing | 0 | missing | missing | missing | missing | missing | missing | - | missing | 5.26 (1000 / QPS@1) |", md );
+      Assert.Contains( "| sql | old | missing | missing | missing | 0 | missing | missing | missing | missing | missing | - | missing | - | missing | 5.26 (1000 / QPS@1) |", md );
       Assert.Contains( "| CPU governor | missing |", md );
       Assert.DoesNotContain( "\u2014", md );
    }

@@ -9,8 +9,11 @@ namespace GenericVectorBuilder.Tests.Unit;
 
 /// <summary>
 /// The summary block on /bench-results and each run page: the chart has one bar per engine in
-/// rank order with every name escaped, the numbers are the consolidated.json medians, and the
+/// median order with every name escaped, the numbers are the consolidated.json medians, and the
 /// headline, table and "yes/no" column read as intended.
+/// The ranking is titled as request speed on a small collection and shown as tie bands (engines
+/// whose min to max ranges overlap share a band) instead of strict ranks; the band cases here are
+/// the ones the Bench tool's ConsolidateTests expect, so the two copies of the rule agree.
 /// </summary>
 public class BenchResultsSummaryTests
 {
@@ -21,6 +24,21 @@ public class BenchResultsSummaryTests
    private const int MAX_UP = 10;
    private const string PARTITION = "client 0,4; engines 1-3,5-7";
    private static readonly Regex ENGINE_ATTR = new( "<g class=\"bc-row\" data-engine=\"([^\"]*)\">", RegexOptions.Compiled );
+
+   private const string FRAMING_SOURCE = "src/GenericVectorBuilder.Bench/Stats/ConsolidateFraming.cs";
+   private const string SMALL_TITLE = "<h2 class=\"bench-title\">Request speed on a small collection (524 vectors)</h2><p class=\"bench-framing muted\">At this size the numbers measure per-request cost, not index scaling.</p>";
+
+   /// <summary>The Bench tool's hand-made band case, QPS at 8 as median, min, max over three runs.</summary>
+   private static readonly (string Name, double Median, double Min, double Max)[] BAND_CASE =
+   {
+      ( "a", 1050, 1000, 1100 ), ( "b", 1150, 1090, 1200 ), ( "c", 850, 800, 900 ), ( "d", 910, 880, 950 ), ( "e", 305, 300, 310 ),
+   };
+
+   /// <summary>The Bench tool's chained case: x overlaps y, y overlaps z, u touches v, w is alone.</summary>
+   private static readonly (string Name, double Median, double Min, double Max)[] CHAIN_CASE =
+   {
+      ( "x", 150, 100, 200 ), ( "y", 250, 190, 300 ), ( "z", 350, 290, 400 ), ( "u", 15, 10, 20 ), ( "v", 25, 20, 30 ), ( "w", 1.5, 1, 2 ),
+   };
 
    private const string SYNTHETIC = """
    {
@@ -66,7 +84,7 @@ public class BenchResultsSummaryTests
 
       Assert.DoesNotContain( "<b>", svg );
       Assert.DoesNotContain( "<b>", table );
-      Assert.Contains( ">&lt;b&gt;x&amp;y&lt;/b&gt;</text>", svg );
+      Assert.Contains( ">&lt;b&gt;x&amp;y&lt;/b&gt;<tspan class=\"bc-note\" dx=\"8\">band 1</tspan></text>", svg );
       Assert.Contains( "<title>&lt;b&gt;x&amp;y&lt;/b&gt;: 4,000 searches/s", svg );
       Assert.Contains( "<td>&lt;b&gt;x&amp;y&lt;/b&gt;</td>", table );
    }
@@ -82,7 +100,7 @@ public class BenchResultsSummaryTests
 
       Assert.Contains( "x2=\"78%\"", svg );
       Assert.Contains( "<rect class=\"bc-bar bc-mem\"", svg );
-      Assert.Contains( ">Redis<tspan class=\"bc-note\" dx=\"8\">in memory</tspan></text>", svg );
+      Assert.Contains( ">Redis<tspan class=\"bc-note\" dx=\"8\">in memory</tspan><tspan class=\"bc-note\" dx=\"8\">band 2</tspan></text>", svg );
       double redisMax = 3100 * BenchChart.PLOT_PERCENT / 4100;
       Assert.Contains( $"<text class=\"bc-value\" x=\"{redisMax.ToString( "0.##", CultureInfo.InvariantCulture )}%\" dx=\"8\"", svg );
    }
@@ -418,6 +436,242 @@ public class BenchResultsSummaryTests
    }
 
    /// <summary>
+   /// Engines whose min to max ranges overlap share a band, chained through the overlaps, numbered
+   /// from the fastest; the rows stay in median order; the numbers are the ones the Bench tool's
+   /// ConsolidateTests expect for the same cases.
+   /// </summary>
+   [Fact]
+   public void Bands_FollowTheSameCasesAsTheBenchTool()
+   {
+      BenchSummary summary = BenchSummaryReader.FromConsolidated( PublishedShape( BAND_CASE ) );
+      Assert.Equal( new[] { "b:1", "a:1", "d:2", "c:2", "e:3" }, summary.Ranked.Select( r => $"{r.Key}:{r.Band}" ).ToArray() );
+
+      BenchSummary chain = BenchSummaryReader.FromConsolidated( PublishedShape( CHAIN_CASE ) );
+      Assert.Equal( new[] { "z:1", "y:1", "x:1", "v:2", "u:2", "w:3" }, chain.Ranked.Select( r => $"{r.Key}:{r.Band}" ).ToArray() );
+   }
+
+   /// <summary>
+   /// Two engines in different bands never overlap, over the real published file: for every pair
+   /// in different bands the slower engine's fastest run is slower than the faster engine's slowest
+   /// run; band numbers start at 1 and run without gaps in table order.
+   /// </summary>
+   [Fact]
+   public void Bands_OfThePublishedFile_NeverOverlapAcrossBands()
+   {
+      BenchSummary summary = BenchSummaryReader.FromConsolidated( File.ReadAllText( RepoFile( PUBLISHED ) ) );
+
+      List<int> bands = summary.Ranked.Select( r => r.Band!.Value ).ToList();
+      Assert.Equal( 1, bands[0] );
+      Assert.Equal( bands.Order().ToList(), bands );
+      Assert.All( bands.Zip( bands.Skip( 1 ) ), p => Assert.InRange( p.Second - p.First, 0, 1 ) );
+      for( int i = 0; i < summary.Ranked.Count; i++ )
+      {
+         for( int j = i + 1; j < summary.Ranked.Count; j++ )
+         {
+            if( summary.Ranked[i].Band != summary.Ranked[j].Band )
+            {
+               Assert.True( summary.Ranked[j].Qps8Max < summary.Ranked[i].Qps8Min, $"{summary.Ranked[i].Key} and {summary.Ranked[j].Key} overlap but are in different bands" );
+            }
+         }
+      }
+
+      Assert.True( bands.Max() < summary.Ranked.Count, "the published runs overlap, so some engines must share a band" );
+   }
+
+   /// <summary>
+   /// Rows with no min and max count as points: equal values share a band, different values do not.
+   /// </summary>
+   [Fact]
+   public void Bands_TreatMissingRangesAsPoints()
+   {
+      var rows = new List<BenchEngineRow>
+      {
+         new( "a", "a", 100, null, null, null, null, false ), new( "b", "b", 100, null, null, null, null, false ), new( "c", "c", 90, null, null, null, null, false ),
+      };
+
+      Assert.Equal( new[] { 1, 1, 2 }, BenchBands.Assign( rows ).Select( r => r.Band!.Value ).ToArray() );
+   }
+
+   /// <summary>
+   /// The table's first column is the band when the numbers are medians of several runs (engines
+   /// that share a band show the same number) and the order in this run when there is one run; a
+   /// line under the table says what that column means.
+   /// </summary>
+   [Fact]
+   public void Table_ShowsBands_NotRanks_AndSaysWhatTheyMean()
+   {
+      BenchSummary summary = BenchSummaryReader.FromConsolidated( PublishedShape( BAND_CASE ) );
+
+      string table = BenchSummaryHtml.Table( summary );
+      string note = BenchSummaryHtml.BandsNote( summary );
+
+      Assert.Contains( "<th class=\"n\">Band</th><th>Engine</th>", table );
+      Assert.DoesNotContain( ">Rank<", table );
+      Assert.Equal( new[] { "1", "1", "2", "2", "3" }, Regex.Matches( table, "<tr><td class=\"n\">(\\d+)</td>" ).Select( m => m.Groups[1].Value ).ToArray() );
+      Assert.Equal( "<p class=\"bench-bands muted\">Engines in different bands never overlap: every run of an engine in a faster band beat every run of an engine in a slower band. Engines in one band are linked by overlapping slowest-to-fastest ranges, so these runs do not separate them cleanly. Inside a band they are listed by median, and that order is not a ranking.</p>", note );
+
+      BenchSummary one = BenchSummaryReader.FromRunResults( """{ "targets": [ { "name": "sql", "search": { "qps": { "8": 50 } } }, { "name": "mariadb", "search": { "qps": { "8": 99 } } } ] }""" );
+      string oneTable = BenchSummaryHtml.Table( one );
+      Assert.Contains( "<th class=\"n\">Order</th>", oneTable );
+      Assert.Equal( new[] { "1", "2" }, Regex.Matches( oneTable, "<tr><td class=\"n\">(\\d+)</td>" ).Select( m => m.Groups[1].Value ).ToArray() );
+      Assert.All( one.Ranked, r => Assert.Null( r.Band ) );
+      Assert.Contains( "One run: no spread is known, so no band can be drawn. The order shows this run only.", BenchSummaryHtml.BandsNote( one ) );
+      Assert.DoesNotContain( "band", BenchChart.Svg( one ) );
+      Assert.Equal( string.Empty, BenchSummaryHtml.BandsNote( new BenchSummary( Array.Empty<BenchEngineRow>(), Array.Empty<string>(), 1 ) ) );
+   }
+
+   /// <summary>
+   /// When several engines share the fastest band the headline names all of them, gives each
+   /// median and says their runs overlap, instead of naming one winner.
+   /// </summary>
+   [Fact]
+   public void Headline_NamesEveryEngineOfTheFastestBand()
+   {
+      Assert.Equal( "b and a were fastest together, linked by overlapping runs: 1,150 and 1,050 searches per second with 8 at once (median of 3 runs).",
+         BenchSummaryHtml.Headline( BenchSummaryReader.FromConsolidated( PublishedShape( BAND_CASE ) ) ) );
+      Assert.Equal( "z, y and x were fastest together, linked by overlapping runs: 350, 250 and 150 searches per second with 8 at once (median of 3 runs).",
+         BenchSummaryHtml.Headline( BenchSummaryReader.FromConsolidated( PublishedShape( CHAIN_CASE ) ) ) );
+      string json = """{ "m": { "runs": 3, "qps8": { "median": 1000, "min": 900, "max": 1100 }, "recall": { "median": 0.9 } }, "n": { "runs": 3, "qps8": { "median": 990, "min": 950, "max": 1010 }, "recall": { "median": 1 } } }""";
+      Assert.Equal( "m and n were fastest together, linked by overlapping runs: 1,000 and 990 searches per second with 8 at once (median of 3 runs), m returned 90% of the exact top 10.",
+         BenchSummaryHtml.Headline( BenchSummaryReader.FromConsolidated( json ) ) );
+   }
+
+   /// <summary>
+   /// The block opens with the title "Request speed on a small collection (524 vectors)" and the
+   /// one line that at this size it measures per-request cost, before the headline: from the
+   /// consolidate output's settings, from one run's results, and, for the old published file that
+   /// records no row count, from the data line printed next to it.
+   /// </summary>
+   [Fact]
+   public void Block_OpensWithTheSmallCollectionFraming_FromEveryShape()
+   {
+      string report = ReportJson( 2, Settings( "performance", PARTITION, "Release", 524 ), new[] { Summary( "qdrant", 3000, 2900, 3100, 1.5, 1.0 ) }, Array.Empty<( string, string, string, int )>() );
+      string fromReport = BenchSummaryHtml.Block( BenchSummaryReader.FromConsolidated( report ), "note", null );
+      string fromRun = BenchSummaryHtml.Block( BenchSummaryReader.FromRunResults( """{ "rows": 524, "targets": [ { "name": "sql", "search": { "qps": { "8": 50 } } } ] }""" ), "note", null );
+      string published = BenchSummaryHtml.Block( BenchSummaryReader.FromConsolidated( File.ReadAllText( RepoFile( PUBLISHED ) ) ), "note", BenchSummaryHtml.PUBLISHED_DATA );
+
+      foreach( string html in new[] { fromReport, fromRun, published } )
+      {
+         Assert.Contains( SMALL_TITLE, html );
+         Assert.True( html.IndexOf( SMALL_TITLE, StringComparison.Ordinal ) < html.IndexOf( "bench-lead", StringComparison.Ordinal ) );
+      }
+
+      Assert.Equal( 524, BenchSummaryReader.FromConsolidated( report ).Rows );
+      Assert.Null( BenchSummaryReader.FromConsolidated( File.ReadAllText( RepoFile( PUBLISHED ) ) ).Rows );
+   }
+
+   /// <summary>
+   /// The framing claims "small collection" only for a small one: above the limit it names the
+   /// size and does not say per-request cost; with no recorded size it says so, and an old results
+   /// file still renders.
+   /// </summary>
+   [Fact]
+   public void Framing_NamesTheSize_AndClaimsSmallOnlyWhenSmall()
+   {
+      Assert.Equal( "Request speed on a small collection (524 vectors)", BenchSummaryHtml.FramingTitle( 524 ) );
+      Assert.Equal( "Request speed on a small collection (10,000 vectors)", BenchSummaryHtml.FramingTitle( 10000 ) );
+      Assert.Equal( "Request speed at 100,000 vectors", BenchSummaryHtml.FramingTitle( 100000 ) );
+      Assert.Equal( "Measured at 100,000 vectors; the order applies to this size only.", BenchSummaryHtml.FramingLine( 100000 ) );
+      Assert.DoesNotContain( "per-request", BenchSummaryHtml.FramingLine( 100000 ) );
+      Assert.Equal( "Request speed (collection size not recorded)", BenchSummaryHtml.FramingTitle( null ) );
+      Assert.Equal( "Request speed (collection size not recorded)", BenchSummaryHtml.FramingTitle( 0 ) );
+      Assert.Equal( "The collection size was not recorded in these results.", BenchSummaryHtml.FramingLine( null ) );
+      string old = BenchSummaryHtml.Block( BenchSummaryReader.FromConsolidated( SYNTHETIC ), "note", null );
+      Assert.Contains( "<h2 class=\"bench-title\">Request speed (collection size not recorded)</h2>", old );
+      string big = BenchSummaryHtml.Block( BenchSummaryReader.FromRunResults( """{ "rows": 50000, "targets": [ { "name": "sql", "search": { "qps": { "8": 50 } } } ] }""" ), "note", null );
+      Assert.Contains( "<h2 class=\"bench-title\">Request speed at 50,000 vectors</h2>", big );
+      Assert.DoesNotContain( "small collection", big );
+   }
+
+   /// <summary>
+   /// The page and the Bench tool say the same words: every framing sentence, the band sentence
+   /// and the size limit are the same text and number in the Bench tool's ConsolidateFraming.cs.
+   /// </summary>
+   [Fact]
+   public void FramingText_MatchesTheBenchTool()
+   {
+      string source = File.ReadAllText( RepoFile( FRAMING_SOURCE ) );
+
+      Assert.Equal( BenchSummaryHtml.TITLE_SMALL, StringConstant( source, "TITLE_SMALL" ) );
+      Assert.Equal( BenchSummaryHtml.TITLE_LARGE, StringConstant( source, "TITLE_LARGE" ) );
+      Assert.Equal( BenchSummaryHtml.TITLE_UNKNOWN, StringConstant( source, "TITLE_UNKNOWN" ) );
+      Assert.Equal( BenchSummaryHtml.LINE_SMALL, StringConstant( source, "LINE_SMALL" ) );
+      Assert.Equal( BenchSummaryHtml.LINE_LARGE, StringConstant( source, "LINE_LARGE" ) );
+      Assert.Equal( BenchSummaryHtml.LINE_UNKNOWN, StringConstant( source, "LINE_UNKNOWN" ) );
+      Assert.Equal( BenchSummaryHtml.BANDS_LINE, StringConstant( source, "BANDS_LINE" ) );
+      Assert.Equal( BenchSummaryHtml.ONE_RUN_LINE, StringConstant( source, "ONE_RUN_LINE" ) );
+      Assert.Equal( BenchSummaryHtml.SMALL_COLLECTION_MAX_ROWS, (int)Constant( source, "SMALL_COLLECTION_MAX_ROWS" ) );
+   }
+
+   /// <summary>
+   /// The notes the consolidate command wrote for an engine are shown under the table with their
+   /// source (from the results, or a documented limit the run did not record) and are HTML-escaped;
+   /// an older file with no notes shows no notes block.
+   /// </summary>
+   [Fact]
+   public void EngineNotes_AreShownWithTheirSource_AndEscaped()
+   {
+      JsonObject oracle = Summary( "oracle", 3000, 2900, 3100, 1.5, 1.0 );
+      oracle["engineNotes"] = new JsonArray( new JsonObject { ["kind"] = "cpu-cap", ["source"] = "known", ["text"] = "Oracle Free caps itself at 2 CPUs <b>x</b>." } );
+      JsonObject sql = Summary( "sql", 900, 850, 950, 4.5, 1.0 );
+      sql["engineNotes"] = new JsonArray( new JsonObject { ["kind"] = "exact-by-design", ["source"] = "results", ["text"] = "Exact by design: scans every vector." }, new JsonObject { ["kind"] = "future-kind", ["text"] = "Something new." } );
+      string json = ReportJson( 2, Settings( "performance", PARTITION, "Release" ), new[] { oracle, sql, Summary( "qdrant", 2000, 1900, 2100, 1.5, 1.0 ) }, Array.Empty<( string, string, string, int )>() );
+
+      BenchSummary summary = BenchSummaryReader.FromConsolidated( json );
+      string html = BenchSummaryHtml.EngineNotes( summary );
+
+      Assert.Equal( new[] { "cpu-cap" }, summary.Ranked.Single( r => r.Key == "oracle" ).Notes!.Select( n => n.Kind ).ToArray() );
+      Assert.Null( summary.Ranked.Single( r => r.Key == "qdrant" ).Notes );
+      Assert.DoesNotContain( "<b>", html );
+      Assert.Contains( "<li><strong>Oracle 23ai Free</strong> Oracle Free caps itself at 2 CPUs &lt;b&gt;x&lt;/b&gt;. <span class=\"muted\">(known limit, not recorded in these results)</span></li>", html );
+      Assert.Contains( "<li><strong>SQL Server 2025</strong> Exact by design: scans every vector. <span class=\"muted\">(from the results)</span></li>", html );
+      Assert.Contains( "<li><strong>SQL Server 2025</strong> Something new. <span class=\"muted\">(from the results)</span></li>", html );
+      Assert.DoesNotContain( "Qdrant (exact)", html );
+      Assert.Equal( string.Empty, BenchSummaryHtml.EngineNotes( BenchSummaryReader.FromConsolidated( SYNTHETIC ) ) );
+      Assert.DoesNotContain( "bench-engine-notes", BenchSummaryHtml.Block( BenchSummaryReader.FromConsolidated( File.ReadAllText( RepoFile( PUBLISHED ) ) ), "note", null ) );
+   }
+
+   /// <summary>
+   /// The whole page for a consolidate output: title, then headline, chart with band labels, the
+   /// table headed Band, the band sentence, the engine notes, and the legend, in that order; the
+   /// segment-layout flag has a marker and a meaning.
+   /// </summary>
+   [Fact]
+   public void ListPage_ShowsFramingBandsAndNotes_InOrder()
+   {
+      string root = Path.Combine( AppContext.BaseDirectory, "bench-summary-tests", Guid.NewGuid().ToString( "N" ) );
+      try
+      {
+         string folder = Path.Combine( root, BenchResultsEndpoints.PUBLISHED_FOLDER );
+         Directory.CreateDirectory( folder );
+         JsonObject qdrant = Summary( "qdrant", 3000, 2900, 3100, 1.5, 1.0 );
+         qdrant["engineNotes"] = new JsonArray( new JsonObject { ["kind"] = "exact-by-design", ["source"] = "results", ["text"] = "Exact by design." } );
+         File.WriteAllText( Path.Combine( folder, "consolidated.json" ), ReportJson( 2, Settings( "performance", PARTITION, "Release", 524 ),
+            new[] { qdrant, Summary( "sql", 900, 850, 950, 4.5, 1.0 ) }, new[] { ( "sql", "segment-layout-changed", "1 segment after the load, 2 segments after the searches", 2 ) } ) );
+
+         string html = BenchResultsEndpoints.ListPageHtml( root );
+
+         int title = html.IndexOf( SMALL_TITLE, StringComparison.Ordinal );
+         int chart = html.IndexOf( "<svg class=\"bench-chart\"", StringComparison.Ordinal );
+         int table = html.IndexOf( "<th class=\"n\">Band</th>", StringComparison.Ordinal );
+         int bands = html.IndexOf( "bench-bands", StringComparison.Ordinal );
+         int notes = html.IndexOf( "bench-engine-notes", StringComparison.Ordinal );
+         int legend = html.IndexOf( "bench-legend", StringComparison.Ordinal );
+         Assert.True( title >= 0 && chart > title && table > chart && bands > table && notes > bands && legend > notes, html );
+         Assert.Contains( "band 1</tspan>", html );
+         Assert.Contains( ">Sg</abbr>", html );
+         Assert.Contains( "different segment layout after the searches", html );
+      }
+      finally
+      {
+         if( Directory.Exists( root ) )
+         {
+            Directory.Delete( root, true );
+         }
+      }
+   }
+
+   /// <summary>
    /// Malformed input fails loud instead of drawing an empty chart.
    /// </summary>
    [Theory]
@@ -440,10 +694,17 @@ public class BenchResultsSummaryTests
    /// <param name="governor">Governor.</param>
    /// <param name="partition">CPU partition text.</param>
    /// <param name="build">Build configuration.</param>
+   /// <param name="rows">Vectors in the collection, or null to leave the field out (as an older consolidate output does).</param>
    /// <returns>The settings object.</returns>
-   private static JsonObject Settings( string governor, string partition, string build )
+   private static JsonObject Settings( string governor, string partition, string build, int? rows = null )
    {
-      return new JsonObject { ["governor"] = governor, ["cpuPartition"] = partition, ["buildConfiguration"] = build, ["warmupSearches"] = 20, ["exactSeconds"] = 60 };
+      var settings = new JsonObject { ["governor"] = governor, ["cpuPartition"] = partition, ["buildConfiguration"] = build, ["warmupSearches"] = 20, ["exactSeconds"] = 60 };
+      if( rows.HasValue )
+      {
+         settings["rows"] = rows.Value;
+      }
+
+      return settings;
    }
 
    /// <summary>
@@ -504,6 +765,36 @@ public class BenchResultsSummaryTests
          } ).ToArray() ),
       };
       return root.ToJsonString();
+   }
+
+   /// <summary>
+   /// The published consolidated.json shape (an object keyed by engine) for cases given as
+   /// median, min and max QPS at 8 over three runs.
+   /// </summary>
+   /// <param name="cases">Name, median, min, max.</param>
+   /// <returns>The JSON text.</returns>
+   private static string PublishedShape( (string Name, double Median, double Min, double Max)[] cases )
+   {
+      var root = new JsonObject();
+      foreach( ( string name, double median, double min, double max ) in cases )
+      {
+         root[name] = new JsonObject { ["runs"] = 3, ["qps8"] = new JsonObject { ["median"] = median, ["min"] = min, ["max"] = max }, ["p50"] = new JsonObject { ["median"] = 2.0 }, ["recall"] = new JsonObject { ["median"] = 1 } };
+      }
+
+      return root.ToJsonString();
+   }
+
+   /// <summary>
+   /// The text of a "const string NAME = "x";" in a C# source text.
+   /// </summary>
+   /// <param name="source">Source text.</param>
+   /// <param name="name">Constant name.</param>
+   /// <returns>The string.</returns>
+   private static string StringConstant( string source, string name )
+   {
+      Match match = Regex.Match( source, "const string " + name + "\\s*=\\s*\"([^\"]*)\";" );
+      Assert.True( match.Success, $"{name} not found in the Bench tool's ConsolidateFraming.cs" );
+      return match.Groups[1].Value;
    }
 
    /// <summary>

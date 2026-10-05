@@ -31,21 +31,33 @@ public static class SqlDurability
    /// <param name="serverConnectionString">Connection string without a database.</param>
    /// <param name="benchDatabases">Benchmark databases to report on when they exist.</param>
    /// <param name="ct">Cancellation.</param>
+   /// <param name="confPath">Where this server's mssql.conf is read on the host: <see cref="MSSQL_CONF"/> for the native
+   /// server, the copy inside the data folder for a container (its /var/opt/mssql is that folder).</param>
+   /// <param name="confLabel">How the text names that file, or null to name it by <paramref name="confPath"/>.</param>
+   /// <param name="absentIsEmpty">True when a missing file means "no settings" rather than "unknown": SQL Server in a
+   /// container takes its settings from its environment and writes no mssql.conf unless mssql-conf is run in it.</param>
    /// <returns>The sentence for the report.</returns>
-   public static async Task<string> ReadAsync( string serverConnectionString, IReadOnlyList<string> benchDatabases, CancellationToken ct )
+   public static async Task<string> ReadAsync( string serverConnectionString, IReadOnlyList<string> benchDatabases, CancellationToken ct, string confPath = MSSQL_CONF, string? confLabel = null, bool absentIsEmpty = false )
    {
-      ParsedConfig? conf = await ConfigFiles.ReadWithSudoFallbackAsync( MSSQL_CONF, ct ) is string text ? ConfigFiles.ParseIni( text ) : null;
+      ParsedConfig? conf = await ConfigFiles.ReadWithSudoFallbackAsync( confPath, ct ) is string text ? ConfigFiles.ParseIni( text ) : null;
+      string label = confLabel ?? confPath;
+      if( conf == null && absentIsEmpty && await ConfigFiles.ExistsWithSudoAsync( confPath, ct ) == false )
+      {
+         conf = new ParsedConfig( new Dictionary<string, string>(), 0 );
+         label += " does not exist, so it";
+      }
+
       try
       {
          await using var connection = new SqlConnection( serverConnectionString );
          await connection.OpenAsync( ct );
          IReadOnlyList<DatabaseDurability> databases = await ReadDatabasesAsync( connection, benchDatabases, ct );
          IReadOnlyList<int> flags = await ReadTraceFlagsAsync( connection, ct );
-         return Describe( databases, flags, conf );
+         return Describe( databases, flags, conf, label );
       }
       catch( SqlException ex )
       {
-         return $"not read: the server's durability settings could not be queried ({ex.Message}); {DescribeConf( conf )}";
+         return $"not read: the server's durability settings could not be queried ({ex.Message}); {DescribeConf( conf, label )}";
       }
    }
 
@@ -56,8 +68,9 @@ public static class SqlDurability
    /// <param name="databases">The model database first, then any benchmark databases.</param>
    /// <param name="traceFlags">Trace flags enabled globally.</param>
    /// <param name="conf">mssql.conf parsed, or null when it could not be read.</param>
+   /// <param name="confLabel">How the text names mssql.conf; <see cref="MSSQL_CONF"/> for the native server.</param>
    /// <returns>The sentence for the report.</returns>
-   public static string Describe( IReadOnlyList<DatabaseDurability> databases, IReadOnlyList<int> traceFlags, ParsedConfig? conf )
+   public static string Describe( IReadOnlyList<DatabaseDurability> databases, IReadOnlyList<int> traceFlags, ParsedConfig? conf, string confLabel = MSSQL_CONF )
    {
       DatabaseDurability? model = databases.FirstOrDefault( d => d.Name == "model" );
       string[] delayed = databases.Where( d => d.DelayedDurability != "DISABLED" ).Select( d => $"{d.Name} {d.DelayedDurability}" ).ToArray();
@@ -69,7 +82,7 @@ public static class SqlDurability
       string existing = databases.Count( d => d.Name != "model" ) == 0 ? string.Empty
          : $"; existing benchmark databases: {string.Join( ", ", databases.Where( d => d.Name != "model" ).Select( d => $"{d.Name} {d.Recovery}/{d.DelayedDurability}/{d.PageVerify}" ) )}";
       string flags = traceFlags.Count == 0 ? "no global trace flags are enabled" : $"global trace flags enabled: {string.Join( ", ", traceFlags )}";
-      return $"{commit}; {inherited}{existing}; {flags}; {DescribeConf( conf )}. Not tested by cutting power; whether the disk's own write cache reaches the media was not checked.";
+      return $"{commit}; {inherited}{existing}; {flags}; {DescribeConf( conf, confLabel )}. Not tested by cutting power; whether the disk's own write cache reaches the media was not checked.";
    }
 
    #endregion Public Methods
@@ -80,17 +93,18 @@ public static class SqlDurability
    /// Describes mssql.conf, and says whether it changes how writes are flushed.
    /// </summary>
    /// <param name="conf">mssql.conf parsed, or null when it could not be read.</param>
+   /// <param name="label">How the text names the file.</param>
    /// <returns>The sentence part.</returns>
-   private static string DescribeConf( ParsedConfig? conf )
+   private static string DescribeConf( ParsedConfig? conf, string label )
    {
       if( conf == null )
       {
-         return $"{MSSQL_CONF} could not be read (this account cannot open it and sudo -n cat failed), so its settings are unknown";
+         return $"{label} could not be read (this account cannot open it and sudo -n cat failed, or the server never wrote one), so its settings are unknown";
       }
 
       bool flushTuned = conf.Values.Keys.Any( k => k.StartsWith( "control.", StringComparison.OrdinalIgnoreCase ) || k.StartsWith( "traceflag.", StringComparison.OrdinalIgnoreCase ) );
       string skipped = conf.SkippedLines > 0 ? $" ({conf.SkippedLines} line(s) the reader did not understand)" : string.Empty;
-      return $"{MSSQL_CONF} sets: {ConfigFiles.List( conf )}{skipped}; "
+      return $"{label} sets: {ConfigFiles.List( conf )}{skipped}; "
          + ( flushTuned ? "it has [control] or [traceflag] entries, which change how writes are flushed"
             : "it has no [control] or [traceflag] entry, so SQL Server's own Linux defaults for flushing writes apply (Microsoft's Linux performance guide names trace flag 3982 as that default; read from the guide, not tested here)" );
    }

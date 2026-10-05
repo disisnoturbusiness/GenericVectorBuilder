@@ -4,12 +4,13 @@ namespace GenericVectorBuilder.Bench.Targets;
 
 /// <summary>
 /// What the benchmark needs to know about one running container, read from the text of
-/// "docker inspect": whether it runs, its address on each Docker network, and which of its
-/// ports are published to the host (host port to container port).
+/// "docker inspect": whether it runs, its address on each Docker network, which of its ports
+/// are published to the host (host port to container port), and the CPU set, image and
+/// environment variable names it was created with.
 /// Why only these facts: the benchmark connects to the container's own address and port instead
 /// of the published host port, because a published port on 127.0.0.1 is served by the
-/// userland docker-proxy process, one extra hop that the always-on SQL Server and Qdrant never
-/// pay. The published-port list is how the benchmark finds the container-side port that a
+/// userland docker-proxy process, one extra hop that some engines would pay and others not. The
+/// published-port list is how the benchmark finds the container-side port that a
 /// sink's default host port (for example OpenSearch's 9201) stands for (9200).
 /// </summary>
 /// <param name="Name">Container name without the leading slash, e.g. "gvb-mariadb".</param>
@@ -21,6 +22,22 @@ namespace GenericVectorBuilder.Bench.Targets;
 public sealed record ContainerFacts( string Name, string Id, string Status, bool Running, IReadOnlyList<ContainerNetwork> Networks, IReadOnlyList<PublishedPort> Ports )
 {
    #region Public Methods
+
+   /// <summary>
+   /// The container's CPU set as Docker holds it (HostConfig.CpusetCpus), e.g. "2-3,6-7"; empty when
+   /// the container may use every CPU. Why it is read: an engine sizes its thread pools from the CPUs
+   /// it sees, so the report states the CPUs the engine was held to, read from Docker, not assumed.
+   /// </summary>
+   public string Cpuset { get; init; } = string.Empty;
+
+   /// <summary>The image the container was created from, as written in its config (Config.Image).</summary>
+   public string Image { get; init; } = string.Empty;
+
+   /// <summary>
+   /// Names of the container's environment variables (Config.Env), never their values: several of
+   /// them are passwords from secrets.env. The names show which settings were overridden.
+   /// </summary>
+   public IReadOnlyList<string> EnvNames { get; init; } = Array.Empty<string>();
 
    /// <summary>
    /// Reads the text "docker inspect NAME" prints (a JSON array with one container).
@@ -41,7 +58,12 @@ public sealed record ContainerFacts( string Name, string Id, string Status, bool
          string name = ( root.GetProperty( "Name" ).GetString() ?? string.Empty ).TrimStart( '/' );
          JsonElement settings = root.GetProperty( "NetworkSettings" );
          return new ContainerFacts( name, id.Length > 12 ? id[..12] : id, state.GetProperty( "Status" ).GetString() ?? "unknown", state.GetProperty( "Running" ).GetBoolean(),
-            ReadNetworks( settings ), ReadPorts( settings ) );
+            ReadNetworks( settings ), ReadPorts( settings ) )
+         {
+            Cpuset = Text( root, "HostConfig", "CpusetCpus" ),
+            Image = Text( root, "Config", "Image" ),
+            EnvNames = ReadEnvNames( root ),
+         };
       }
       catch( Exception ex ) when( ex is JsonException or KeyNotFoundException or InvalidOperationException or InvalidCastException )
       {
@@ -52,6 +74,36 @@ public sealed record ContainerFacts( string Name, string Id, string Status, bool
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// Reads a string two levels down, or empty when either level is missing or null.
+   /// </summary>
+   /// <param name="root">The container object.</param>
+   /// <param name="section">First level, e.g. "HostConfig".</param>
+   /// <param name="key">Second level, e.g. "CpusetCpus".</param>
+   /// <returns>The text, or empty.</returns>
+   private static string Text( JsonElement root, string section, string key )
+   {
+      return root.TryGetProperty( section, out JsonElement outer ) && outer.ValueKind == JsonValueKind.Object
+         && outer.TryGetProperty( key, out JsonElement value ) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : string.Empty;
+   }
+
+   /// <summary>
+   /// Reads the names of Config.Env ("NAME=value" entries), sorted, values dropped at once.
+   /// </summary>
+   /// <param name="root">The container object.</param>
+   /// <returns>The names.</returns>
+   private static List<string> ReadEnvNames( JsonElement root )
+   {
+      var names = new List<string>();
+      if( root.TryGetProperty( "Config", out JsonElement config ) && config.ValueKind == JsonValueKind.Object
+         && config.TryGetProperty( "Env", out JsonElement env ) && env.ValueKind == JsonValueKind.Array )
+      {
+         names.AddRange( env.EnumerateArray().Select( e => ( e.GetString() ?? string.Empty ).Split( '=', 2 )[0] ).Where( n => n.Length > 0 ) );
+      }
+
+      return names.OrderBy( n => n, StringComparer.Ordinal ).ToList();
+   }
 
    /// <summary>
    /// Reads the container's address on each network, skipping a network with no address (a

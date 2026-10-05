@@ -26,6 +26,13 @@ namespace GenericVectorBuilder.Bench.Running;
 /// that pass compiled or its connections pooled, so whichever pass ran first paid for it.
 /// Why the settle: engines that compile at run time (the JVM ones) keep getting faster for a while
 /// after they start; timing them seconds after start measured the warm-up, not the engine.
+/// Why the settle check: windows of 100 searches last a fraction of a second on a fast engine, so
+/// three of them can agree while the engine is still on its way down (the review saw Elasticsearch
+/// "settle" at 2.9 ms and then time 1.35 ms). Right before the first timed pass a short trial of
+/// default searches must agree with the settled p50 within <see cref="TRIAL_TOLERANCE"/>; if it
+/// does not (or the settle never settled), the settle is extended once, for at least
+/// <see cref="EXTENSION_MINIMUM"/> and at most <see cref="EXTENSION_CAP"/>, a second trial is
+/// taken, and both are recorded; a target that still disagrees is flagged as not settled.
 /// Latency is wall-clock time around the sink's SearchAsync, measured by the client: it includes
 /// the network hop and the driver, which is what an application sees.
 /// </summary>
@@ -56,6 +63,24 @@ public sealed class SearchRunner
 
    /// <summary>Default longest the settle may run.</summary>
    public static readonly TimeSpan SETTLE_CAP = TimeSpan.FromSeconds( 120 );
+
+   /// <summary>Most the settled p50 may differ from the trial's p50, as a share of the trial's.</summary>
+   public const double TRIAL_TOLERANCE = 0.15;
+
+   /// <summary>Name of the settle check, in the log and the notes.</summary>
+   public const string CHECK_STEP = "settle check";
+
+   /// <summary>Default length of the trial right before the first timed pass.</summary>
+   public static readonly TimeSpan TRIAL_TIME = TimeSpan.FromSeconds( 2 );
+
+   /// <summary>Default longest the one extension of the settle may run.</summary>
+   public static readonly TimeSpan EXTENSION_CAP = TimeSpan.FromSeconds( 120 );
+
+   /// <summary>
+   /// Default shortest the extension runs. Why: the windows can agree within a second on a fast
+   /// engine, and an extension that stops as soon as they do gives a JVM engine no more time.
+   /// </summary>
+   public static readonly TimeSpan EXTENSION_MINIMUM = TimeSpan.FromSeconds( 30 );
 
    private const int GIVE_UP_FAILURES = 20;
    private static readonly TimeSpan WARMUP_BUDGET = TimeSpan.FromSeconds( 60 );
@@ -110,6 +135,15 @@ public sealed class SearchRunner
    /// </summary>
    public TimeSpan SettleCap { get; init; } = SETTLE_CAP;
 
+   /// <summary>Trial length. Why settable: tests shorten it; the benchmark never does.</summary>
+   public TimeSpan TrialTime { get; init; } = TRIAL_TIME;
+
+   /// <summary>Longest the extension may run. Why settable: tests shorten it; the benchmark never does.</summary>
+   public TimeSpan ExtensionCap { get; init; } = EXTENSION_CAP;
+
+   /// <summary>Shortest the extension runs. Why settable: tests shorten it; the benchmark never does.</summary>
+   public TimeSpan ExtensionMinimum { get; init; } = EXTENSION_MINIMUM;
+
    /// <summary>
    /// The untimed preparation of a target whose index is ready: a rehearsal of every pass type
    /// (default at each concurrency, and exact) for <see cref="RehearsalTime"/> each, through the
@@ -138,14 +172,17 @@ public sealed class SearchRunner
       }
 
       log( $"  {target.Name}: settling, one search at a time until the p50s of {SETTLE_WINDOWS} windows of {SETTLE_WINDOW} searches agree within {SETTLE_TOLERANCE:0%}, at most {SettleCap.TotalSeconds:0} s" );
-      preparation.Settle = await SettleAsync( search, ct );
+      preparation.Settle = await SettleAsync( search, SettleCap, TimeSpan.Zero, ct );
       log( $"  {target.Name}: {( preparation.Settle.Settled ? "settled" : "NOT settled" )} after {preparation.Settle.Seconds:0.0} s and {preparation.Settle.Searches:N0} searches" );
       return preparation;
    }
 
    /// <summary>
    /// Measures a target: every timed pass, in this target's seeded order, each after its own
-   /// warm-up.
+   /// warm-up. When a settle ran, the settle check (trial, and the one extension if needed) runs
+   /// after the first pass's warm-up, right before its timing; after an extension that warm-up is
+   /// announced and run again, so the quiet-box check and the warm-up still come right before
+   /// the timed pass.
    /// </summary>
    /// <param name="target">The target.</param>
    /// <param name="collection">Benchmark collection name.</param>
@@ -159,12 +196,20 @@ public sealed class SearchRunner
       var outcome = new SearchOutcome( new SearchReport { CountInTarget = await CountAsync( sink, collection, ct ) }, preparation );
       ( SearchCall search, SearchCall? exact ) = Calls( sink, collection );
       string? previous = preparation == null ? null : SETTLE_STEP;
+      bool checkSettle = preparation?.Settle != null;
       foreach( string pass in PassesFor( target.Name, exact != null ) )
       {
          SearchCall call = pass == RunOrder.EXACT_PASS ? exact! : search;
          int concurrency = ConcurrencyOf( pass );
          log( $"  {target.Name}: warm-up before {pass}, {_options.Warmup} searches" );
          outcome.Add( pass, await WarmUpAsync( call, concurrency, ct ), log, target.Name );
+         if( checkSettle && ( await CheckSettleAsync( search, preparation!, log, target.Name, ct ) ).Extension != null )
+         {
+            log( $"  {target.Name}: warm-up before {pass}, {_options.Warmup} searches (again, after the settle extension)" );
+            outcome.Add( pass, await WarmUpAsync( call, concurrency, ct ), log, target.Name );
+         }
+
+         checkSettle = false;
          log( $"  {target.Name}: timing {pass}" );
          outcome.PassOrder.Add( pass );
          await RunPassAsync( pass, call, concurrency, outcome, previous, log, target.Name, ct );
@@ -240,6 +285,36 @@ public sealed class SearchRunner
       double[] last = windowP50s.Skip( windowP50s.Count - SETTLE_WINDOWS ).ToArray();
       double low = last.Min();
       return low > 0 && ( last.Max() - low ) / low < SETTLE_TOLERANCE;
+   }
+
+   /// <summary>
+   /// The settled p50: the median of the p50s of the last <see cref="SETTLE_WINDOWS"/> windows
+   /// (of fewer when fewer ran).
+   /// </summary>
+   /// <param name="windowP50s">p50 of each settle window, oldest first.</param>
+   /// <returns>The p50, ms, or null when no window completed.</returns>
+   public static double? SettledP50( IReadOnlyList<double> windowP50s )
+   {
+      if( windowP50s.Count == 0 )
+      {
+         return null;
+      }
+
+      List<double> last = windowP50s.Skip( Math.Max( 0, windowP50s.Count - SETTLE_WINDOWS ) ).OrderBy( p => p ).ToList();
+      int middle = last.Count / 2;
+      return last.Count % 2 == 1 ? last[middle] : ( last[middle - 1] + last[middle] ) / 2;
+   }
+
+   /// <summary>
+   /// True when the settled p50 lies within <see cref="TRIAL_TOLERANCE"/> of the trial's p50
+   /// (the difference over the trial's p50). False when either is missing.
+   /// </summary>
+   /// <param name="settledP50">Settled p50, ms.</param>
+   /// <param name="trialP50">Trial p50, ms.</param>
+   /// <returns>True when they agree.</returns>
+   public static bool TrialAgrees( double? settledP50, double? trialP50 )
+   {
+      return TrialRecord.ApartOf( settledP50, trialP50 ) is double apart && apart <= TRIAL_TOLERANCE;
    }
 
    /// <summary>
@@ -451,14 +526,61 @@ public sealed class SearchRunner
    }
 
    /// <summary>
-   /// Repeats default searches one at a time, in windows of <see cref="SETTLE_WINDOW"/>, until
-   /// <see cref="IsSettled"/>, <see cref="SettleCap"/> runs out, or
-   /// <see cref="GIVE_UP_FAILURES"/> searches in a row fail.
+   /// The settle check right before the first timed pass: a trial of default searches against the
+   /// settled p50; when they disagree (or the settle had not settled), the one extension of the
+   /// settle and a second trial. Recorded in the preparation. A settle that stopped because the
+   /// searches kept failing is not extended: more time does not fix a failing engine.
    /// </summary>
    /// <param name="search">The default search.</param>
+   /// <param name="preparation">The preparation (its settle is checked; the check is stored in it).</param>
+   /// <param name="log">Progress output.</param>
+   /// <param name="name">Target name, for the log.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The check.</returns>
+   private async Task<SettleCheck> CheckSettleAsync( SearchCall search, Preparation preparation, Action<string> log, string name, CancellationToken ct )
+   {
+      SettleResult settle = preparation.Settle!;
+      TrialRecord trial = await TrialAsync( search, SettledP50( settle.WindowP50s ), ct );
+      log( $"  {name}: {CHECK_STEP}: {trial.Describe( "trial" )}" );
+      if( ( settle.Settled && trial.Agrees ) || settle.GaveUp )
+      {
+         return preparation.Check = new SettleCheck( trial, null, null, settle.Settled && trial.Agrees );
+      }
+
+      log( $"  {name}: {CHECK_STEP}: extending the settle once, at least {ExtensionMinimum.TotalSeconds:0} s and at most {ExtensionCap.TotalSeconds:0} s" );
+      SettleResult extension = await SettleAsync( search, ExtensionCap, ExtensionMinimum, ct );
+      TrialRecord retrial = await TrialAsync( search, SettledP50( extension.WindowP50s ), ct );
+      var check = new SettleCheck( trial, extension, retrial, extension.Settled && retrial.Agrees );
+      log( $"  {name}: {CHECK_STEP}: extension ran {extension.Seconds:0.0} s and {extension.Searches:N0} searches; {retrial.Describe( "second trial" )}; {( check.Confirmed ? "confirmed" : "STILL NOT CONFIRMED" )}" );
+      return preparation.Check = check;
+   }
+
+   /// <summary>
+   /// The trial: default searches one at a time for <see cref="TrialTime"/>, untimed for the
+   /// results, through the same window code the timed passes use.
+   /// </summary>
+   /// <param name="search">The default search.</param>
+   /// <param name="settledP50">The settled p50 it is compared with, or null.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The trial.</returns>
+   private async Task<TrialRecord> TrialAsync( SearchCall search, double? settledP50, CancellationToken ct )
+   {
+      SearchWindow window = await WindowAsync( search, 1, TrialTime, false, ct );
+      List<double> latencies = window.Latencies();
+      return new TrialRecord( settledP50, latencies.Count == 0 ? null : BenchMath.Percentile( latencies, 50 ), latencies.Count, window.Errors, window.Seconds );
+   }
+
+   /// <summary>
+   /// Repeats default searches one at a time, in windows of <see cref="SETTLE_WINDOW"/>, until
+   /// <see cref="IsSettled"/> (and at least <paramref name="minimum"/> has passed), the cap runs
+   /// out, or <see cref="GIVE_UP_FAILURES"/> searches in a row fail.
+   /// </summary>
+   /// <param name="search">The default search.</param>
+   /// <param name="cap">Longest it may run.</param>
+   /// <param name="minimum">Shortest it runs (zero for the first settle).</param>
    /// <param name="ct">Cancellation.</param>
    /// <returns>Whether it settled, how long it took, and the window p50s.</returns>
-   private async Task<SettleResult> SettleAsync( SearchCall search, CancellationToken ct )
+   private async Task<SettleResult> SettleAsync( SearchCall search, TimeSpan cap, TimeSpan minimum, CancellationToken ct )
    {
       var p50s = new List<double>();
       var block = new List<double>( SETTLE_WINDOW );
@@ -467,7 +589,7 @@ public sealed class SearchRunner
       int failedInRow = 0;
       string? first = null;
       long start = Stopwatch.GetTimestamp();
-      while( !IsSettled( p50s ) && Stopwatch.GetElapsedTime( start ) < SettleCap && failedInRow < GIVE_UP_FAILURES )
+      while( ( !IsSettled( p50s ) || Stopwatch.GetElapsedTime( start ) < minimum ) && Stopwatch.GetElapsedTime( start ) < cap && failedInRow < GIVE_UP_FAILURES )
       {
          ( _, double ms, string? error ) = await TimedAsync( search, searches++ % _queries.Count, ct );
          failedInRow = error == null ? 0 : failedInRow + 1;
@@ -486,8 +608,9 @@ public sealed class SearchRunner
          }
       }
 
-      string? stopped = IsSettled( p50s ) ? null : failedInRow >= GIVE_UP_FAILURES ? $"{GIVE_UP_FAILURES} searches in a row failed" : $"the {SettleCap.TotalSeconds:0} s cap ran out";
-      return new SettleResult( stopped == null, Stopwatch.GetElapsedTime( start ).TotalSeconds, searches, errors, first, p50s, stopped );
+      bool gaveUp = failedInRow >= GIVE_UP_FAILURES;
+      string? stopped = IsSettled( p50s ) && !gaveUp ? null : gaveUp ? $"{GIVE_UP_FAILURES} searches in a row failed" : $"the {cap.TotalSeconds:0} s cap ran out";
+      return new SettleResult( stopped == null, Stopwatch.GetElapsedTime( start ).TotalSeconds, searches, errors, first, p50s, stopped, gaveUp );
    }
 
    /// <summary>
@@ -757,7 +880,75 @@ public sealed record RehearsalRecord( string Pass, double Seconds, int Searches,
 /// <param name="FirstError">The first failure, or null.</param>
 /// <param name="WindowP50s">p50 of each full window, ms, oldest first.</param>
 /// <param name="StoppedBecause">Why it stopped without settling, or null.</param>
-public sealed record SettleResult( bool Settled, double Seconds, int Searches, int Errors, string? FirstError, IReadOnlyList<double> WindowP50s, string? StoppedBecause );
+/// <param name="GaveUp">True when it stopped because the searches kept failing.</param>
+public sealed record SettleResult( bool Settled, double Seconds, int Searches, int Errors, string? FirstError, IReadOnlyList<double> WindowP50s, string? StoppedBecause, bool GaveUp = false );
+
+/// <summary>
+/// One trial of the settle check: default searches one at a time right before the first timed
+/// pass, compared with the settled p50.
+/// </summary>
+/// <param name="SettledP50">The settled p50 it was compared with, ms, or null when no settle window completed.</param>
+/// <param name="P50">The trial's p50, ms, or null when no search completed.</param>
+/// <param name="Searches">Completed searches.</param>
+/// <param name="Errors">Failed searches.</param>
+/// <param name="Seconds">How long it ran.</param>
+public sealed record TrialRecord( double? SettledP50, double? P50, int Searches, int Errors, double Seconds )
+{
+   #region Public Methods
+
+   /// <summary>How far apart the two p50s are, as a share of the trial's; null when either is missing.</summary>
+   public double? Apart => ApartOf( SettledP50, P50 );
+
+   /// <summary>True when they are within <see cref="SearchRunner.TRIAL_TOLERANCE"/>.</summary>
+   public bool Agrees => Apart is double apart && apart <= SearchRunner.TRIAL_TOLERANCE;
+
+   /// <summary>
+   /// The difference of a settled p50 and a trial p50 over the trial p50.
+   /// </summary>
+   /// <param name="settled">Settled p50.</param>
+   /// <param name="trial">Trial p50.</param>
+   /// <returns>The share, or null when either is missing or the trial is not positive.</returns>
+   public static double? ApartOf( double? settled, double? trial )
+   {
+      return settled is double s && trial is double t && t > 0 && !double.IsNaN( s ) ? Math.Abs( s - t ) / t : null;
+   }
+
+   /// <summary>
+   /// One line: "trial of 1,480 searches in 2.0 s: p50 1.341 ms against the settled p50 2.880 ms, 115% apart (limit 15%)".
+   /// </summary>
+   /// <param name="what">"trial" or "second trial".</param>
+   /// <returns>The text.</returns>
+   public string Describe( string what )
+   {
+      string trial = P50 is double p ? $"{p:0.000} ms" : "none (no search completed)";
+      string settled = SettledP50 is double sp ? $"{sp:0.000} ms" : "none (no settle window completed)";
+      string apart = Apart is double a ? $"{a:0%} apart" : "not comparable";
+      return $"{what} of {Searches:N0} searches in {Seconds:0.0} s{( Errors > 0 ? $" ({Errors} failed)" : string.Empty )}: p50 {trial} against the settled p50 {settled}, {apart} (limit {SearchRunner.TRIAL_TOLERANCE:0%})";
+   }
+
+   #endregion Public Methods
+}
+
+/// <summary>
+/// The settle check of one target: the trial, and when it was needed the one extension and the
+/// second trial.
+/// </summary>
+/// <param name="Trial">The first trial.</param>
+/// <param name="Extension">The extension, or null when none ran.</param>
+/// <param name="Retrial">The trial after the extension, or null.</param>
+/// <param name="Confirmed">True when the last settle settled and its trial agreed.</param>
+public sealed record SettleCheck( TrialRecord Trial, SettleResult? Extension, TrialRecord? Retrial, bool Confirmed )
+{
+   #region Public Methods
+
+   /// <summary>Searches the check sent (trials and extension, completed and failed).</summary>
+   public int Searches => Trial.Searches + Trial.Errors + ( Extension?.Searches ?? 0 ) + ( Retrial is TrialRecord r ? r.Searches + r.Errors : 0 );
+
+   /// <summary>Searches of the check that failed.</summary>
+   public int Errors => Trial.Errors + ( Extension?.Errors ?? 0 ) + ( Retrial?.Errors ?? 0 );
+
+   #endregion Public Methods
+}
 
 /// <summary>
 /// One warm-up's tally.
@@ -781,14 +972,17 @@ public sealed class Preparation
    /// <summary>The settle, or null when it did not run.</summary>
    public SettleResult? Settle { get; set; }
 
+   /// <summary>The settle check made right before the first timed pass, or null when none ran.</summary>
+   public SettleCheck? Check { get; set; }
+
    /// <summary>The first rehearsal failure, with its pass, or null.</summary>
    public string? FirstError { get; private set; }
 
-   /// <summary>Searches sent by the rehearsals and the settle (completed and failed).</summary>
-   public int Searches => Rehearsals.Sum( r => r.Searches + r.Errors ) + ( Settle?.Searches ?? 0 );
+   /// <summary>Searches sent by the rehearsals, the settle and the settle check (completed and failed).</summary>
+   public int Searches => Rehearsals.Sum( r => r.Searches + r.Errors ) + ( Settle?.Searches ?? 0 ) + ( Check?.Searches ?? 0 );
 
-   /// <summary>Searches of the rehearsals and the settle that failed.</summary>
-   public int Errors => Rehearsals.Sum( r => r.Errors ) + ( Settle?.Errors ?? 0 );
+   /// <summary>Searches of the rehearsals, the settle and the settle check that failed.</summary>
+   public int Errors => Rehearsals.Sum( r => r.Errors ) + ( Settle?.Errors ?? 0 ) + ( Check?.Errors ?? 0 );
 
    /// <summary>
    /// Adds one pass type's rehearsal.

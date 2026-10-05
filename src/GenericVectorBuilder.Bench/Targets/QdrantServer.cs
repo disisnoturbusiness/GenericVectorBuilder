@@ -273,6 +273,26 @@ public sealed class QdrantServer : IDisposable
    }
 
    /// <summary>
+   /// Reads the durability settings of a Qdrant server in a container: the config file the server
+   /// read, from inside the container, and the names of its QDRANT__ environment overrides from
+   /// docker inspect (never their values).
+   /// </summary>
+   /// <param name="container">Container name, e.g. "gvb-qdrant".</param>
+   /// <param name="configPath">Path of the config file inside the container.</param>
+   /// <param name="envNames">Every environment variable name of the container, from docker inspect, or null when it could not be read.</param>
+   /// <param name="version">Server version.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The sentence for the report.</returns>
+   public static async Task<string> ReadContainerDurabilityAsync( string container, string configPath, IReadOnlyList<string>? envNames, string version, CancellationToken ct )
+   {
+      string? text = await ConfigFiles.ReadContainerFileAsync( container, configPath, ct );
+      ParsedConfig? all = text == null ? null : ConfigFiles.FlattenYaml( text );
+      ParsedConfig? storage = all == null ? null : all with { Values = all.Values.Where( p => p.Key.StartsWith( "storage.", StringComparison.Ordinal ) ).ToDictionary( p => p.Key, p => p.Value, StringComparer.Ordinal ) };
+      IReadOnlyList<string>? overrides = envNames?.Where( name => name.StartsWith( "QDRANT__", StringComparison.Ordinal ) && name != "QDRANT__CONFIG_PATH" ).OrderBy( name => name, StringComparer.Ordinal ).ToList();
+      return DescribeDurability( storage, $"{configPath} in container {container} (the image's own file; its storage keys are listed)", overrides, version );
+   }
+
+   /// <summary>
    /// Describes what a crash can lose, from the strace measurement of the flush calls (see the
    /// text), the config file and the server's environment.
    /// </summary>
@@ -532,8 +552,10 @@ public sealed class QdrantServer : IDisposable
    }
 
    /// <summary>
-   /// Lists the names of QDRANT__ variables in the running server's environment, never their
-   /// values (one of them can be an API key).
+   /// Lists the names of QDRANT__ variables in the running native server's environment, never their
+   /// values (one of them can be an API key). The native process is the "qdrant" process outside
+   /// any container (<see cref="HostProcess"/>): with the benchmark's own Qdrant container running
+   /// there are two, and the first one found could be the container's.
    /// </summary>
    /// <param name="ct">Cancellation.</param>
    /// <returns>The names, or null when the server process or its environment could not be read.</returns>
@@ -541,15 +563,21 @@ public sealed class QdrantServer : IDisposable
    {
       try
       {
-         ShellResult pid = await Shell.RunAsync( "pgrep", new[] { "-x", "qdrant" }, PROCESS_LOOKUP_LIMIT, ct );
-         string first = pid.Output.Split( '\n', StringSplitOptions.RemoveEmptyEntries )[0].Trim();
-         string environ = await File.ReadAllTextAsync( $"/proc/{first}/environ", ct );
+         int first = HostProcess.FindNative( "qdrant" ).FirstOrDefault();
+         if( first <= 0 )
+         {
+            return null;
+         }
+
+         using var limit = CancellationTokenSource.CreateLinkedTokenSource( ct );
+         limit.CancelAfter( PROCESS_LOOKUP_LIMIT );
+         string environ = await File.ReadAllTextAsync( $"/proc/{first}/environ", limit.Token );
          return environ.Split( '\0', StringSplitOptions.RemoveEmptyEntries )
             .Select( entry => entry.Split( '=', 2 )[0] )
             .Where( name => name.StartsWith( "QDRANT__", StringComparison.Ordinal ) && name != "QDRANT__CONFIG_PATH" )
             .OrderBy( name => name, StringComparer.Ordinal ).ToList();
       }
-      catch( Exception ex ) when( ex is IOException or UnauthorizedAccessException or IndexOutOfRangeException or TimeoutException or System.ComponentModel.Win32Exception or InvalidOperationException )
+      catch( Exception ex ) when( ex is IOException or UnauthorizedAccessException or OperationCanceledException && !ct.IsCancellationRequested )
       {
          return null;
       }

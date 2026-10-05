@@ -17,8 +17,10 @@ namespace GenericVectorBuilder.Bench.Running;
 /// Why a random order: in a fixed order the same query ran faster later in a run, so the order
 /// favoured whichever engine came last. The seed is recorded so the order can be repeated.
 /// For bench and run-all the run also takes control of the machine (<see cref="MachineControl"/>):
-/// performance governor, engine and client on separate physical cores, timed passes held while
-/// the box is busy, all put back in a finally block and recorded under "conditions".
+/// performance governor, engine and client on separate physical cores (an engine run-all starts
+/// is created on its cores), each pass's warm-up held while the box is busy, all put back in a
+/// finally block and recorded under "conditions", with the CPU idle settings and how each target
+/// was reached.
 /// </summary>
 public sealed class BenchSession : IDisposable
 {
@@ -146,15 +148,16 @@ public sealed class BenchSession : IDisposable
       SearchRunner? runner = _options.Command == "replicate" ? null : await PrepareSearchAsync( data, report, seed, ct );
       List<(string Name, BenchTarget? Target, string? Error)> targets = order.Select( Create ).ToList();
       Action<string> log = machine.WrapLog( _log );
-      var lifecycle = new EngineLifecycle( machine.WrapHost( _host ), _options.Command == "run-all", log );
+      var lifecycle = new EngineLifecycle( machine.WrapHost( _host ), _options.Command == "run-all", log, machine.EngineCpus );
       await lifecycle.SnapshotAsync( targets.Select( t => t.Target?.ComposePath ), ct );
-      var measurer = new TargetRunner( _options, lifecycle, log );
+      var connections = new ConnectionRecorder( _system, _settings.SqlServer, _settings.QdrantHost, _settings.QdrantGrpcPort );
+      var measurer = new TargetRunner( _options, lifecycle, log ) { AfterSearch = connections.Observe };
       await machine.PinClientAsync( ct );
       foreach( (string name, BenchTarget? target, string? error) in targets )
       {
          log( $"== {name}" );
          report.TargetOrder.Add( name );
-         report.Targets.Add( target == null ? new TargetReport { Name = name, Error = error } : await MeasureOneAsync( measurer, machine, target, data, runner, ct ) );
+         report.Targets.Add( target == null ? new TargetReport { Name = name, Error = error } : await MeasureOneAsync( measurer, machine, connections, target, data, runner, ct ) );
          WriteResults( report, folder, machine );
       }
 
@@ -164,16 +167,17 @@ public sealed class BenchSession : IDisposable
 
    /// <summary>
    /// Measures one target with its engine pinned to the engine CPUs, and puts the pin back
-   /// afterwards even when the measurement fails.
+   /// afterwards even when the measurement fails. Records how the target was reached.
    /// </summary>
    /// <param name="measurer">Target runner.</param>
    /// <param name="machine">Machine control.</param>
+   /// <param name="connections">Records each target's route and open connections.</param>
    /// <param name="target">The target.</param>
    /// <param name="data">Rows.</param>
    /// <param name="runner">Search runner, or null for replicate.</param>
    /// <param name="ct">Cancellation.</param>
-   /// <returns>The target's results, with the machine notes added.</returns>
-   private static async Task<TargetReport> MeasureOneAsync( TargetRunner measurer, MachineControl machine, BenchTarget target, PipelineData data, SearchRunner? runner, CancellationToken ct )
+   /// <returns>The target's results, with the machine and connection notes added.</returns>
+   private static async Task<TargetReport> MeasureOneAsync( TargetRunner measurer, MachineControl machine, ConnectionRecorder connections, BenchTarget target, PipelineData data, SearchRunner? runner, CancellationToken ct )
    {
       await machine.EnterTargetAsync( target.Name, target.Hosting, target.ComposePath, ct );
       TargetReport result;
@@ -186,6 +190,9 @@ public sealed class BenchSession : IDisposable
          await machine.LeaveTargetAsync( target.Name );
       }
 
+      TargetConnection connection = connections.Describe( target );
+      machine.RecordConnection( connection );
+      result.Notes.Add( ConnectionRecorder.Note( connection ) );
       machine.AnnotateTarget( result );
       return result;
    }
@@ -364,21 +371,28 @@ public sealed class BenchSession : IDisposable
    }
 
    /// <summary>
-   /// How every number was measured, printed with the results.
+   /// How every number was measured, printed with the results. Each line says what the code
+   /// does now; the review of 2026-10-04 found these lines describing an older method (latency
+   /// from a separate one-query-at-a-time burst, no rehearsal, no settle), so they are kept next
+   /// to the constants they quote.
    /// </summary>
    /// <param name="seed">The run's seed.</param>
    /// <returns>The notes.</returns>
    private IEnumerable<string> MethodNotes( int seed )
    {
-      yield return $"Order: targets ran one at a time in a random order from seed {seed} (runSeed; --seed {seed} repeats it, targetOrder lists it). Inside each target the timed passes also ran in a random order from the same seed and the target's name (passOrder): default@1 is latency one query at a time (which also gives recall) followed by throughput with one searcher, default@N is throughput with N searchers, exact is the engine's exact mode.";
-      yield return $"Warm-up: every timed pass started with its own untimed warm-up of {_options.Warmup} searches in the same search mode and with the same number of searchers, stopped early after 60 s. Failed warm-up searches are counted per target (warmupErrors) and are not in the timed error counts.";
+      yield return $"Order: targets ran one at a time in a random order from seed {seed} (runSeed; --seed {seed} repeats it, targetOrder lists it). Inside each target the timed passes also ran in a random order from the same seed and the target's name (passOrder): "
+         + $"default@1 is one searcher for {_options.Seconds} s (every search's latency gives p50/p95/p99, the completed searches give QPS@1, its first answer to each query gives recall and nDCG), default@N is N searchers for {_options.Seconds} s (QPS@N), exact is the engine's exact mode, one searcher for {_options.ExactSeconds} s cycling the queries.";
+      yield return $"Preparation, untimed, before any timed pass: a rehearsal of every pass type for {SearchRunner.REHEARSAL_TIME.TotalSeconds:0} s each through the same code the passes use, then a settle (default searches one at a time until the p50s of {SearchRunner.SETTLE_WINDOWS} windows of {SearchRunner.SETTLE_WINDOW} agree within {SearchRunner.SETTLE_TOLERANCE:0%}, at most {SearchRunner.SETTLE_CAP.TotalSeconds:0} s). "
+         + $"Right before the first timed pass a {SearchRunner.TRIAL_TIME.TotalSeconds:0} s trial of default searches must agree with the settled p50 within {SearchRunner.TRIAL_TOLERANCE:0%}; if it does not, or the settle did not settle, the settle is extended once (at least {SearchRunner.EXTENSION_MINIMUM.TotalSeconds:0} s, at most {SearchRunner.EXTENSION_CAP.TotalSeconds:0} s more) and a second trial taken. Each target's notes give the result; a target still disagreeing is marked NOT settled.";
+      yield return $"Warm-up: every timed pass started with its own untimed warm-up of {_options.Warmup} searches in the same search mode and with the same number of searchers, stopped early after 60 s; with machine control on, the check for a quiet box comes right before the warm-up, so warm-up and timed pass run back to back. Failed untimed searches are counted per target (warmupErrors) and are not in the timed error counts.";
       yield return $"Load rows/s counts only time inside each target's upsert calls: one writer, batches of {_options.Batch}, rows already in memory, the collection dropped and created fresh first. Engines that build or finish their index after the writes do it in a separate timed index step (the load's index seconds), and the run waits for it before searching.";
       yield return "Index proof: each engine's own report of its index (indexState) is read after the load and again after the last pass. A target whose index was not ready after the load was still measured and carries a WARNING; an engine that reports nothing counts as not ready.";
       yield return "Durability: each target's crash-safety setting as configured here (durability). Engines that do not force writes to disk on every commit load faster for that reason.";
-      yield return "Latency is client-side wall time around each search (network and driver included), one query at a time; at least 200 samples (small query sets are repeated).";
-      yield return $"QPS: N workers searching back to back for {_options.Seconds} s per level; completed searches divided by elapsed time.";
+      yield return $"Latency is client-side wall time around each search (network and driver included), every search of the default@1 window, one searcher, the queries cycled; a window with fewer than {SearchRunner.MIN_LATENCY_SAMPLES} searches, a p50 above {SearchRunner.SKEW_LIMIT} x its mean, or a mean above its p99 is flagged.";
+      yield return $"QPS: N searchers back to back for {_options.Seconds} s per level; completed searches divided by the window's elapsed time.";
       yield return $"Recall@{_options.Top}: share of the exact top {_options.Top} (brute force in memory) that the engine returned. A hit whose exact similarity ties the {_options.Top}th best (within 1e-5) also counts, because duplicate rows embed to identical vectors.";
-      yield return "RAM of always-on servers (SQL Server, Qdrant) is the whole process, including every other database or collection it serves; for compose engines it is docker stats of the engine's containers. Disk is the table's reserved pages (SQL), the collection folder (Qdrant), or for other engines what the load added to the engine's data folder (engines that keep data in memory until a snapshot show almost nothing).";
+      yield return "Routes: a container engine (the benchmark's own SQL Server and Qdrant containers included) is reached at its container's own address on its Docker network, never through the published 127.0.0.1 port (docker-proxy); the native comparison targets (sql-native, qdrant-native) are native services reached directly over loopback. Each target's addresses and the connections the client held open after its passes are in its notes and in conditions.connections.";
+      yield return "RAM of compose engines, the benchmark's own SQL Server and Qdrant containers (sql, sql-diskann, qdrant, qdrant-hnsw) included, is docker stats of the engine's containers; for the native comparison targets (sql-native, qdrant-native) it is the whole native process, including every other database or collection it serves. Disk is the table's reserved pages (SQL), the collection folder (Qdrant), or for other engines what the load added to the engine's data folder (engines that keep data in memory until a snapshot show almost nothing).";
       yield return _options.Command == "run-all"
          ? "Engines: run-all starts an engine that is down and stops it afterwards only if it was not running when the run began; an engine that was already running is left running."
          : "Engines: this command starts and stops nothing; every engine had to be running already.";
@@ -390,7 +404,7 @@ public sealed class BenchSession : IDisposable
    /// <returns>Exit code.</returns>
    private int List()
    {
-      foreach( string name in _options.Targets.Count > 0 ? _options.Targets : _factory.Names )
+      foreach( string name in _options.Targets.Count > 0 ? _options.Targets : _factory.Names.Concat( _factory.ComparisonNames ) )
       {
          try
          {
@@ -435,7 +449,8 @@ public sealed class BenchSession : IDisposable
    }
 
    /// <summary>
-   /// Drops the "sql" target's benchmark database when it is empty. Best effort.
+   /// Drops the "sql-native" target's benchmark database on the native server when it is empty
+   /// (the container's is dropped by the "sql" target itself). Best effort.
    /// </summary>
    /// <param name="wanted">False to skip (bench and replicate keep their copies).</param>
    /// <param name="report">Report for a note, or null.</param>

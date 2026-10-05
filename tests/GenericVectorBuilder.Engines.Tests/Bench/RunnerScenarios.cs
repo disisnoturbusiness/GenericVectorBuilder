@@ -112,6 +112,35 @@ public static class RunnerScenarios
    }
 
    /// <summary>
+   /// run-all with machine control's engine CPU set: an engine the run starts (and stops) is
+   /// asked to be created on those CPUs; one that was running before the run but went down before
+   /// its turn is started unrestricted, because run-all leaves it running as it found it.
+   /// </summary>
+   /// <param name="targets">Per target: name and compose file.</param>
+   /// <param name="runningBefore">Compose files running when the run starts.</param>
+   /// <param name="downBeforeTurn">Compose files that go down after the snapshot, before their turn.</param>
+   /// <param name="hostApplies">True for a host that creates the containers on the CPU set and reads it back; false for one that cannot.</param>
+   /// <returns>The host's calls and each target's start note.</returns>
+   public static async Task<PinnedLifecycleScenario> RunAllPinnedAsync( (string Name, string Compose)[] targets, string[] runningBefore, string[] downBeforeTurn, bool hostApplies )
+   {
+      var host = new FakeHost( runningBefore, Array.Empty<string>() ) { AppliesCpuset = hostApplies };
+      var lifecycle = new EngineLifecycle( host, true, _ => { }, "2-3,6-7" );
+      List<BenchTarget> fakes = targets.Select( t => Target( new FakeFullSink( t.Name, new CallTrace() ), t.Compose ) ).ToList();
+      await lifecycle.SnapshotAsync( fakes.Select( f => f.ComposePath ), CancellationToken.None );
+      downBeforeTurn.ToList().ForEach( path => host.Running[path] = false );
+      var notes = new List<string>();
+      foreach( BenchTarget fake in fakes )
+      {
+         var mine = new List<string>();
+         await lifecycle.EnsureRunningAsync( fake, mine, CancellationToken.None );
+         await lifecycle.ReleaseAsync( fake, mine );
+         notes.Add( string.Join( " | ", mine ) );
+      }
+
+      return new PinnedLifecycleScenario( host.Calls.ToArray(), notes.ToArray() );
+   }
+
+   /// <summary>
    /// Loads and searches one fake target with the real <see cref="TargetRunner"/> and writes the
    /// results with the real <see cref="ResultsWriter"/>.
    /// </summary>
@@ -198,6 +227,11 @@ public sealed record SearchScenario( string[] Events, string[] PassOrder, int Wa
 /// <param name="RunningAfter">Compose files running at the end.</param>
 /// <param name="Errors">Per target, its error, "not searched", or null.</param>
 public sealed record LifecycleScenario( string[] Calls, string[] RunningAfter, string?[] Errors );
+
+/// <summary>What <see cref="RunnerScenarios.RunAllPinnedAsync"/> saw.</summary>
+/// <param name="Calls">Host calls in order, e.g. "up b.yaml on 2-3,6-7".</param>
+/// <param name="Notes">Per target, its lifecycle notes joined by " | ".</param>
+public sealed record PinnedLifecycleScenario( string[] Calls, string[] Notes );
 
 /// <summary>What <see cref="RunnerScenarios.MeasureOneAsync"/> saw.</summary>
 /// <param name="Events">Sink calls in order.</param>
@@ -531,6 +565,9 @@ public sealed class FakeHost : IEngineHost
    /// <summary>Calls in order: "up X" and "down X".</summary>
    public List<string> Calls { get; } = new();
 
+   /// <summary>True to act as a host that creates the containers on the CPU set and reads it back.</summary>
+   public bool AppliesCpuset { get; init; }
+
    /// <summary>
    /// Whether the compose file runs.
    /// </summary>
@@ -546,13 +583,19 @@ public sealed class FakeHost : IEngineHost
    /// Starts it, or fails half-way for a file in the fail list.
    /// </summary>
    /// <param name="composePath">Compose file.</param>
+   /// <param name="cpuset">CPU set it is asked to be created on, or null.</param>
    /// <param name="ct">Cancellation.</param>
-   /// <returns>A completed task.</returns>
-   public Task UpAsync( string composePath, CancellationToken ct )
+   /// <returns>The read-back line when <see cref="AppliesCpuset"/> and a set was given, else null.</returns>
+   public Task<string?> UpAsync( string composePath, string? cpuset, CancellationToken ct )
    {
-      Calls.Add( $"up {composePath}" );
+      Calls.Add( cpuset == null ? $"up {composePath}" : $"up {composePath} on {cpuset}" );
       Running[composePath] = true;
-      return _failUp.Contains( composePath ) ? Task.FromException( new InvalidOperationException( $"Could not start {composePath}: fake failure" ) ) : Task.CompletedTask;
+      if( _failUp.Contains( composePath ) )
+      {
+         return Task.FromException<string?>( new InvalidOperationException( $"Could not start {composePath}: fake failure" ) );
+      }
+
+      return Task.FromResult( AppliesCpuset && cpuset != null ? $"{composePath}: 1 container started on CPUs {cpuset} (read back from Docker)" : null );
    }
 
    /// <summary>

@@ -68,6 +68,53 @@ public static class ConfigFiles
    }
 
    /// <summary>
+   /// Whether a file exists, asked with "sudo -n test -f" when this account cannot see it (a
+   /// container's data folder belongs to the container's user).
+   /// </summary>
+   /// <param name="path">Absolute path on the host.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>True or false, or null when it could not be told.</returns>
+   public static async Task<bool?> ExistsWithSudoAsync( string path, CancellationToken ct )
+   {
+      if( File.Exists( path ) )
+      {
+         return true;
+      }
+
+      try
+      {
+         ShellResult result = await Shell.RunAsync( "sudo", new[] { "-n", "test", "-f", path }, PRIVILEGED_READ_LIMIT, ct );
+         return result.ExitCode switch { 0 => true, 1 => false, _ => null };
+      }
+      catch( Exception ex ) when( ex is TimeoutException or System.ComponentModel.Win32Exception or InvalidOperationException )
+      {
+         return null;
+      }
+   }
+
+   /// <summary>
+   /// Reads a file inside a running container with "sudo -n docker exec NAME cat PATH", within a
+   /// time limit. Why from inside: a container's config file ships in its image, not in the data
+   /// folder on the host, and the copy the server really read is the one in the container.
+   /// </summary>
+   /// <param name="container">Container name.</param>
+   /// <param name="path">Absolute path inside the container.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The text, or null when the container or the file could not be read.</returns>
+   public static async Task<string?> ReadContainerFileAsync( string container, string path, CancellationToken ct )
+   {
+      try
+      {
+         ShellResult result = await Shell.RunAsync( "sudo", new[] { "-n", "docker", "exec", container, "cat", path }, PRIVILEGED_READ_LIMIT, ct );
+         return result.ExitCode == 0 ? result.Output : null;
+      }
+      catch( Exception ex ) when( ex is TimeoutException or System.ComponentModel.Win32Exception or InvalidOperationException )
+      {
+         return null;
+      }
+   }
+
+   /// <summary>
    /// Flattens nested "key: value" lines to dotted paths, for example "storage.wal.wal_capacity_mb".
    /// A key with no value opens a section; a section ends at the first line indented no deeper
    /// than it. Quotes around a value are removed and "# comment" tails are cut.

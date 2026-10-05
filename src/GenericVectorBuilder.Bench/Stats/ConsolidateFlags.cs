@@ -64,6 +64,8 @@ public static class ConsolidateFlags
       AddFlag( flags, s.Name, "durability-not-stated", runs.Where( r => r.Durability != null && IsNotStated( r.Durability ) ).Select( r => ( r.Run, r.Durability!.Trim().Length == 0 ? "(empty)" : r.Durability! ) ) );
       AddFlag( flags, s.Name, "warmup-errors", runs.Where( r => r.WarmupErrors > 0 ).Select( r => ( r.Run, $"{r.WarmupErrors} warm-up errors" ) ) );
       AddFlag( flags, s.Name, "search-errors", runs.Where( r => r.Errors > 0 ).Select( r => ( r.Run, $"{r.Errors} search errors" ) ) );
+      AddFlag( flags, s.Name, "segment-layout-changed", runs.Where( r => r.SegmentLayoutAfterLoad != null && r.SegmentLayoutAfterSearch != null && r.SegmentLayoutAfterLoad != r.SegmentLayoutAfterSearch )
+         .Select( r => ( r.Run, $"{r.SegmentLayoutAfterLoad} after the load, {r.SegmentLayoutAfterSearch} after the searches" ) ) );
       AddFlag( flags, s.Name, "exact-recall-below-1", runs.Where( r => r.ExactRecall < 1.0 ).Select( r => ( r.Run, $"exactRecall {r.ExactRecall:0.000}" ) ) );
       AddFlag( flags, s.Name, "fields-missing", runs.Select( ( r, i ) => ( r.Run, string.Join( ", ", MissingFields( r, used[i] ) ) ) ).Where( x => x.Item2.Length > 0 ) );
       if( s.Engines.Count > 1 || s.Indexes.Count > 1 )

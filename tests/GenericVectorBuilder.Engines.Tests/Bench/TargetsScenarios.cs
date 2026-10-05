@@ -317,9 +317,11 @@ public static class TargetsScenarios
    }
 
    /// <summary>
-   /// Builds the four built-in targets through the factory the benchmark uses and reports what
-   /// each one carries, then loads the two Qdrant targets with real vectors and reads their
-   /// state through the target's own members, the way the runner does.
+   /// Builds the two native comparison targets ("sql-native", "qdrant-native", the builder's own sinks
+   /// on the native servers) through the factory the benchmark uses and reports what each carries,
+   /// then loads the Qdrant one with real vectors and reads its state through the target's own
+   /// members, the way the runner does. The four default targets run in the benchmark's own
+   /// containers and are checked end to end by TargetsPinnedLiveTests.
    /// </summary>
    /// <param name="repoRoot">Repository root.</param>
    /// <returns>One line per fact.</returns>
@@ -330,18 +332,18 @@ public static class TargetsScenarios
       using var factory = new TargetFactory( new GvbSettings(), repoRoot, null, _ => { } );
       await factory.InitializeAsync( CancellationToken.None );
       lines.AddRange( factory.Notes.Select( n => "factory note: " + n ) );
-      foreach( string name in new[] { "sql", "sql-diskann", "qdrant", "qdrant-hnsw" } )
+      foreach( string name in factory.ComparisonNames )
       {
          BenchTarget target = factory.Create( name );
-         lines.Add( $"target {name}|finisher {target.HasIndexFinisher}|settle {target.Settle != null}|reader {target.IndexStateReader != null}|durability {target.Durability}|pair {( target.PairHint == null ? "none" : $"{target.PairHint.PassA} vs {target.PairHint.PassB}" )}|connection {target.ConnectionText}" );
+         lines.Add( $"target {name}|hosting {target.Hosting}|finisher {target.HasIndexFinisher}|settle {target.Settle != null}|reader {target.IndexStateReader != null}|durability {target.Durability}|pair {( target.PairHint == null ? "none" : $"{target.PairHint.PassA} vs {target.PairHint.PassB}" )}|engine {target.Engine}|connection {target.ConnectionText}" );
       }
 
-      BenchTarget missing = factory.Create( "sql" );
+      BenchTarget missing = factory.Create( TargetFactory.SQL_NATIVE );
       IndexState none = await missing.ReadIndexStateAsync( stem, TimeSpan.FromSeconds( 30 ), CancellationToken.None );
-      lines.Add( $"sql target, table absent|ready {none.Ready}|{none.Detail}" );
+      lines.Add( $"sql-native target, table absent|ready {none.Ready}|{none.Detail}" );
 
       VectorRecord[] data = Make( 524, 1024, 5 );
-      foreach( string name in new[] { "qdrant", "qdrant-hnsw" } )
+      foreach( string name in new[] { TargetFactory.QDRANT_NATIVE } )
       {
          BenchTarget target = factory.Create( name );
          try
@@ -586,7 +588,7 @@ public static class TargetsScenarios
    /// <param name="dimension">Dimension.</param>
    /// <param name="seed">Random seed.</param>
    /// <returns>The records.</returns>
-   private static VectorRecord[] Make( int count, int dimension, int seed )
+   internal static VectorRecord[] Make( int count, int dimension, int seed )
    {
       var random = new Random( seed );
       var records = new VectorRecord[count];

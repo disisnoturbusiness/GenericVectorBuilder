@@ -187,7 +187,8 @@ public class MachineControlTests
    /// A whole run on the fake machine: governors are in the state file before the first write,
    /// SQL Server gets SQL ids 4-7 (kernel 2-3,6-7), Qdrant every thread on 2-3,6-7, the redis
    /// container cpuset 2-3,6-7, the client 0-1,4-5, the embedded engine nothing; each target's
-   /// pins are put back after it, the governors at the end, and the state file is removed.
+   /// pins are put back after it, the governors at the end, and the state file is removed. A
+   /// container moved with docker update after its start says it sized its pools for every CPU.
    /// </summary>
    [Fact]
    public async Task Run_PinsEachEngineAndPutsItBack()
@@ -220,6 +221,8 @@ public class MachineControlTests
       Assert.Equal( 9, c.GetProperty( "exactSeconds" ).GetInt32() );
       Assert.Equal( 4, c.GetProperty( "passes" ).GetArrayLength() );
       Assert.All( c.GetProperty( "engines" ).EnumerateArray(), e => Assert.Empty( e.GetProperty( "problems" ).EnumerateArray() ) );
+      Assert.Contains( "container gvb-redis: cpuset '' -> 2-3,6-7 with docker update after it had started, so it sized its thread pools for every CPU",
+         c.GetProperty( "engines" )[2].GetProperty( "changes" ).EnumerateArray().Select( e => e.GetString() ) );
       Assert.Contains( "embedded", c.GetProperty( "engines" )[3].GetProperty( "method" ).GetString() );
       Assert.Equal( "0-1,4-5", c.GetProperty( "engines" )[3].GetProperty( "cpus" ).GetString() );
       Assert.Contains( "governor back to schedutil on CPUs 0-7", c.GetProperty( "restored" ).EnumerateArray().Select( e => e.GetString() ) );
@@ -255,22 +258,155 @@ public class MachineControlTests
    }
 
    /// <summary>
-   /// A pass announced while 3 CPUs of outside work run waits its limit, runs, and is flagged
-   /// busy; a pass announced on a quiet box starts at once. Each pass ends at its last result
+   /// The quiet check is made at the warm-up line: a warm-up announced while 3 CPUs of outside
+   /// work run waits its limit and its pass is flagged busy (although the box went quiet before
+   /// the timing line); a warm-up on a quiet box goes on at once, and work that starts between
+   /// the warm-up and the timing line does not hold the pass a second time; a pass with no
+   /// warm-up line is checked at its timing line instead. Each pass ends at its last result
    /// line, and one with no result line says so.
    /// </summary>
    [Fact]
-   public async Task BusyBox_WaitsThenFlags()
+   public async Task BusyBox_WaitsBeforeTheWarmupThenFlags()
    {
       dynamic r = await MachineControlCompiler.InFolderAsync( folder => MachineControlCompiler.CallAsync( "GateAsync", folder ) );
       string[] passes = r.Passes;
       Assert.Equal( 3, passes.Length );
-      Assert.StartsWith( "t default@8 busy=True waited=0.4 by=result line", passes[0] );
-      Assert.StartsWith( "t exact busy=False waited=0.0 by=result line", passes[1] );
-      Assert.StartsWith( "t default@1 busy=False waited=0.0 by=end of the target (no result line seen)", passes[2] );
-      Assert.Contains( "after waiting 0 s", ( (string[])r.Reasons )[0] );
-      Assert.Contains( (string[])r.Log, l => l.Contains( "box busy before t default@8", StringComparison.Ordinal ) );
-      Assert.Contains( (string[])r.Log, l => l.Contains( "BUSY BOX", StringComparison.Ordinal ) );
+      Assert.StartsWith( "t default@8 busy=True waited=0.", passes[0] );
+      Assert.InRange( Waited( passes[0] ), 0.4, 0.7 );
+      Assert.Contains( "by=result line before=warm-up", passes[0] );
+      Assert.StartsWith( "t exact busy=False waited=0.0 by=result line before=warm-up load=0.00", passes[1] );
+      Assert.StartsWith( "t default@1 busy=True waited=0.", passes[2] );
+      Assert.Contains( "by=end of the target (no result line seen) before=timed pass (no warm-up line seen)", passes[2] );
+      Assert.Contains( "deadline", ( (string[])r.Reasons )[0] );
+      string[] log = r.Log;
+      Assert.Contains( log, l => l.Contains( "box busy before t default@8 (warm-up)", StringComparison.Ordinal ) );
+      Assert.Contains( log, l => l.Contains( "BUSY BOX", StringComparison.Ordinal ) );
+      Assert.DoesNotContain( log, l => l.Contains( "box busy before t exact", StringComparison.Ordinal ) );
+   }
+
+   /// <summary>
+   /// The deadline is per pass: a warm-up announced twice for the same pass on a busy box waits
+   /// the 0.6 s deadline once in all (not 1.2 s), and the pass is flagged.
+   /// </summary>
+   [Fact]
+   public async Task BusyBox_DeadlineIsPerPass()
+   {
+      dynamic r = await MachineControlCompiler.InFolderAsync( folder => MachineControlCompiler.CallAsync( "RecheckAsync", folder ) );
+      string[] passes = r.Passes;
+      Assert.Single( passes );
+      Assert.StartsWith( "default@1 busy=True waited=0.6", passes[0] );
+      Assert.InRange( (double)r.Seconds, 0.55, 1.1 );
+      Assert.Equal( 2, ( (string[])r.Log ).Count( l => l.Contains( "box busy before t default@1 (warm-up)", StringComparison.Ordinal ) ) );
+   }
+
+   /// <summary>
+   /// The defaults: 0.3 CPUs of outside work at most, a 10-minute deadline per pass, a 60 s
+   /// window and a 5 s window; the rule text says the check is before the warm-up.
+   /// </summary>
+   [Fact]
+   public void BusyBox_Defaults()
+   {
+      string[] d = (string[])MachineControlCompiler.Call( "BusyDefaults" );
+      Assert.Equal( new[] { "0.3", "600", "60", "5" }, d.Take( 4 ) );
+      Assert.Contains( "right before each pass's warm-up", d[4] );
+      Assert.Contains( "up to 10 min", d[4] );
+      Assert.Contains( "0.3 CPUs", d[4] );
+   }
+
+   /// <summary>
+   /// An engine's own start-up is not outside work: the warm-up after run-all started a compose
+   /// engine (3 CPUs of start-up burn before its cgroup was known) goes on at once, while the
+   /// same burn from outside the benchmark holds the next target's warm-up and flags its pass.
+   /// The start is recorded in the state file before it happens; the container created on the
+   /// engine CPUs needs no docker update; leaving the target gives a container still on them
+   /// every CPU back, and nothing is left in the state file.
+   /// </summary>
+   [Fact]
+   public async Task BusyBox_EngineStartupIsNotOutsideWork()
+   {
+      dynamic r = await MachineControlCompiler.InFolderAsync( folder => MachineControlCompiler.CallAsync( "StartupAsync", folder ) );
+      string[] passes = r.Passes;
+      Assert.Equal( 2, passes.Length );
+      Assert.StartsWith( "es busy=False waited=0.0 load=0.00", passes[0] );
+      Assert.StartsWith( "other busy=True", passes[1] );
+      Assert.Equal( "/x/es.compose.yaml 2-3,6-7 es", (string)r.StateDuringUp );
+      string[] calls = r.Calls;
+      Assert.DoesNotContain( "sudo -n docker update --cpuset-cpus 2-3,6-7 e5e5", calls );
+      Assert.Contains( "sudo -n docker update --cpuset-cpus 0-7 e5e5", calls );
+      Assert.Contains( "sudo -n docker compose -f /x/es.compose.yaml ps -q --status running --orphans=false", calls );
+      Assert.Contains( "sudo -n docker compose -f /x/es.compose.yaml ps -a -q --orphans=false", calls );
+      Assert.DoesNotContain( calls, c => c.Contains( " ps " ) && !c.Contains( "--orphans=false" ) );
+      Assert.StartsWith( "cpuset from the container's creation when run-all started it on the engine CPUs", (string)r.Method );
+      Assert.Contains( "container gvb-elasticsearch: already on CPUs 2-3,6-7 (its cpuset since creation), not changed", (string[])r.Changes );
+      Assert.Contains( (string[])r.Restored, l => l.Contains( "e5e5 of es.compose.yaml were still on CPUs 2-3,6-7", StringComparison.Ordinal ) );
+      Assert.False( (bool)r.FileAfter );
+   }
+
+   /// <summary>
+   /// A run that died after a pinned start leaves the containers on the engine CPUs; the next
+   /// start gives the one still on exactly those CPUs every CPU back and leaves alone the one
+   /// someone has changed since.
+   /// </summary>
+   [Fact]
+   public async Task Restore_PinnedStartAfterCrash()
+   {
+      dynamic r = await MachineControlCompiler.InFolderAsync( folder => MachineControlCompiler.CallAsync( "RestoreAfterCrashAsync", folder, "pinned-start" ) );
+      Assert.Null( (string?)r.Error );
+      Assert.False( (bool)r.FileLeft );
+      Assert.Equal( "0-7|1", (string)r.PinnedStartCpusets );
+      Assert.Contains( "sudo -n docker compose -f /x/es.compose.yaml ps -a -q --orphans=false", (string[])r.Calls );
+      Assert.DoesNotContain( "sudo -n docker update --cpuset-cpus 0-7 d0d0", (string[])r.Calls );
+   }
+
+   /// <summary>
+   /// The CPU idle settings are read at the start and the end, with machine control on or off,
+   /// never written; a change made under the run is flagged.
+   /// </summary>
+   [Theory]
+   [InlineData( true )]
+   [InlineData( false )]
+   public async Task Idle_RecordedNeverChanged( bool on )
+   {
+      dynamic r = await MachineControlCompiler.InFolderAsync( folder => MachineControlCompiler.CallAsync( "IdleAsync", folder, on ) );
+      Assert.Equal( "driver intel_idle, governor menu, intel_idle max_cstate 9; POLL on, C1 on, C1E on, C3 OFF on CPUs 0-7 (default disabled), C6 on", (string)r.Start );
+      Assert.Contains( "C6 OFF on CPUs 5 (default enabled)", (string)r.End );
+      Assert.DoesNotContain( (string[])r.Calls, c => c.Contains( "cpuidle", StringComparison.Ordinal ) || c.Contains( "max_cstate", StringComparison.Ordinal ) );
+      using JsonDocument json = JsonDocument.Parse( (string)r.ConditionsJson );
+      JsonElement idle = json.RootElement.GetProperty( "cpuIdle" );
+      Assert.Equal( 5, idle.GetProperty( "states" ).GetArrayLength() );
+      Assert.Equal( "0-7", idle.GetProperty( "states" )[3].GetProperty( "disabledOn" ).GetString() );
+      Assert.Equal( 133, idle.GetProperty( "states" )[4].GetProperty( "latencyUs" ).GetInt32() );
+      Assert.Contains( (string[])r.RunNotes, n => n.StartsWith( "WARNING: the CPU idle settings changed during the run", StringComparison.Ordinal ) );
+      Assert.Contains( (string[])r.RunNotes, n => n.Contains( "C3 OFF on CPUs 0-7", StringComparison.Ordinal ) );
+   }
+
+   /// <summary>
+   /// Connections: /proc/net addresses decode (IPv4, IPv4-mapped IPv6, IPv6 loopback); only this
+   /// process's established sockets count; each target's record names its route and endpoints
+   /// and classifies what was open (its own endpoint, the docker-proxy port, something else); a
+   /// connection through docker-proxy is flagged; SQL data sources split into host and port.
+   /// </summary>
+   [Fact]
+   public async Task Connections_RecordedAndChecked()
+   {
+      dynamic r = await MachineControlCompiler.CallAsync( "ConnectionsAsync" );
+      Assert.Equal( new[] { "127.0.0.1:1433", "127.0.0.1:6334", "172.22.0.2:9200", "::1:8080" }, (string[])r.Decoded );
+      Assert.Equal( new[] { "127.0.0.1:1433 x1", "127.0.0.1:9200 x1", "172.22.0.2:9200 x2" }, (string[])r.Peers );
+      string[] notes = r.Notes;
+      Assert.StartsWith( "Connection: container address on its Docker network, not the published port (no docker-proxy): container gvb-elasticsearch (e5e5e5e5e5e5) on network engines_default at 172.22.0.2:9200, not through docker-proxy 127.0.0.1:9200.", notes[0] );
+      Assert.Contains( "172.22.0.2:9200 x2 (this target)", notes[0] );
+      Assert.Contains( "127.0.0.1:9200 x1 (docker-proxy (published port))", notes[0] );
+      Assert.Contains( "127.0.0.1:1433 x1 (not this target)", notes[0] );
+      Assert.StartsWith( "Connection: native service on this host, reached directly (no container, no docker-proxy): SQL Server at localhost:1433.", notes[1] );
+      Assert.Contains( "127.0.0.1:1433 x1 (this target)", notes[1] );
+      Assert.Equal( "Connection: in this process (embedded), no network: no network address. Open connections not read (not searched).", notes[2] );
+      using JsonDocument json = JsonDocument.Parse( (string)r.Json );
+      JsonElement es = json.RootElement[0];
+      Assert.Equal( 9200, es.GetProperty( "endpoints" )[0].GetProperty( "port" ).GetInt32() );
+      Assert.Equal( "127.0.0.1:9200", es.GetProperty( "endpoints" )[0].GetProperty( "notUsed" ).GetString() );
+      Assert.Contains( (string[])r.Flags, f => f.StartsWith( "WARNING: elasticsearch had 1 connection(s) open to its published port 127.0.0.1:9200", StringComparison.Ordinal ) );
+      Assert.Equal( "(db1, 1500)", (string)r.SqlWithPort );
+      Assert.Equal( "(db2, )", (string)r.SqlNamed );
    }
 
    /// <summary>
@@ -353,6 +489,17 @@ public class MachineControlTests
    #region Private Methods
 
    /// <summary>
+   /// The waited seconds of a pass line ("... waited=0.4 ...").
+   /// </summary>
+   /// <param name="pass">The line.</param>
+   /// <returns>Seconds.</returns>
+   private static double Waited( string pass )
+   {
+      string part = pass.Split( ' ' ).First( p => p.StartsWith( "waited=", StringComparison.Ordinal ) );
+      return double.Parse( part["waited=".Length..], System.Globalization.CultureInfo.InvariantCulture );
+   }
+
+   /// <summary>
    /// Asserts that the calls contain each expected call, in this order.
    /// </summary>
    /// <param name="calls">Calls made.</param>
@@ -383,7 +530,7 @@ internal static class MachineControlCompiler
    private const string SCENARIOS_TYPE = "GenericVectorBuilder.Bench.UnderTest.MachineControlScenarios";
    private const string IMPLICIT_USINGS = "global using System; global using System.Collections.Generic; global using System.IO; global using System.Linq; "
       + "global using System.Net.Http; global using System.Threading; global using System.Threading.Tasks;";
-   private static readonly TimeSpan SCENARIO_DEADLINE = TimeSpan.FromMinutes( 2 );
+   private static readonly TimeSpan SCENARIO_DEADLINE = TimeSpan.FromMinutes( 4 );
    private static readonly Lazy<Assembly> COMPILED = new( Compile );
 
    #endregion Data Members

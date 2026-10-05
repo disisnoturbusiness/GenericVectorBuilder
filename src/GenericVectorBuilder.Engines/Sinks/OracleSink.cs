@@ -50,6 +50,12 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// COUNT(*)), no inserts or deletes wait in the change log, the index is VALID in USER_INDEXES, and
 /// EXPLAIN PLAN of the default search shows VECTOR INDEX HNSW SCAN. The V$ views need a login the
 /// application user does not have, see <see cref="OracleSinkOptions.EvidenceUser"/>.
+/// Why the CPU cap is read and reported (<see cref="OracleCpuCap"/>): Oracle Free caps itself at 2 CPU
+/// threads whatever the host has, which no CPU pinning of the container can change, so every result
+/// carries "Oracle Free caps itself at N CPUs" in <see cref="IndexDescription"/>, in
+/// <see cref="Durability"/> (as the value measured on this box, because that text is read before any
+/// connection exists) and in the detail of <see cref="GetIndexStateAsync"/> (read live from V$INSTANCE,
+/// V$PARAMETER and V$OSSTAT with the evidence login).
 /// Quirk: Oracle stores an empty string as NULL, so an empty origin or chunk text comes back as
 /// an empty string only because this sink maps NULL back to "".
 /// </summary>
@@ -76,6 +82,7 @@ public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription, II
    private readonly OracleSinkOptions _options;
    private readonly string _connectionString;
    private readonly string _evidenceConnectionString;
+   private OracleCpuCap? _cpuCap;
 
    #endregion Data Members
 
@@ -126,7 +133,7 @@ public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription, II
 
    /// <inheritdoc />
    public string IndexDescription =>
-      $"HNSW in-memory neighbor graph NEIGHBORS={_options.HnswNeighbors} EFCONSTRUCTION={_options.HnswEfConstruction}, EFSEARCH={_options.HnswEfSearch} per query, cosine; exact mode = FETCH EXACT FIRST (full scan)";
+      $"HNSW in-memory neighbor graph NEIGHBORS={_options.HnswNeighbors} EFCONSTRUCTION={_options.HnswEfConstruction}, EFSEARCH={_options.HnswEfSearch} per query, cosine; exact mode = FETCH EXACT FIRST (full scan); {CpuCapText}";
 
    /// <inheritdoc />
    public string ComposeFile => "oracle.compose.yaml";
@@ -138,7 +145,8 @@ public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription, II
       + "of the probe table), and the log writer and the datafile writer hold their files open with O_DSYNC (open flags 02110002, filesystemio_options none). The database "
       + "runs NOARCHIVELOG (V$DATABASE.LOG_MODE), so redo serves crash recovery only and there is no point-in-time restore. The HNSW graph lives in the 768 MB vector memory "
       + "pool (oracle-init/01-vector-memory.sh) and is not the durable copy; the table is. "
-      + "Not tested by cutting power; whether the disk's own write cache reaches the media was not checked.";
+      + "Not tested by cutting power; whether the disk's own write cache reaches the media was not checked. "
+      + $"CPU: {CpuCapText}.";
 
    /// <summary>
    /// Optional receiver for progress lines while <see cref="FinishLoadAsync"/> works (one line
@@ -449,7 +457,7 @@ public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription, II
       string plan = await PlanAsync( table, ct );
       bool ready = views.Vectors == stored && views.PendingInserts == 0 && views.PendingDeletes == 0 && status == "VALID" && plan.Contains( "HNSW", StringComparison.Ordinal );
       string detail = $"HNSW graph holds {views.Vectors} of {stored} rows, change log waiting: {views.PendingInserts} inserts and {views.PendingDeletes} deletes, "
-         + $"USER_INDEXES status {status}, plan of the default search: {plan}, index used by {views.UsedCount} queries so far";
+         + $"USER_INDEXES status {status}, plan of the default search: {plan}, index used by {views.UsedCount} queries so far; {await CpuCapDetailAsync( ct )}";
       return new Readout( new IndexState( ready, views.Vectors, stored, detail ), EvidenceMissing: false );
    }
 
@@ -550,6 +558,53 @@ public sealed class OracleSink : ISink, IExactSearchSink, IEngineDescription, II
       await ExecuteAsync( connection, $"DELETE FROM plan_table WHERE statement_id = '{statement}'", ct );
       return string.Join( " > ", operations.Where( o => o.Contains( "SCAN", StringComparison.Ordinal ) || o.Contains( "TABLE ACCESS", StringComparison.Ordinal ) ) );
    }
+
+   /// <summary>
+   /// The CPU cap as text for the report: read live when it can be (and remembered, so
+   /// <see cref="IndexDescription"/> shows it too), otherwise the measured note with the reason the
+   /// read failed. Never throws for a missing view: the cap is context for the numbers, and a failure
+   /// to read it must not hide the index state.
+   /// </summary>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The sentence.</returns>
+   private async Task<string> CpuCapDetailAsync( CancellationToken ct )
+   {
+      try
+      {
+         _cpuCap = await ReadCpuCapAsync( ct );
+         return _cpuCap.Describe();
+      }
+      catch( OracleException ex )
+      {
+         return $"{OracleCpuCap.STATIC_NOTE}; the live read of the CPU settings failed: {ex.Message.Split( '\n' )[0]}";
+      }
+   }
+
+   /// <summary>
+   /// Reads the edition, cpu_count and the host CPU count with the evidence login.
+   /// </summary>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The CPU facts.</returns>
+   private async Task<OracleCpuCap> ReadCpuCapAsync( CancellationToken ct )
+   {
+      await using var connection = new OracleConnection( _evidenceConnectionString );
+      await connection.OpenAsync( ct );
+      await using OracleCommand command = NewCommand( connection );
+      command.CommandText = "SELECT i.edition, TO_NUMBER( p.value ), ( SELECT TO_NUMBER( o.value ) FROM v$osstat o WHERE o.stat_name = 'NUM_CPUS' ) FROM v$instance i, v$parameter p WHERE p.name = 'cpu_count'";
+      await using OracleDataReader reader = await command.ExecuteReaderAsync( ct );
+      if( !await reader.ReadAsync( ct ) )
+      {
+         throw new InvalidOperationException( "Oracle returned no row for the instance edition and cpu_count." );
+      }
+
+      return new OracleCpuCap( reader.GetString( 0 ), Convert.ToInt64( reader.GetValue( 1 ) ), reader.IsDBNull( 2 ) ? null : Convert.ToInt64( reader.GetValue( 2 ) ) );
+   }
+
+   /// <summary>
+   /// The CPU cap sentence for the synchronous text properties: the live reading once one was
+   /// taken, else the measured note.
+   /// </summary>
+   private string CpuCapText => _cpuCap?.Describe() ?? OracleCpuCap.STATIC_NOTE;
 
    /// <summary>
    /// Opens a connection from the driver's pool. Failing to connect throws here, on the first

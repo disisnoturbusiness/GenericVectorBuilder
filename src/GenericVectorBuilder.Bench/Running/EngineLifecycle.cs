@@ -12,6 +12,11 @@ namespace GenericVectorBuilder.Bench.Running;
 /// not tell that engine from one run-all brought up.
 /// The other commands (replicate, bench) promise not to start anything, so for them a stopped
 /// engine is an error with the command that starts it.
+/// An engine run-all starts for its measurement (and stops after) is created on the engine CPUs
+/// when the run split them, so it sizes its thread pools for the CPUs it will run on. An engine
+/// that was running before the run but down at its turn is started unrestricted, because run-all
+/// leaves it running afterwards and must leave it as it was; machine control pins it with
+/// "docker update" for the measurement and puts that back.
 /// </summary>
 public sealed class EngineLifecycle
 {
@@ -19,6 +24,7 @@ public sealed class EngineLifecycle
 
    private readonly IEngineHost _host;
    private readonly bool _runAll;
+   private readonly string? _engineCpus;
    private readonly Action<string> _log;
    private readonly Dictionary<string, bool> _runningBefore = new( StringComparer.Ordinal );
    private readonly HashSet<string> _startedByRun = new( StringComparer.Ordinal );
@@ -33,11 +39,13 @@ public sealed class EngineLifecycle
    /// <param name="host">Starts, stops and checks engines.</param>
    /// <param name="runAll">True for run-all, the only command allowed to start engines.</param>
    /// <param name="log">Progress output.</param>
-   public EngineLifecycle( IEngineHost host, bool runAll, Action<string> log )
+   /// <param name="engineCpus">CPUs an engine this run starts (and stops) is created on, or null to start engines unrestricted (machine control off or CPUs not split).</param>
+   public EngineLifecycle( IEngineHost host, bool runAll, Action<string> log, string? engineCpus = null )
    {
       _host = host;
       _runAll = runAll;
       _log = log;
+      _engineCpus = string.IsNullOrWhiteSpace( engineCpus ) ? null : engineCpus;
    }
 
    #endregion Constructor
@@ -104,11 +112,15 @@ public sealed class EngineLifecycle
          _startedByRun.Add( path );
       }
 
-      _log( $"  starting {Path.GetFileName( path )}" );
-      await _host.UpAsync( path, ct );
-      notes.Add( _runningBefore[path]
-         ? "Engine was running before the run but was down at its turn; run-all started it and leaves it running, as it found it."
-         : "Started by run-all for this measurement and stopped afterwards." );
+      string? cpuset = _runningBefore[path] ? null : _engineCpus;
+      _log( $"  starting {Path.GetFileName( path )}{( cpuset != null ? $" with every container created on CPUs {cpuset}" : string.Empty )}" );
+      string? started = await _host.UpAsync( path, cpuset, ct );
+      if( started != null )
+      {
+         _log( $"  {started}" );
+      }
+
+      notes.Add( StartNote( _runningBefore[path], cpuset, started ) );
    }
 
    /// <summary>
@@ -139,4 +151,32 @@ public sealed class EngineLifecycle
    }
 
    #endregion Public Methods
+
+   #region Private Methods
+
+   /// <summary>
+   /// The note for an engine run-all started.
+   /// </summary>
+   /// <param name="runningBefore">True when it was running before the run (so it is left running).</param>
+   /// <param name="cpuset">The CPUs it was asked to be created on, or null.</param>
+   /// <param name="started">What the host read back about the start, or null when it applied no CPU set.</param>
+   /// <returns>The note.</returns>
+   private static string StartNote( bool runningBefore, string? cpuset, string? started )
+   {
+      if( runningBefore )
+      {
+         return "Engine was running before the run but was down at its turn; run-all started it unrestricted (as it was) and leaves it running, as it found it.";
+      }
+
+      if( cpuset == null )
+      {
+         return "Started by run-all for this measurement, unrestricted (machine control off or the CPUs not split), and stopped afterwards.";
+      }
+
+      return started != null
+         ? $"Started by run-all for this measurement with every container created on CPUs {cpuset} ({started.TrimEnd( '.' )}); stopped afterwards."
+         : $"Started by run-all for this measurement and stopped afterwards; it was to be created on CPUs {cpuset}, but the host did not apply a CPU set at creation, so machine control moved it there after the start (the CPU pinning note says so).";
+   }
+
+   #endregion Private Methods
 }

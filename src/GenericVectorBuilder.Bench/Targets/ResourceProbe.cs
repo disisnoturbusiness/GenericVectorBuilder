@@ -27,7 +27,7 @@ public static class ResourceProbe
    /// <returns>The reading.</returns>
    public static async Task<Measurement> DockerRamAsync( string composePath, CancellationToken ct )
    {
-      string? ids = await Shell.TryOutputAsync( "sudo", new[] { "docker", "compose", "-f", composePath, "ps", "-q" }, ct );
+      string? ids = await Shell.TryOutputAsync( "sudo", new[] { "docker", "compose", "-f", composePath, "ps", "-q", "--orphans=false" }, ct );
       string[] containers = ( ids ?? string.Empty ).Split( '\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries );
       if( containers.Length == 0 )
       {
@@ -67,7 +67,9 @@ public static class ResourceProbe
 
    /// <summary>
    /// Resident memory of a local process found by its exact name (for Qdrant, which runs
-   /// under systemd and serves every collection, so the number is the whole server's).
+   /// under systemd and serves every collection, so the number is the whole server's). Only a
+   /// process outside any container counts (<see cref="HostProcess"/>): the benchmark's own Qdrant
+   /// container runs a process of the same name.
    /// </summary>
    /// <param name="processName">Process name, e.g. "qdrant".</param>
    /// <param name="scope">What the number covers.</param>
@@ -75,8 +77,8 @@ public static class ResourceProbe
    /// <returns>The reading.</returns>
    public static async Task<Measurement> ProcessRssAsync( string processName, string scope, CancellationToken ct )
    {
-      string? pid = ( await Shell.TryOutputAsync( "pgrep", new[] { "-x", processName }, ct ) )?.Split( '\n' )[0];
-      string status = pid == null ? string.Empty : $"/proc/{pid}/status";
+      int pid = HostProcess.FindNative( processName ).FirstOrDefault();
+      string status = pid <= 0 ? string.Empty : $"/proc/{pid}/status";
       string? line = File.Exists( status ) ? ( await File.ReadAllLinesAsync( status, ct ) ).FirstOrDefault( l => l.StartsWith( "VmRSS:", StringComparison.Ordinal ) ) : null;
       if( line == null || !long.TryParse( line.Split( ' ', StringSplitOptions.RemoveEmptyEntries )[1], out long kb ) )
       {
@@ -101,6 +103,11 @@ public static class ResourceProbe
 
    /// <summary>
    /// Pages reserved by one SQL table plus its internal tables (where a vector index lives).
+   /// Why the database is looked up first, on a connection without one: a login into a database
+   /// that does not exist yet fails, and SqlClient then blocks that connection string for a few
+   /// seconds and hands the same failure to the next open. Measured 2026-10-04 on the container
+   /// targets, whose size is read before the load: the sink's first open after creating the database
+   /// failed with "Cannot open database", and the load's rows per second included the 5 s retry.
    /// </summary>
    /// <param name="serverConnectionString">Connection string without a database.</param>
    /// <param name="database">Database holding the table.</param>
@@ -111,6 +118,11 @@ public static class ResourceProbe
    {
       const string SQL = @"SELECT SUM( ps.reserved_page_count ) * 8192 FROM sys.dm_db_partition_stats ps
 WHERE ps.object_id = OBJECT_ID( @t ) OR ps.object_id IN ( SELECT it.object_id FROM sys.internal_tables it WHERE it.parent_object_id = OBJECT_ID( @t ) );";
+      if( await SqlScalarAsync( serverConnectionString, "SELECT DB_ID( @t );", database, ct ) == null )
+      {
+         return Measurement.None( $"database {database} does not exist yet" );
+      }
+
       string connection = new SqlConnectionStringBuilder( serverConnectionString ) { InitialCatalog = database }.ConnectionString;
       long? bytes = await SqlScalarAsync( connection, SQL, $"dbo.[{table}]", ct );
       return bytes.HasValue ? new Measurement( bytes.Value, $"{Measurement.Format( bytes.Value )} (table and its indexes, reserved pages)" ) : Measurement.None( "table not found" );
