@@ -100,6 +100,9 @@ public sealed class MachineConditions
    /// <summary>The first sampling failure, or null.</summary>
    public string? SamplingError { get; set; }
 
+   /// <summary>Which /proc/stat columns the outside load counted as busy and why (see <see cref="CpuAccounting"/>), or null when machine control was off.</summary>
+   public string? CpuAccounting { get; set; }
+
    /// <summary>Load average (1, 5, 15 min) at the end of the run.</summary>
    public string? LoadAverageEnd { get; set; }
 
@@ -257,14 +260,48 @@ public sealed class PassConditions
    /// <summary>Start of the window the quiet check averaged over (UTC): a full window back, or the target's or its engine's start if later.</summary>
    public string? OutsideWindowFromUtc { get; set; }
 
-   /// <summary>CPUs busy outside the benchmark (mean over the busy window) at the quiet check before the pass's warm-up.</summary>
+   /// <summary>CPUs busy outside the benchmark (mean over the busy window) at the quiet check before the pass's warm-up. Signed: below zero means the CPU counters did not add up (see <see cref="AccountingMismatch"/>).</summary>
    public double? OutsideLoadAtStart { get; set; }
 
-   /// <summary>CPUs busy outside the benchmark over the last few seconds at that check.</summary>
+   /// <summary>CPUs busy outside the benchmark over the last few seconds at that check. Signed like <see cref="OutsideLoadAtStart"/>.</summary>
    public double? OutsideLoadRecentAtStart { get; set; }
 
-   /// <summary>CPUs busy outside the benchmark during the pass (mean).</summary>
+   /// <summary>CPUs busy outside the benchmark during the pass (mean). Signed like <see cref="OutsideLoadAtStart"/>.</summary>
    public double? OutsideLoadDuring { get; set; }
+
+   /// <summary>
+   /// True when any of the three outside loads is below <see cref="MachineFlags.MISMATCH_LIMIT"/>
+   /// (-0.05 CPUs): the kernel's total busy time minus this process minus the engine's cgroups
+   /// came out negative, so the counters do not add up and the pass's outside figures cannot be
+   /// trusted. Computed from the recorded loads, so a pass written by older code is judged the same way.
+   /// </summary>
+   public bool AccountingMismatch => MismatchReason() != null;
+
+   /// <summary>Which outside load is below the limit and by how much, or null.</summary>
+   public string? AccountingMismatchReason => MismatchReason();
+
+   /// <summary>Completed timed searches in the pass's window, read from the target's pass note, or null when no note was found.</summary>
+   public int? Searches { get; set; }
+
+   /// <summary>
+   /// CPU seconds this (client) process used during the pass's timed window: user + system of its
+   /// threads, not its finished children. Includes the sampler thread and the kernel network time
+   /// spent on the process's behalf, as every search's cost does.
+   /// </summary>
+   public double? ClientCpuSeconds { get; set; }
+
+   /// <summary>
+   /// The client's CPU per completed search in the pass, in milliseconds: <see cref="ClientCpuSeconds"/>
+   /// over <see cref="Searches"/>. For the fastest engines this is about as large as the latency
+   /// itself, so the order of such engines partly reflects their .NET client libraries.
+   /// </summary>
+   public double? ClientCpuMsPerSearch { get; set; }
+
+   /// <summary>What the client CPU figure was measured over, or null when it was not.</summary>
+   public string? ClientCpuBasis { get; set; }
+
+   /// <summary>Why there is no client CPU per search for this pass, or null when there is.</summary>
+   public string? ClientCpuProblem { get; set; }
 
    /// <summary>Seconds the pass waited for a quiet box.</summary>
    public double WaitedSeconds { get; set; }
@@ -275,7 +312,38 @@ public sealed class PassConditions
    /// <summary>Why it is flagged busy.</summary>
    public string? BusyReason { get; set; }
 
+   /// <summary>
+   /// Records the client CPU of the pass.
+   /// </summary>
+   /// <param name="seconds">Client CPU seconds in the pass's window, or null when it could not be measured.</param>
+   /// <param name="searches">Completed searches in the window, or null when the pass's note was not found.</param>
+   /// <param name="basis">What it was measured over (set when measured).</param>
+   /// <param name="problem">Why there is no per-search figure, or null.</param>
+   public void ApplyClientCpu( double? seconds, int? searches, string? basis, string? problem )
+   {
+      Searches = searches;
+      ClientCpuSeconds = seconds.HasValue ? Math.Round( seconds.Value, 4 ) : null;
+      ClientCpuMsPerSearch = seconds.HasValue && searches > 0 ? Math.Round( seconds.Value * 1000 / searches.Value, 4 ) : null;
+      ClientCpuBasis = basis;
+      ClientCpuProblem = ClientCpuMsPerSearch == null ? problem ?? "client CPU per search could not be worked out" : null;
+   }
+
    #endregion Public Methods
+
+   #region Private Methods
+
+   /// <summary>
+   /// The reason for an accounting mismatch: the lowest outside load, if below the limit.
+   /// </summary>
+   /// <returns>The text, or null when none is below the limit.</returns>
+   private string? MismatchReason()
+   {
+      ( string Name, double? Value )[] loads = { ( "before the warm-up", OutsideLoadAtStart ), ( "over the last few seconds before the warm-up", OutsideLoadRecentAtStart ), ( "during the pass", OutsideLoadDuring ) };
+      ( string Name, double? Value ) worst = loads.Where( l => l.Value < MachineFlags.MISMATCH_LIMIT ).OrderBy( l => l.Value ).FirstOrDefault();
+      return worst.Value.HasValue ? string.Create( CultureInfo.InvariantCulture, $"outside load {worst.Name} was {worst.Value:0.000} CPUs, below {MachineFlags.MISMATCH_LIMIT:0.00}" ) : null;
+   }
+
+   #endregion Private Methods
 }
 
 /// <summary>
@@ -286,6 +354,11 @@ public sealed class PassConditions
 public static class MachineFlags
 {
    #region Data Members
+
+   /// <summary>Outside load (CPUs) below which the counters are said not to add up: a little under zero is rounding, this much is not.</summary>
+   public const double MISMATCH_LIMIT = -0.05;
+
+   private const string DEFAULT_PASS = "default@";
 
    private static readonly JsonSerializerOptions JSON = new()
    {
@@ -332,6 +405,8 @@ public static class MachineFlags
       flags.AddRange( c.Engines.Where( e => e.Problems.Count > 0 ).Select( e => $"WARNING: {e.Target} not fully pinned to its CPUs: {string.Join( "; ", e.Problems ).TrimEnd( '.' )}." ) );
       flags.AddRange( c.Engines.Where( e => e.Hosting == "embedded" ).Select( e => $"{e.Target} is embedded: it ran inside the client process on the client CPUs {e.Cpus ?? "(all)"}, sharing them with the client." ) );
       flags.AddRange( c.Passes.Where( p => p.BusyBox ).Select( p => $"WARNING: busy box during {p.Target} {p.Pass}: {p.BusyReason?.TrimEnd( '.' )}." ) );
+      flags.AddRange( c.Passes.Where( p => p.AccountingMismatch ).Select( p => $"WARNING: accounting mismatch in {p.Target} {p.Pass}: {p.AccountingMismatchReason}; the kernel's busy time minus this process minus the engine's cgroups came out negative, so the outside-load figures of this pass cannot be trusted." ) );
+      flags.AddRange( on ? c.Passes.Where( p => p.ClientCpuMsPerSearch == null ).Select( p => $"WARNING: no client CPU per search for {p.Target} {p.Pass}: {p.ClientCpuProblem ?? "it was never recorded"}." ) : Array.Empty<string>() );
       flags.AddRange( IdleFlags( c ) );
       flags.AddRange( c.Connections.SelectMany( t => t.Observed.Where( p => p.Kind.StartsWith( "docker-proxy", StringComparison.Ordinal ) )
          .Select( p => $"WARNING: {t.Target} had {p.Sockets} connection(s) open to its published port {p.Address}:{p.Port}, which goes through docker-proxy, not the container address it was meant to use." ) ) );
@@ -405,8 +480,31 @@ public static class MachineFlags
    public static string? ClockLine( IEnumerable<PassConditions> passes )
    {
       List<string> parts = passes.Select( p => string.Create( CultureInfo.InvariantCulture,
-         $"{p.Pass} {p.EngineMhzMedian?.ToString( CultureInfo.InvariantCulture ) ?? "?"}/{p.ClientMhzMedian?.ToString( CultureInfo.InvariantCulture ) ?? "?"} MHz, {p.Governor ?? "?"}, outside load {Load( p.OutsideLoadAtStart )} before the warm-up{( p.WaitedSeconds > 0 ? $" after waiting {p.WaitedSeconds:0} s" : string.Empty )}, {Load( p.OutsideLoadDuring )} during{( p.BusyBox ? ", BUSY BOX" : string.Empty )}" ) ).ToList();
-      return parts.Count == 0 ? null : "Clock per pass (median MHz of engine CPUs / client CPUs, governor, CPUs busy outside the benchmark): " + string.Join( "; ", parts ) + ".";
+         $"{p.Pass} {p.EngineMhzMedian?.ToString( CultureInfo.InvariantCulture ) ?? "?"}/{p.ClientMhzMedian?.ToString( CultureInfo.InvariantCulture ) ?? "?"} MHz, {p.Governor ?? "?"}, outside load {Load( p.OutsideLoadAtStart )} before the warm-up{( p.WaitedSeconds > 0 ? $" after waiting {p.WaitedSeconds:0} s" : string.Empty )}, {Load( p.OutsideLoadDuring )} during{( p.BusyBox ? ", BUSY BOX" : string.Empty )}{( p.ClientCpuMsPerSearch is double cpu ? $", client CPU {cpu:0.000} ms per search" : string.Empty )}" ) ).ToList();
+      return parts.Count == 0 ? null : "Clock per pass (median MHz of engine CPUs / client CPUs, governor, CPUs busy outside the benchmark, client CPU per search): " + string.Join( "; ", parts ) + ".";
+   }
+
+   /// <summary>
+   /// The client's CPU per search by concurrency level, for the search section of a target in
+   /// results.json (search.clientCpuMsPerSearch, which the consolidation reads): pass "default@8"
+   /// is level 8. The exact pass has no level and a pass without a figure is left out, so a level
+   /// is never shown with an empty or zero value.
+   /// </summary>
+   /// <param name="passes">One target's recorded passes.</param>
+   /// <returns>Milliseconds by level; empty when no pass has a figure.</returns>
+   public static Dictionary<int, double> ClientCpuByLevel( IEnumerable<PassConditions> passes )
+   {
+      var byLevel = new Dictionary<int, double>();
+      foreach( PassConditions pass in passes )
+      {
+         if( pass.ClientCpuMsPerSearch is double ms && pass.Pass.StartsWith( DEFAULT_PASS, StringComparison.Ordinal )
+            && int.TryParse( pass.Pass[DEFAULT_PASS.Length..], NumberStyles.None, CultureInfo.InvariantCulture, out int level ) )
+         {
+            byLevel[level] = ms;
+         }
+      }
+
+      return byLevel;
    }
 
    /// <summary>

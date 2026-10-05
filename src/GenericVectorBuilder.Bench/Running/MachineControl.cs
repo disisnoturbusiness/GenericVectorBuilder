@@ -400,6 +400,13 @@ public sealed class MachineControl : IDisposable
          pinning = Conditions.Engines.LastOrDefault( e => e.Target == result.Name );
       }
 
+      _sampler?.AttachClientCpu( passes, result.Notes, DateTime.UtcNow );
+      Dictionary<int, double> clientCpu = MachineFlags.ClientCpuByLevel( passes );
+      if( result.Search != null && clientCpu.Count > 0 )
+      {
+         result.Search.ClientCpuMsPerSearch = clientCpu;
+      }
+
       if( pinning != null )
       {
          result.Notes.Add( $"CPU pinning: {pinning.Method}{( pinning.Cpus != null ? $", CPUs {pinning.Cpus}" : string.Empty )}."
@@ -432,6 +439,7 @@ public sealed class MachineControl : IDisposable
       ClosePass( DateTime.UtcNow, "the end of the run" );
       _sampler?.Stop();
       Conditions.SamplingError ??= _sampler?.LastError;
+      Conditions.CpuAccounting = _sampler?.Accounting.Description;
       Conditions.LoadAverageEnd = MachineFacts.ReadLoadAverage();
       Conditions.CpuIdleAtEnd = CpuIdleReader.Read( _system, _partition?.OnlineCpus ?? AllCpus( _system ) );
       if( _keeper == null )
@@ -789,7 +797,7 @@ public sealed class MachineControl : IDisposable
       string split = _partition is { IsSplit: true } ? _partition.Describe() : $"CPUs not split ({c.PartitionProblem})";
       return $"Machine control on: governor {c.Governor} on every CPU during the run (before: {c.GovernorBefore}; at the end: {c.GovernorAtEnd ?? "not read"}; after putting it back: {c.GovernorAfterRestore ?? "not read"}). "
          + $"{split}; the client process{( c.ClientPinning != null ? " was pinned" : " was NOT pinned" )}; each engine was pinned to the engine CPUs for its turn and put back after (conditions.engines); an engine run-all started (and stopped) was asked to be created on them, and its notes say whether the host did so or it was moved there after the start. "
-         + $"Busy box: {c.BusyRule}. CPU clocks were sampled every {_options.SampleInterval.TotalMilliseconds:0} ms; each pass's min/median/max per CPU is in conditions.passes. "
+         + $"Busy box: {c.BusyRule}. Outside load counts {c.CpuAccounting ?? "(not read)"} (conditions.cpuAccounting); each pass also records this client's own CPU time per search (conditions.passes[].clientCpuMsPerSearch). CPU clocks were sampled every {_options.SampleInterval.TotalMilliseconds:0} ms; each pass's min/median/max per CPU is in conditions.passes. "
          + $"CPU idle states, recorded and left as found: {c.CpuIdle?.Describe() ?? "not read"} (conditions.cpuIdle). How each target was reached: conditions.connections. {build}";
    }
 

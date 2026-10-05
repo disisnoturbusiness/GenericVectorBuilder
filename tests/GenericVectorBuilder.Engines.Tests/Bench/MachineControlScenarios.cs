@@ -20,7 +20,7 @@ namespace GenericVectorBuilder.Bench.UnderTest;
 /// refuse while another run owns the machine, which CPUs each engine gets) decide whether the
 /// box is left changed, and a fake makes every command visible without touching the box.
 /// </summary>
-public static class MachineControlScenarios
+public static partial class MachineControlScenarios
 {
    #region Data Members
 
@@ -444,7 +444,9 @@ public static class MachineControlScenarios
    public static string[] Flags( string scenario )
    {
       var c = new MachineConditions { BuildConfiguration = "Release", MachineControl = "on", Governor = "performance", GovernorAtEnd = "performance", StateFile = "/s.json" };
-      c.Passes.Add( new PassConditions { Target = "a", Pass = "default@1", Governor = "performance" } );
+      var first = new PassConditions { Target = "a", Pass = "default@1", Governor = "performance", OutsideLoadDuring = 0.07 };
+      first.ApplyClientCpu( 0.5, 1000, "basis", null );
+      c.Passes.Add( first );
       c.Engines.Add( new TargetPinning { Target = "a", Hosting = "always-on", Cpus = "2-3,6-7" } );
       if( scenario == "bad" )
       {
@@ -452,7 +454,7 @@ public static class MachineControlScenarios
          c.JitOptimizerDisabled = true;
          c.GovernorAtEnd = "mixed: cpu0 performance, cpu1 schedutil";
          c.PartitionProblem = "only one physical core is online";
-         c.Passes.Add( new PassConditions { Target = "a", Pass = "default@8", Governor = "schedutil", BusyBox = true, BusyReason = "outside 2.10 CPUs", NearestSample = true } );
+         c.Passes.Add( new PassConditions { Target = "a", Pass = "default@8", Governor = "schedutil", BusyBox = true, BusyReason = "outside 2.10 CPUs", NearestSample = true, OutsideLoadDuring = -0.4 } );
          c.Engines.Add( new TargetPinning { Target = "duckdb", Hosting = "embedded", Cpus = "0-1,4-5" } );
          c.Engines.Add( new TargetPinning { Target = "b", Hosting = "compose", Problems = { "docker update failed" } } );
          c.RestoreProblems.Add( "container x cpuset: permission denied" );
@@ -832,6 +834,9 @@ public sealed class FakeMachine : IMachineSystem
    private DateTime _lastChange = DateTime.UtcNow;
    private double _outsideCpus;
    private double _busyBase;
+   private double _ownCpus;
+   private double _ownBase;
+   private DateTime _ownChange = DateTime.UtcNow;
    private string _counters = string.Empty;
 
    #endregion Data Members
@@ -883,6 +888,26 @@ public sealed class FakeMachine : IMachineSystem
             _busyBase += ( now - _lastChange ).TotalSeconds * 100 * _outsideCpus;
             _lastChange = now;
             _outsideCpus = value;
+         }
+      }
+   }
+
+   /// <summary>
+   /// CPUs of work this (client) process does from now on: its utime grows at this rate in
+   /// /proc/PID/stat, and /proc/stat's busy time grows with it, so it is never outside work.
+   /// Integrates over time like <see cref="OutsideCpus"/>.
+   /// </summary>
+   public double OwnCpus
+   {
+      get => _ownCpus;
+      set
+      {
+         lock( _lock )
+         {
+            DateTime now = DateTime.UtcNow;
+            _ownBase += ( now - _ownChange ).TotalSeconds * 100 * _ownCpus;
+            _ownChange = now;
+            _ownCpus = value;
          }
       }
    }
@@ -982,20 +1007,25 @@ public sealed class FakeMachine : IMachineSystem
    /// Sets the CPU counters (when <see cref="StaticCounters"/>): busy ticks of /proc/stat, this
    /// process's user ticks, and the qdrant cgroup's usage.
    /// </summary>
-   /// <param name="busyTicks">Busy ticks.</param>
-   /// <param name="selfTicks">This process's ticks.</param>
+   /// <param name="busyTicks">user + nice + system ticks.</param>
+   /// <param name="selfTicks">This process's own (utime) ticks.</param>
    /// <param name="groupUsec">qdrant.service usage_usec.</param>
-   public void SetCounters( long busyTicks, long selfTicks, long groupUsec )
+   /// <param name="softirqTicks">softirq ticks (the kernel keeps them out of user + nice + system).</param>
+   /// <param name="irqTicks">hardirq ticks.</param>
+   /// <param name="stealTicks">steal ticks.</param>
+   /// <param name="childTicks">Ticks of this process's finished children (cutime).</param>
+   public void SetCounters( long busyTicks, long selfTicks, long groupUsec, long softirqTicks = 0, long irqTicks = 0, long stealTicks = 0, long childTicks = 0 )
    {
-      _counters = string.Create( CultureInfo.InvariantCulture, $"cpu  {busyTicks} 0 0 99999 0 0 0 0 0 0\ncpu0 0 0 0 0\n" );
+      _counters = string.Create( CultureInfo.InvariantCulture, $"cpu  {busyTicks} 0 0 99999 0 {irqTicks} {softirqTicks} {stealTicks} 0 0\ncpu0 0 0 0 0\n" );
       Set( "/proc/stat", _counters );
-      Set( $"/proc/{ProcessId}/stat", Stat( ProcessId, "dotnet", 4242, selfTicks ) );
+      Set( $"/proc/{ProcessId}/stat", Stat( ProcessId, "dotnet", 4242, selfTicks, 0, childTicks ) );
       Set( "/sys/fs/cgroup/system.slice/qdrant.service/cpu.stat", $"usage_usec {groupUsec}\nuser_usec 0\n" );
       if( !StaticCounters )
       {
          lock( _lock )
          {
-            _files["/proc/stat"] = () => string.Create( CultureInfo.InvariantCulture, $"cpu  {(long)( _busyBase + ( DateTime.UtcNow - _lastChange ).TotalSeconds * 100 * _outsideCpus + Drift() )} 0 0 99999 0 0 0 0 0 0\n" );
+            _files["/proc/stat"] = () => string.Create( CultureInfo.InvariantCulture, $"cpu  {(long)( _busyBase + ( DateTime.UtcNow - _lastChange ).TotalSeconds * 100 * _outsideCpus + OwnTicks() + Drift() )} 0 0 99999 0 0 0 0 0 0\n" );
+            _files[$"/proc/{ProcessId}/stat"] = () => Stat( ProcessId, "dotnet", 4242, (long)OwnTicks(), 0, 0 );
          }
       }
    }
@@ -1242,6 +1272,15 @@ public sealed class FakeMachine : IMachineSystem
    }
 
    /// <summary>
+   /// Ticks of this process's own work so far (see <see cref="OwnCpus"/>).
+   /// </summary>
+   /// <returns>Ticks.</returns>
+   private double OwnTicks()
+   {
+      return _ownBase + ( DateTime.UtcNow - _ownChange ).TotalSeconds * 100 * _ownCpus;
+   }
+
+   /// <summary>
    /// A little busy time that always grows, so /proc/stat is never flat.
    /// </summary>
    /// <returns>Ticks.</returns>
@@ -1257,12 +1296,16 @@ public sealed class FakeMachine : IMachineSystem
    /// <param name="name">Command name.</param>
    /// <param name="startTicks">Start time (field 22).</param>
    /// <param name="userTicks">User time (field 14).</param>
+   /// <param name="systemTicks">System time (field 15).</param>
+   /// <param name="childTicks">Finished children's user time (field 16).</param>
    /// <returns>The line.</returns>
-   private static string Stat( int pid, string name, long startTicks, long userTicks )
+   private static string Stat( int pid, string name, long startTicks, long userTicks, long systemTicks = 0, long childTicks = 0 )
    {
       string[] after = Enumerable.Repeat( "0", 30 ).ToArray();
       after[0] = "S";
       after[11] = userTicks.ToString( CultureInfo.InvariantCulture );
+      after[12] = systemTicks.ToString( CultureInfo.InvariantCulture );
+      after[13] = childTicks.ToString( CultureInfo.InvariantCulture );
       after[19] = startTicks.ToString( CultureInfo.InvariantCulture );
       return $"{pid} ({name}) {string.Join( " ", after )}\n";
    }

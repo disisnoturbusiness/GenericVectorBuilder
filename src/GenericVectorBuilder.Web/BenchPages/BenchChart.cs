@@ -14,8 +14,8 @@ namespace GenericVectorBuilder.Web.BenchPages;
 /// with a viewBox. Names sit above their bar for the same reason: a left label column would eat
 /// a phone screen. Colors come from style.css tokens, so light and dark both work.
 /// When the numbers are medians of several runs each name carries its tie band ("band 2"):
-/// engines whose min to max lines overlap share a band, and the bars are in median order, which
-/// is not a ranking inside a band.
+/// engines whose min to max lines overlap, or whose neighboring medians are less than 3% apart,
+/// share a band, and the bars are in median order, which is not a ranking inside a band.
 /// </summary>
 public static class BenchChart
 {
@@ -151,7 +151,7 @@ public static class BenchChart
    private static string AriaLabel( BenchSummary summary )
    {
       string what = summary.HasRanges ? $"median of {summary.Runs} runs" : "one run";
-      string bands = summary.HasRanges ? " Engines with the same band number have overlapping ranges, so their order is not a ranking." : string.Empty;
+      string bands = summary.HasRanges ? " Engines with the same band number have overlapping ranges or medians less than 3% apart, so their order is not a ranking." : string.Empty;
       return $"Bar chart of searches per second with 8 at once for {summary.Ranked.Count} engines, {what}, in median order.{bands} The same numbers are in the table below.";
    }
 

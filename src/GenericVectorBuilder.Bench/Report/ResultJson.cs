@@ -13,6 +13,13 @@ namespace GenericVectorBuilder.Bench.Report;
 /// </summary>
 public static class ResultJson
 {
+   #region Data Members
+
+   /// <summary>The start of a default-search pass name ("default@8"); what follows is the number of searchers.</summary>
+   private const string PASS_PREFIX = "default@";
+
+   #endregion Data Members
+
    #region Public Methods
 
    /// <summary>
@@ -126,7 +133,8 @@ public static class ResultJson
    }
 
    /// <summary>
-   /// An object keyed by concurrency level ("1", "8") holding numbers, e.g. search.qps.
+   /// An object keyed by concurrency level ("1", "8"; "default@8" counts as 8) holding numbers,
+   /// e.g. search.qps.
    /// </summary>
    /// <param name="element">An object.</param>
    /// <param name="name">Property name.</param>
@@ -141,7 +149,8 @@ public static class ResultJson
 
       foreach( JsonProperty property in obj.EnumerateObject() )
       {
-         if( int.TryParse( property.Name, NumberStyles.Integer, CultureInfo.InvariantCulture, out int level ) && AsNumber( property.Value ) is double value )
+         string key = property.Name.StartsWith( PASS_PREFIX, StringComparison.Ordinal ) ? property.Name[PASS_PREFIX.Length..] : property.Name;
+         if( int.TryParse( key, NumberStyles.Integer, CultureInfo.InvariantCulture, out int level ) && AsNumber( property.Value ) is double value )
          {
             map[level] = value;
          }

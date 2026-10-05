@@ -22,6 +22,9 @@ namespace GenericVectorBuilder.Bench.Stats;
 /// bench), different engine hosting (container against native) or different segment layouts are
 /// refused, not merged; and each target carries notes a reader needs next to its speed (a CPU
 /// cap, an exact-by-design search, a scan where an index was meant).
+/// Rules added after the v4 review: neighbours whose medians are less than 3% apart share a band
+/// even when their ranges do not overlap (the repeatability of one engine is about 2%), and the
+/// client's CPU per search is carried through where a run recorded it.
 /// </summary>
 public static class Consolidator
 {
@@ -317,6 +320,12 @@ public static class Consolidator
       foreach( int level in levels )
       {
          summary.Qps[Key( level )] = Spread.Of( results.Select( t => Qps( t, level ) ) );
+         Spread clientCpu = Spread.Of( results.Select( t => t.ClientCpuMsPerSearch.TryGetValue( level, out double ms ) ? ms : (double?)null ) );
+         if( clientCpu.N > 0 )
+         {
+            summary.ClientCpuMsPerSearch[Key( level )] = clientCpu;
+         }
+
          if( level != levels[0] )
          {
             summary.QpsRatio[$"{level}/{levels[0]}"] = Spread.Of( results.Select( t => ConsolidateMath.Ratio( Qps( t, level ), Qps( t, levels[0] ) ) ) );

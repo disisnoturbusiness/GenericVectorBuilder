@@ -1,0 +1,63 @@
+# MariaDB 11.8 for the vector benchmark only: the benchmark's "mariadb" target uses this container
+# (gvbbench-mariadb) and never gvb-mariadb, the daily container of mariadb.compose.yaml.
+# Why a second container: the daily gvb-mariadb is long-running and sized for all 8 CPUs, so the
+# v4 benchmark moved it onto the engine CPUs with "docker update" after it had started (sized for 8
+# CPUs, then running on 4) and put it back, which also loaded and changed a long-running server.
+# This container is created for the benchmark on the engine CPUs, like every other engine, started
+# by run-all at the target's turn and removed after it (its data stays).
+# Same image and same server settings as mariadb.compose.yaml, so the numbers describe the same
+# engine; a test compares the two files line by line.
+# Port 3306 inside the container is published on 127.0.0.1:13306 only (3306 is the daily
+# container's; 3307 and 3308 are other containers'); the benchmark itself connects to the container's
+# own bridge address and port 3306, never through docker-proxy. Data lives in
+# /home/dan/gvb-data/engines/mariadb-bench, apart from the daily container's data folder.
+# The root password comes from secrets.env (MARIADB_ROOT_PASSWORD) through env_file; it is applied
+# only when the data directory is first created, so changing it later means wiping
+# /home/dan/gvb-data/engines/mariadb-bench.
+# The image starts as root and gives the data dir to its mysql user (uid 999) itself.
+# Server settings, and why (the same as mariadb.compose.yaml):
+#   innodb-buffer-pool-size 2G       table pages for the vector rows; the default 128M is far too small.
+#   mhnsw-max-cache-size 4G          memory for the loaded HNSW graph. The default is 16M, which at
+#                                    1024 dimensions holds about 4,000 vectors, so a bigger index is
+#                                    re-read from disk on every query.
+#   innodb-flush-log-at-trx-commit 2 flush the log once a second instead of at every commit; a crash can
+#                                    lose the last second, which a rebuildable benchmark index can afford.
+#   max-allowed-packet 64M           room for large batched INSERTs of 1024-dimension vectors.
+# Settings that differ from mariadb.compose.yaml, and why:
+#   cpuset ${GVB_ENGINE_CPUS:-2-3,6-7}  held to the engine CPUs from creation, so MariaDB sizes its
+#                                        thread pools for the CPUs it really has. 2-3,6-7 is the split
+#                                        the benchmark's machine control picks on linus7795 (physical
+#                                        cores 2 and 3 with their hyperthreads); when run-all starts this
+#                                        file it passes the split it chose through a compose override, so
+#                                        the default only matters for a start by hand.
+#   restart "no"                         run-all starts and stops it; it must never come back on its own
+#                                        and take CPUs from a measurement of another engine.
+# Start: sudo docker compose -f deploy/engines/mariadb-bench.compose.yaml up -d   (measured 2026-10-05: about 10 s
+# from an empty data folder, about 6 s after)
+# Stop (data kept): sudo docker compose -f deploy/engines/mariadb-bench.compose.yaml down
+# Own project name so this file never sees (or removes) the other engines' containers.
+name: gvbbench-mariadb
+services:
+  mariadb:
+    image: mariadb:11.8.9
+    container_name: gvbbench-mariadb
+    env_file:
+      - /home/dan/gvb-data/engines/secrets.env
+    command:
+      - --innodb-buffer-pool-size=2G
+      - --mhnsw-max-cache-size=4G
+      - --innodb-flush-log-at-trx-commit=2
+      - --max-allowed-packet=64M
+    cpuset: "${GVB_ENGINE_CPUS:-2-3,6-7}"
+    ports:
+      - "127.0.0.1:13306:3306"
+    volumes:
+      - /home/dan/gvb-data/engines/mariadb-bench:/var/lib/mysql
+    mem_limit: 8g
+    stop_grace_period: 60s
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30

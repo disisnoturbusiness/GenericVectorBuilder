@@ -11,10 +11,12 @@ namespace GenericVectorBuilder.Web.BenchPages;
 /// Why: the full report is a wide table plus a page of per-engine detail that nobody reads, so
 /// the answer has to be readable in about ten seconds before any of that starts.
 /// Every piece of data is HTML-escaped; only the fixed text in this class is trusted markup.
-/// The ranking is titled as request speed on a small collection and put in tie bands instead of
-/// strict ranks: engines whose min to max ranges over the runs overlap share a band, because at
-/// 524 vectors the numbers measure the cost of each request and engines a few percent apart swap
-/// places from run to run.
+/// The ranking is titled as request speed on a small collection, measured through each engine's
+/// .NET client, and put in tie bands instead of strict ranks: engines whose min to max ranges over
+/// the runs overlap, or whose neighboring medians are less than 3% apart, share a band, because at
+/// 524 vectors the numbers measure the cost of each request (the client library included) and
+/// engines a few percent apart swap places from run to run. Where the results carry the client's
+/// CPU per search it is shown beside the single-search p50.
 /// </summary>
 public static class BenchSummaryHtml
 {
@@ -39,16 +41,19 @@ public static class BenchSummaryHtml
    public const string TITLE_UNKNOWN = "Request speed (collection size not recorded)";
 
    /// <summary>The one line under a small-collection title.</summary>
-   public const string LINE_SMALL = "At this size the numbers measure per-request cost, not index scaling.";
+   public const string LINE_SMALL = "Measured end to end through each engine's .NET client; at this size it reflects per-request cost including the client library, not index scaling.";
 
    /// <summary>The one line under a larger-collection title; {0} is the vector count.</summary>
-   public const string LINE_LARGE = "Measured at {0} vectors; the order applies to this size only.";
+   public const string LINE_LARGE = "Measured end to end through each engine's .NET client at {0} vectors; the order applies to this size only.";
 
    /// <summary>The one line when the collection size is unknown.</summary>
-   public const string LINE_UNKNOWN = "The collection size was not recorded in these results.";
+   public const string LINE_UNKNOWN = "The collection size was not recorded in these results. Measured end to end through each engine's .NET client.";
 
    /// <summary>What a band is, printed under the table when the numbers are medians of several runs.</summary>
-   public const string BANDS_LINE = "Engines in different bands never overlap: every run of an engine in a faster band beat every run of an engine in a slower band. Engines in one band are linked by overlapping slowest-to-fastest ranges, so these runs do not separate them cleanly. Inside a band they are listed by median, and that order is not a ranking.";
+   public const string BANDS_LINE = "Engines in different bands never overlap: every run of an engine in a faster band beat every run of an engine in a slower band, and the medians on either side of a band boundary are at least 3% apart. Engines in one band are linked by overlapping slowest-to-fastest ranges or by neighboring medians less than 3% apart (an engine varies about 2% from run to run), so these runs do not separate them cleanly. Inside a band they are listed by median, and that order is not a ranking.";
+
+   /// <summary>What the client CPU per search column is and why it sits beside the latency; printed under a table that shows it.</summary>
+   public const string CLIENT_CPU_LINE = "Client CPU per search is the CPU time the test's .NET client itself used for each search, measured in the same pass as the figure beside it. Where it is close to the latency, the client library is a large part of what is measured.";
 
    /// <summary>Printed under the table of a single run, which has no spread and so no bands.</summary>
    public const string ONE_RUN_LINE = "One run: no spread is known, so no band can be drawn. The order shows this run only.";
@@ -61,7 +66,7 @@ public static class BenchSummaryHtml
       "Qdrant (HNSW) never built its HNSW index at 524 points, so both Qdrant rows are plain scans.",
       "Milvus and Oracle were searched without waiting for their index builds to finish.",
       "SQL Server 2025 + DiskANN and SQL Server 2025 exact were compared across different runs.",
-      "524 vectors measures the cost of each call more than how an engine scales.",
+      "524 vectors measures the cost of each call, through each engine's .NET client library, more than how an engine scales.",
       "The test client and every engine shared one 8-thread box.",
       "Redis holds everything in memory. As set up here it snapshots every 5 minutes with no append-only log, so a crash can lose recent writes.",
    };
@@ -172,22 +177,27 @@ public static class BenchSummaryHtml
          html.Append( $"<figure class=\"bench-figure\">{svg}<figcaption>{Enc( Caption( summary ) )}</figcaption></figure>" );
       }
 
-      html.Append( Table( summary ) ).Append( BandsNote( summary ) ).Append( EngineNotes( summary ) ).Append( Legend( summary ) ).Append( "</section>" );
+      html.Append( Table( summary ) ).Append( BandsNote( summary ) ).Append( ClientCpuNote( summary ) ).Append( EngineNotes( summary ) ).Append( Legend( summary ) ).Append( "</section>" );
       return html.ToString();
    }
 
    /// <summary>
    /// The compact table: band (or the order in this run when only one run was used), engine,
-   /// searches per second with 8 at once, single search p50, and whether the answers matched exact
-   /// search. Same order as the chart. A band is shared by engines whose ranges overlap, so the
-   /// first column is never a strict rank when there are several runs.
+   /// searches per second with 8 at once, single search p50, the client's CPU per search when the
+   /// results carry it for any engine (the p50 then shows two decimals, to compare at the same
+   /// precision), and whether the answers matched exact search. Same order as
+   /// the chart. A band is shared by engines whose ranges overlap or whose neighboring medians are
+   /// close, so the first column is never a strict rank when there are several runs.
    /// </summary>
    /// <param name="summary">Ranked engines.</param>
    /// <returns>HTML fragment.</returns>
    public static string Table( BenchSummary summary )
    {
+      bool cpu = HasClientCpu( summary );
       var html = new StringBuilder( $"<div class=\"preview\"><table class=\"bench-table\"><thead><tr><th class=\"n\">{( summary.HasRanges ? "Band" : "Order" )}</th><th>Engine</th>" );
-      html.Append( "<th class=\"n\">Searches/s, 8 at once</th><th class=\"n\">Single search p50 ms</th><th>Same answers as exact search</th></tr></thead><tbody>" );
+      html.Append( "<th class=\"n\">Searches/s, 8 at once</th><th class=\"n\">Single search p50 ms</th>" );
+      html.Append( cpu ? "<th class=\"n\">Client CPU per search ms</th>" : string.Empty );
+      html.Append( "<th>Same answers as exact search</th></tr></thead><tbody>" );
       for( int i = 0; i < summary.Ranked.Count; i++ )
       {
          BenchEngineRow row = summary.Ranked[i];
@@ -196,12 +206,14 @@ public static class BenchSummaryHtml
          string sameClass = same.StartsWith( "no", StringComparison.Ordinal ) ? " class=\"bench-no\"" : string.Empty;
          int place = summary.HasRanges ? row.Band ?? i + 1 : i + 1;
          html.Append( $"<tr><td class=\"n\">{place}</td><td>{Enc( row.Name )}{memory}{Markers( row )}</td><td class=\"n\">{Enc( BenchChart.Count( row.Qps8 ) )}</td>" );
-         html.Append( $"<td class=\"n\">{Enc( Ms( row.P50Ms ) )}</td><td{sameClass}>{Enc( same )}</td></tr>" );
+         html.Append( $"<td class=\"n\">{Enc( cpu ? MsTwoDecimals( row.P50Ms ) : Ms( row.P50Ms ) )}</td>" );
+         html.Append( cpu ? $"<td class=\"n\">{Enc( MsTwoDecimals( row.ClientCpuMs ) )}</td>" : string.Empty );
+         html.Append( $"<td{sameClass}>{Enc( same )}</td></tr>" );
       }
 
       foreach( string name in summary.NoResult )
       {
-         html.Append( $"<tr><td class=\"n\">-</td><td>{Enc( name )}</td><td colspan=\"3\" class=\"muted\">no result</td></tr>" );
+         html.Append( $"<tr><td class=\"n\">-</td><td>{Enc( name )}</td><td colspan=\"{( cpu ? 4 : 3 )}\" class=\"muted\">no result</td></tr>" );
       }
 
       return html.Append( "</tbody></table></div>" ).ToString();
@@ -316,6 +328,17 @@ public static class BenchSummaryHtml
    }
 
    /// <summary>
+   /// The line under the table that says what the client CPU column is: shown only when the table
+   /// has it.
+   /// </summary>
+   /// <param name="summary">Ranked engines.</param>
+   /// <returns>HTML fragment; empty when no engine carries the figure.</returns>
+   public static string ClientCpuNote( BenchSummary summary )
+   {
+      return HasClientCpu( summary ) ? $"<p class=\"bench-client-cpu muted\">{Enc( CLIENT_CPU_LINE )}</p>" : string.Empty;
+   }
+
+   /// <summary>
    /// The notes on individual engines that the consolidate command wrote: a CPU cap, an
    /// exact-by-design search, a scan where an index was meant. Each says where it came from: the
    /// results, or a known limit the run did not record. Empty when no engine has a note (older
@@ -375,6 +398,18 @@ public static class BenchSummaryHtml
    }
 
    /// <summary>
+   /// Formats milliseconds with two decimals, or "-" when missing. Used for the client's CPU per
+   /// search (a fraction of a millisecond for the fast engines) and, when that column is shown, for
+   /// the p50 beside it, so the two can be compared at the same precision.
+   /// </summary>
+   /// <param name="ms">Milliseconds or null.</param>
+   /// <returns>E.g. "0.49".</returns>
+   public static string MsTwoDecimals( double? ms )
+   {
+      return ms == null ? "-" : ms.Value.ToString( "0.00", CultureInfo.InvariantCulture );
+   }
+
+   /// <summary>
    /// Formats a latency in milliseconds with one decimal, or "-" when missing.
    /// </summary>
    /// <param name="ms">Milliseconds or null.</param>
@@ -389,6 +424,16 @@ public static class BenchSummaryHtml
    #region Private Methods
 
    /// <summary>
+   /// True when at least one engine carries the client's CPU per search.
+   /// </summary>
+   /// <param name="summary">Ranked engines.</param>
+   /// <returns>True when the table shows the column.</returns>
+   private static bool HasClientCpu( BenchSummary summary )
+   {
+      return summary.Ranked.Any( r => r.ClientCpuMs != null );
+   }
+
+   /// <summary>
    /// The chart caption: what the bars, lines and hatching mean.
    /// </summary>
    /// <param name="summary">Ranked engines.</param>
@@ -396,14 +441,14 @@ public static class BenchSummaryHtml
    private static string Caption( BenchSummary summary )
    {
       string text = summary.HasRanges
-         ? $"Searches per second with 8 at once; longer is faster. Bar: median of {summary.Runs} runs. Thin line: slowest to fastest run. Engines with the same band number have overlapping lines."
+         ? $"Searches per second with 8 at once; longer is faster. Bar: median of {summary.Runs} runs. Thin line: slowest to fastest run. Engines with the same band number have overlapping lines or medians less than 3% apart."
          : "Searches per second with 8 at once in this run; longer is faster.";
       return summary.Ranked.Any( r => r.InMemory ) ? text + " Hatched: holds everything in memory." : text;
    }
 
    /// <summary>
    /// The headline when several engines share the fastest band: all of them, their medians, and
-   /// that their runs are linked by overlap; plus a warning for each one that missed exact answers.
+   /// that these runs do not tell them apart; plus a warning for each one that missed exact answers.
    /// </summary>
    /// <param name="summary">Ranked engines.</param>
    /// <param name="top">The engines of the fastest band, in median order.</param>
@@ -412,7 +457,7 @@ public static class BenchSummaryHtml
    {
       string names = JoinWords( top.Select( r => r.Name ).ToList() );
       string medians = JoinWords( top.Select( r => BenchChart.Count( r.Qps8 ) ).ToList() );
-      string text = $"{names} were fastest together, linked by overlapping runs: {medians} searches per second with 8 at once (median of {summary.Runs} runs)";
+      string text = $"{names} were fastest together, too close to tell apart in these runs: {medians} searches per second with 8 at once (median of {summary.Runs} runs)";
       foreach( BenchEngineRow row in top.Where( r => r.Recall != null && r.Recall.Value < SAME_ANSWERS ) )
       {
          text += $", {row.Name} returned {Percent( row.Recall!.Value )} of the exact top 10";

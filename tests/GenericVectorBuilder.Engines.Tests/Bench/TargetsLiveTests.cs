@@ -189,7 +189,9 @@ public class TargetsLiveTests
 
    /// <summary>
    /// The proof that a compose-hosted engine is measured without the docker-proxy hop, on the real
-   /// gvb-mariadb container: the target's recorded address is the container's (confirmed by a second,
+   /// benchmark container gvbbench-mariadb (which must be running: start it with
+   /// deploy/engines/mariadb-bench.compose.yaml, see <see cref="MariaBenchLiveTests"/> for a test that
+   /// starts and stops it itself): the target's recorded address is the container's (confirmed by a second,
    /// independent docker read), and while searches run the kernel's socket table (sudo ss -tnp) shows
    /// this process connected to the container's own address and port, with no socket to the published
    /// 127.0.0.1 port and no docker-proxy socket facing one of ours. The control runs the same searches
@@ -206,19 +208,19 @@ public class TargetsLiveTests
       }
 
       string connection = lines.Single( l => l.StartsWith( "connection|", StringComparison.Ordinal ) );
-      Match address = Regex.Match( connection, @"^connection\|gvb-mariadb \((?<id>[0-9a-f]{12})\) on network (?<net>\S+) at (?<ip>[\d.]+):3306, not through docker-proxy 127\.0\.0\.1:3306$" );
+      Match address = Regex.Match( connection, @"^connection\|gvbbench-mariadb \((?<id>[0-9a-f]{12})\) on network (?<net>\S+) at (?<ip>[\d.]+):3306, not through docker-proxy 127\.0\.0\.1:13306$" );
       Assert.True( address.Success, connection );
       string ip = address.Groups["ip"].Value;
       Assert.Equal( ip, lines.Single( l => l.StartsWith( "docker says the address is|", StringComparison.Ordinal ) ).Split( '|' )[1].Trim() );
 
       string[] direct = lines.Where( l => l.StartsWith( "direct|sample ", StringComparison.Ordinal ) ).ToArray();
       Assert.Equal( 3, direct.Length );
-      Assert.All( direct, l => Assert.Matches( $@"\|ours [1-9]\d*\|to {Regex.Escape( ip )}:3306 [1-9]\d*\|to 127\.0\.0\.1:3306 0\|docker-proxy sockets facing ours 0$", l ) );
+      Assert.All( direct, l => Assert.Matches( $@"\|ours [1-9]\d*\|to {Regex.Escape( ip )}:3306 [1-9]\d*\|to 127\.0\.0\.1:13306 0\|docker-proxy sockets facing ours 0$", l ) );
       Assert.Matches( @"^direct\|searches\|completed [1-9]\d{2,}\|failed 0$", lines.Single( l => l.StartsWith( "direct|searches|", StringComparison.Ordinal ) ) );
 
       string[] control = lines.Where( l => l.StartsWith( "proxied control|sample ", StringComparison.Ordinal ) ).ToArray();
       Assert.Equal( 3, control.Length );
-      Assert.All( control, l => Assert.Matches( @"\|to 127\.0\.0\.1:3306 [1-9]\d*\|docker-proxy sockets facing ours [1-9]\d*$", l ) );
+      Assert.All( control, l => Assert.Matches( @"\|to 127\.0\.0\.1:13306 [1-9]\d*\|docker-proxy sockets facing ours [1-9]\d*$", l ) );
       Assert.Matches( @"^proxied control\|searches\|completed [1-9]\d{2,}\|failed 0$", lines.Single( l => l.StartsWith( "proxied control|searches|", StringComparison.Ordinal ) ) );
       Assert.Contains( lines, l => l.StartsWith( "cleanup|dropped gvb.gvb_gvbbench_direct", StringComparison.Ordinal ) );
    }
@@ -226,8 +228,9 @@ public class TargetsLiveTests
    /// <summary>
    /// Real "docker inspect" output of every running engine container (one or two published ports each, on
    /// different networks) is read into a recorded address that matches a second docker read and accepts a
-   /// real TCP connection from this process. gvb-mariadb must be among them; engines that other work has
-   /// stopped are skipped and printed as such.
+   /// real TCP connection from this process. The daily gvb-mariadb is never among them (no target uses it);
+   /// the benchmark's gvbbench-mariadb is bound when it is running and skipped when it is not, like the
+   /// engines that other work has stopped.
    /// </summary>
    [Fact]
    public async Task Bind_EveryRunningContainerResolvesAndAcceptsConnections()
@@ -239,7 +242,8 @@ public class TargetsLiveTests
       }
 
       string[] bound = lines.Where( l => l.Contains( "|bound|", StringComparison.Ordinal ) ).ToArray();
-      Assert.Contains( bound, l => l.StartsWith( "mariadb|bound|", StringComparison.Ordinal ) );
+      Assert.DoesNotContain( bound, l => l.Contains( "|gvb-mariadb|", StringComparison.Ordinal ) );
+      Assert.All( lines.Where( l => l.StartsWith( "mariadb|", StringComparison.Ordinal ) ), l => Assert.True( l.StartsWith( "mariadb|bound|", StringComparison.Ordinal ) ? l.Contains( "|gvbbench-mariadb|", StringComparison.Ordinal ) : l.Contains( "gvbbench-mariadb", StringComparison.Ordinal ), l ) );
       foreach( string[] fields in bound.Select( l => l.Split( '|' ) ) )
       {
          string ip = fields[2].Split( ':' )[0];

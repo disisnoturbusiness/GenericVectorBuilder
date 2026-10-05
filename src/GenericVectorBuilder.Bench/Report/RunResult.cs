@@ -163,6 +163,7 @@ public sealed class TargetResult
    private static readonly string[] SETTING_NAMES = { "searchSettings", "searchSetting", "searchParams", "searchEffort", "effort", "settings" };
    private static readonly string[] SETTLED_NAMES = { "settled", "isSettled", "indexSettled" };
    private static readonly string[] CPU_CAP_NAMES = { "cpuCap", "cpuLimit", "engineCpuCap" };
+   private static readonly string[] CLIENT_CPU_NAMES = { "clientCpuMsPerSearch", "clientCpuPerSearchMs" };
 
    #endregion Data Members
 
@@ -257,6 +258,15 @@ public sealed class TargetResult
    public string? CpuCap { get; init; }
 
    /// <summary>
+   /// CPU time the benchmark client itself used per search, in milliseconds, by concurrency level
+   /// (the pass with that many searchers); empty when the run did not record it. Read from the
+   /// search section's "clientCpuMsPerSearch", an object keyed by level ("1", "8" or "default@8").
+   /// Why carried: for the fastest engines it is about as large as the latency, so the speed order
+   /// partly reflects each engine's .NET client library, and a reader needs both numbers side by side.
+   /// </summary>
+   public IReadOnlyDictionary<int, double> ClientCpuMsPerSearch { get; init; } = new Dictionary<int, double>();
+
+   /// <summary>
    /// Reads one target object.
    /// Why passOrder and warmupErrors are also looked for inside "search": the contract puts them
    /// on the target, and a writer that put them on the search section must not read as missing.
@@ -299,12 +309,37 @@ public sealed class TargetResult
          PairHint = PairHintValue.Parse( ResultJson.Child( t, "pairHint" ) ),
          MeanMs = Search( search, "meanMs" ) ?? Search( search, "latencyMeanMs" ),
          CpuCap = CpuCapText( t ),
+         ClientCpuMsPerSearch = ClientCpu( t, search ),
       };
    }
 
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// The client's CPU time per search by concurrency level, from the search section or the target
+   /// object; levels whose value is negative are skipped.
+   /// </summary>
+   /// <param name="target">The target object.</param>
+   /// <param name="search">The search section, if any.</param>
+   /// <returns>Milliseconds by level; empty when the run recorded none.</returns>
+   private static IReadOnlyDictionary<int, double> ClientCpu( JsonElement target, JsonElement? search )
+   {
+      foreach( JsonElement holder in search.HasValue ? new[] { search.Value, target } : new[] { target } )
+      {
+         foreach( string name in CLIENT_CPU_NAMES )
+         {
+            Dictionary<int, double> found = ResultJson.LevelMap( holder, name ).Where( p => p.Value >= 0 ).ToDictionary( p => p.Key, p => p.Value );
+            if( found.Count > 0 )
+            {
+               return found;
+            }
+         }
+      }
+
+      return new Dictionary<int, double>();
+   }
 
    /// <summary>
    /// The engine's own CPU limit as text, from the accepted spellings on the target object.

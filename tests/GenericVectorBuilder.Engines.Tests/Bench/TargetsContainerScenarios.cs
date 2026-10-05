@@ -19,11 +19,11 @@ namespace GenericVectorBuilder.Bench.UnderTest;
 /// Runs the benchmark's container-address code and hands back plain lines for the tests to
 /// check. The pure part feeds it "docker inspect" text (one real capture, the rest built to
 /// match) and compose files from deploy/engines; the live part sends real searches to the running
-/// gvb-mariadb container and looks at the kernel's socket table with ss while they run.
+/// benchmark container gvbbench-mariadb (the target's own, never the daily gvb-mariadb) and looks at
+/// the kernel's socket table with ss while they run.
 /// Why the live part exists: the pure part proves the address a sink is BUILT with, but only the
 /// socket table shows where the bytes actually go. Every MariaDB table it creates is named
-/// gvb_gvbbench_direct* and is dropped at the end; the shared gvb database and its other tables
-/// are never read or written.
+/// gvb_gvbbench_direct* and is dropped at the end; the daily container is never contacted.
 /// </summary>
 public static class TargetsContainerScenarios
 {
@@ -169,12 +169,12 @@ public static class TargetsContainerScenarios
    /// Exercises one compose-hosted target's binding against a fake Docker and counts the asks.
    /// </summary>
    /// <param name="repoRoot">Repository root.</param>
-   /// <param name="mariadbJson">docker inspect text of the MariaDB container.</param>
+   /// <param name="mariadbJson">docker inspect text of the benchmark's MariaDB container (gvbbench-mariadb).</param>
    /// <returns>One line per fact.</returns>
    public static async Task<string[]> BindingAsync( string repoRoot, string mariadbJson )
    {
       var lines = new List<string>();
-      var fake = new FakeInspector( new Dictionary<string, List<string?>> { ["gvb-mariadb"] = new() { mariadbJson } } );
+      var fake = new FakeInspector( new Dictionary<string, List<string?>> { [MariaBench.CONTAINER] = new() { mariadbJson } } );
       using var factory = new TargetFactory( new GvbSettings(), repoRoot, null, _ => { }, fake );
       BenchTarget target = factory.Create( "mariadb" );
       string known = $"{target.Name}|{target.Engine.Length > 0}|{target.Hosting}|{target.Durability.Length > 0}|{target.Index.Length > 0}|{target.HasIndexFinisher}";
@@ -224,9 +224,10 @@ public static class TargetsContainerScenarios
    }
 
    /// <summary>
-   /// Sends real searches to the running gvb-mariadb container twice, once on the container's own
-   /// address (the benchmark's route) and once on the published 127.0.0.1 port (docker-proxy, as a
-   /// positive control), and while each runs reads the kernel's socket table with "sudo ss -tnp". For
+   /// Sends real searches to the running benchmark container gvbbench-mariadb (start it first with
+   /// deploy/engines/mariadb-bench.compose.yaml; the daily gvb-mariadb is never used) twice, once on the
+   /// container's own address (the benchmark's route) and once on the published 127.0.0.1 port
+   /// (docker-proxy, as a positive control), and while each runs reads the kernel's socket table with "sudo ss -tnp". For
    /// each route it reports where this process's sockets lead and whether docker-proxy holds a socket
    /// facing one of ours. Then times single searches on both routes in alternating rounds (evidence,
    /// not an assertion).
@@ -244,7 +245,9 @@ public static class TargetsContainerScenarios
       ContainerAddress address = target.Connections.Single();
       lines.Add( "connection|" + address.Describe() );
       lines.Add( "docker says the address is|" + ( await Shell.TryOutputAsync( "sudo", new[] { "-n", "docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}", address.Container }, cancel.Token ) ) );
-      using var proxied = new MariaDbSink();
+      MariaDbSinkOptions proxiedOptions = MariaDbSinkOptions.LocalDefaults();
+      proxiedOptions.Port = address.HostPort;
+      using var proxied = new MariaDbSink( proxiedOptions );
       VectorRecord[] data = Make( ROWS, DIMENSION, 7 );
       try
       {
@@ -349,7 +352,7 @@ public static class TargetsContainerScenarios
 
       BenchTarget target = factory.Create( name );
       ISink bound = await target.BindAsync( CancellationToken.None );
-      string[] defaults = Endpoints( catalog[name] ).ToArray();
+      string[] defaults = Endpoints( catalog[name] ).Select( e => RouteHostEndpoint( name, e ) ).ToArray();
       string[] wanted = defaults.Select( e => ExpectedEndpoint( e, declared, addresses[container] ) ).ToArray();
       string[] actual = Endpoints( bound ).OrderBy( e => e, StringComparer.Ordinal ).ToArray();
       bool same = actual.SequenceEqual( wanted.OrderBy( e => e, StringComparer.Ordinal ) ) && actual.Length > 0;
@@ -357,6 +360,19 @@ public static class TargetsContainerScenarios
       string remapped = string.Join( " ", defaults.Zip( wanted, ( d, w ) => ( Host: d.Split( ':' )[1], Container: w.Split( ':' )[1] ) ).Where( p => p.Host != p.Container ).Select( p => $"{p.Host}->{p.Container}" ) );
       string verdict = same && noProxy && target.Connections.Count == actual.Length ? "ok" : "FAIL";
       return $"{name}|{verdict}|default {string.Join( ",", defaults )}|expected {string.Join( ",", wanted )}|actual {string.Join( ",", actual )}|recorded {target.Connections.Count}|remapped {( remapped.Length == 0 ? "none" : remapped )}";
+   }
+
+   /// <summary>
+   /// The host endpoint a route asks Docker for: the sink's own default, except for MariaDB, whose
+   /// default (127.0.0.1:3306) is the daily container's and whose benchmark container publishes
+   /// another host port (see deploy/engines/mariadb-bench.compose.yaml), which the route sets itself.
+   /// </summary>
+   /// <param name="sinkName">Sink name.</param>
+   /// <param name="defaultEndpoint">host:port from the sink's default options.</param>
+   /// <returns>host:port the route maps to the container's own port.</returns>
+   private static string RouteHostEndpoint( string sinkName, string defaultEndpoint )
+   {
+      return sinkName == MariaBench.TARGET ? $"{defaultEndpoint.Split( ':' )[0]}:{MariaBench.HOST_PORT}" : defaultEndpoint;
    }
 
    /// <summary>

@@ -26,7 +26,8 @@ public class BenchResultsSummaryTests
    private static readonly Regex ENGINE_ATTR = new( "<g class=\"bc-row\" data-engine=\"([^\"]*)\">", RegexOptions.Compiled );
 
    private const string FRAMING_SOURCE = "src/GenericVectorBuilder.Bench/Stats/ConsolidateFraming.cs";
-   private const string SMALL_TITLE = "<h2 class=\"bench-title\">Request speed on a small collection (524 vectors)</h2><p class=\"bench-framing muted\">At this size the numbers measure per-request cost, not index scaling.</p>";
+   private const string BANDS_SOURCE = "src/GenericVectorBuilder.Bench/Stats/ConsolidateBands.cs";
+   private const string SMALL_TITLE = "<h2 class=\"bench-title\">Request speed on a small collection (524 vectors)</h2><p class=\"bench-framing muted\">Measured end to end through each engine&#39;s .NET client; at this size it reflects per-request cost including the client library, not index scaling.</p>";
 
    /// <summary>The Bench tool's hand-made band case, QPS at 8 as median, min, max over three runs.</summary>
    private static readonly (string Name, double Median, double Min, double Max)[] BAND_CASE =
@@ -451,6 +452,45 @@ public class BenchResultsSummaryTests
    }
 
    /// <summary>
+   /// Neighbours whose medians are less than 3% apart share a band even when their ranges do not
+   /// overlap, and a chain of such neighbours is one band; 2.9% apart share, 3.1% apart do not;
+   /// these are the cases the Bench tool's ConsolidateTests expect, and each engine here varies by
+   /// only 0.1% so that no two ranges touch.
+   /// </summary>
+   [Fact]
+   public void Bands_JoinNeighboursWithinThreePercent_LikeTheBenchTool()
+   {
+      (string Name, double Median, double Min, double Max)[] Tight( params (string Name, double Median)[] cases )
+      {
+         return cases.Select( c => ( c.Name, c.Median, c.Median * 0.999, c.Median * 1.001 ) ).ToArray();
+      }
+
+      BenchSummary pairs = BenchSummaryReader.FromConsolidated( PublishedShape( Tight( ( "a", 1000 ), ( "b", 1020 ), ( "c", 1100 ), ( "d", 1130 ) ) ) );
+      Assert.Equal( new[] { "d:1", "c:1", "b:2", "a:2" }, pairs.Ranked.Select( r => $"{r.Key}:{r.Band}" ).ToArray() );
+      Assert.True( pairs.Ranked[2].Qps8Min > pairs.Ranked[3].Qps8Max, "b and a must not overlap, or the case proves nothing" );
+
+      BenchSummary limit = BenchSummaryReader.FromConsolidated( PublishedShape( Tight( ( "s", 3093 ), ( "r", 3000 ), ( "q", 2058 ), ( "p", 2000 ), ( "w", 1090 ), ( "z", 1050 ), ( "y", 1025 ), ( "x", 1000 ) ) ) );
+      Assert.Equal( new[] { "s:1", "r:2", "q:3", "p:3", "w:4", "z:5", "y:5", "x:5" }, limit.Ranked.Select( r => $"{r.Key}:{r.Band}" ).ToArray() );
+      Assert.Equal( new[] { "s", "r", "q", "p", "w", "z", "y", "x" }, limit.Ranked.Select( r => r.Key ).ToArray() );
+   }
+
+   /// <summary>
+   /// Engines with no spread (no min and max) are joined by the same 3% rule on their medians: 100
+   /// and 102 share a band, 100 and 104 do not.
+   /// </summary>
+   [Fact]
+   public void Bands_ApplyTheThreePercentRuleToPointRows_Too()
+   {
+      var rows = new List<BenchEngineRow>
+      {
+         new( "a", "a", 104, null, null, null, null, false ), new( "b", "b", 102, null, null, null, null, false ), new( "c", "c", 100, null, null, null, null, false ),
+      };
+
+      Assert.Equal( new[] { 1, 1, 1 }, BenchBands.Assign( rows ).Select( r => r.Band!.Value ).ToArray() );
+      Assert.Equal( new[] { 1, 2 }, BenchBands.Assign( new List<BenchEngineRow> { rows[0], rows[2] } ).Select( r => r.Band!.Value ).ToArray() );
+   }
+
+   /// <summary>
    /// Two engines in different bands never overlap, over the real published file: for every pair
    /// in different bands the slower engine's fastest run is slower than the faster engine's slowest
    /// run; band numbers start at 1 and run without gaps in table order.
@@ -508,7 +548,7 @@ public class BenchResultsSummaryTests
       Assert.Contains( "<th class=\"n\">Band</th><th>Engine</th>", table );
       Assert.DoesNotContain( ">Rank<", table );
       Assert.Equal( new[] { "1", "1", "2", "2", "3" }, Regex.Matches( table, "<tr><td class=\"n\">(\\d+)</td>" ).Select( m => m.Groups[1].Value ).ToArray() );
-      Assert.Equal( "<p class=\"bench-bands muted\">Engines in different bands never overlap: every run of an engine in a faster band beat every run of an engine in a slower band. Engines in one band are linked by overlapping slowest-to-fastest ranges, so these runs do not separate them cleanly. Inside a band they are listed by median, and that order is not a ranking.</p>", note );
+      Assert.Equal( "<p class=\"bench-bands muted\">Engines in different bands never overlap: every run of an engine in a faster band beat every run of an engine in a slower band, and the medians on either side of a band boundary are at least 3% apart. Engines in one band are linked by overlapping slowest-to-fastest ranges or by neighboring medians less than 3% apart (an engine varies about 2% from run to run), so these runs do not separate them cleanly. Inside a band they are listed by median, and that order is not a ranking.</p>", note );
 
       BenchSummary one = BenchSummaryReader.FromRunResults( """{ "targets": [ { "name": "sql", "search": { "qps": { "8": 50 } } }, { "name": "mariadb", "search": { "qps": { "8": 99 } } } ] }""" );
       string oneTable = BenchSummaryHtml.Table( one );
@@ -527,12 +567,12 @@ public class BenchResultsSummaryTests
    [Fact]
    public void Headline_NamesEveryEngineOfTheFastestBand()
    {
-      Assert.Equal( "b and a were fastest together, linked by overlapping runs: 1,150 and 1,050 searches per second with 8 at once (median of 3 runs).",
+      Assert.Equal( "b and a were fastest together, too close to tell apart in these runs: 1,150 and 1,050 searches per second with 8 at once (median of 3 runs).",
          BenchSummaryHtml.Headline( BenchSummaryReader.FromConsolidated( PublishedShape( BAND_CASE ) ) ) );
-      Assert.Equal( "z, y and x were fastest together, linked by overlapping runs: 350, 250 and 150 searches per second with 8 at once (median of 3 runs).",
+      Assert.Equal( "z, y and x were fastest together, too close to tell apart in these runs: 350, 250 and 150 searches per second with 8 at once (median of 3 runs).",
          BenchSummaryHtml.Headline( BenchSummaryReader.FromConsolidated( PublishedShape( CHAIN_CASE ) ) ) );
       string json = """{ "m": { "runs": 3, "qps8": { "median": 1000, "min": 900, "max": 1100 }, "recall": { "median": 0.9 } }, "n": { "runs": 3, "qps8": { "median": 990, "min": 950, "max": 1010 }, "recall": { "median": 1 } } }""";
-      Assert.Equal( "m and n were fastest together, linked by overlapping runs: 1,000 and 990 searches per second with 8 at once (median of 3 runs), m returned 90% of the exact top 10.",
+      Assert.Equal( "m and n were fastest together, too close to tell apart in these runs: 1,000 and 990 searches per second with 8 at once (median of 3 runs), m returned 90% of the exact top 10.",
          BenchSummaryHtml.Headline( BenchSummaryReader.FromConsolidated( json ) ) );
    }
 
@@ -571,11 +611,12 @@ public class BenchResultsSummaryTests
       Assert.Equal( "Request speed on a small collection (524 vectors)", BenchSummaryHtml.FramingTitle( 524 ) );
       Assert.Equal( "Request speed on a small collection (10,000 vectors)", BenchSummaryHtml.FramingTitle( 10000 ) );
       Assert.Equal( "Request speed at 100,000 vectors", BenchSummaryHtml.FramingTitle( 100000 ) );
-      Assert.Equal( "Measured at 100,000 vectors; the order applies to this size only.", BenchSummaryHtml.FramingLine( 100000 ) );
+      Assert.Equal( "Measured end to end through each engine's .NET client; at this size it reflects per-request cost including the client library, not index scaling.", BenchSummaryHtml.FramingLine( 524 ) );
+      Assert.Equal( "Measured end to end through each engine's .NET client at 100,000 vectors; the order applies to this size only.", BenchSummaryHtml.FramingLine( 100000 ) );
       Assert.DoesNotContain( "per-request", BenchSummaryHtml.FramingLine( 100000 ) );
       Assert.Equal( "Request speed (collection size not recorded)", BenchSummaryHtml.FramingTitle( null ) );
       Assert.Equal( "Request speed (collection size not recorded)", BenchSummaryHtml.FramingTitle( 0 ) );
-      Assert.Equal( "The collection size was not recorded in these results.", BenchSummaryHtml.FramingLine( null ) );
+      Assert.Equal( "The collection size was not recorded in these results. Measured end to end through each engine's .NET client.", BenchSummaryHtml.FramingLine( null ) );
       string old = BenchSummaryHtml.Block( BenchSummaryReader.FromConsolidated( SYNTHETIC ), "note", null );
       Assert.Contains( "<h2 class=\"bench-title\">Request speed (collection size not recorded)</h2>", old );
       string big = BenchSummaryHtml.Block( BenchSummaryReader.FromRunResults( """{ "rows": 50000, "targets": [ { "name": "sql", "search": { "qps": { "8": 50 } } } ] }""" ), "note", null );
@@ -600,7 +641,83 @@ public class BenchResultsSummaryTests
       Assert.Equal( BenchSummaryHtml.LINE_UNKNOWN, StringConstant( source, "LINE_UNKNOWN" ) );
       Assert.Equal( BenchSummaryHtml.BANDS_LINE, StringConstant( source, "BANDS_LINE" ) );
       Assert.Equal( BenchSummaryHtml.ONE_RUN_LINE, StringConstant( source, "ONE_RUN_LINE" ) );
+      Assert.Equal( BenchSummaryHtml.CLIENT_CPU_LINE, StringConstant( source, "CLIENT_CPU_LINE" ) );
+      Assert.Equal( BenchBands.MIN_MEDIAN_GAP, Constant( File.ReadAllText( RepoFile( BANDS_SOURCE ) ), "MIN_MEDIAN_GAP" ) );
+      Assert.Equal( 0.03, BenchBands.MIN_MEDIAN_GAP );
       Assert.Equal( BenchSummaryHtml.SMALL_COLLECTION_MAX_ROWS, (int)Constant( source, "SMALL_COLLECTION_MAX_ROWS" ) );
+   }
+
+   /// <summary>
+   /// The client's CPU per search is a table column (with a line saying what it is) only when the
+   /// results carry it: from one run's search section (a number per level), or from a consolidate
+   /// output (a median per level, of which the median is shown); an engine without it shows "-";
+   /// results with none show no column and no line, and the "no result" cell spans the right number
+   /// of columns either way.
+   /// </summary>
+   [Fact]
+   public void ClientCpu_IsAColumnOnlyWhenTheResultsCarryIt()
+   {
+      string run = """{ "targets": [ { "name": "qdrant", "search": { "qps": { "1": 500, "8": 900 }, "p50Ms": 0.9, "clientCpuMsPerSearch": { "1": 0.4912, "8": 0.3 } } }, { "name": "sql", "search": { "qps": { "8": 50 }, "p50Ms": 6.8 } }, { "name": "oracle" } ] }""";
+      BenchSummary one = BenchSummaryReader.FromRunResults( run );
+      string table = BenchSummaryHtml.Table( one );
+
+      Assert.Contains( "<th class=\"n\">Single search p50 ms</th><th class=\"n\">Client CPU per search ms</th><th>Same answers", table );
+      Assert.Contains( "<td class=\"n\">0.90</td><td class=\"n\">0.49</td>", table );
+      Assert.Contains( "<td class=\"n\">6.80</td><td class=\"n\">-</td>", table );
+      Assert.Contains( "<td colspan=\"4\" class=\"muted\">no result</td>", table );
+      Assert.Equal( 0.4912, one.Ranked.Single( r => r.Key == "qdrant" ).ClientCpuMs );
+      Assert.Equal( "<p class=\"bench-client-cpu muted\">Client CPU per search is the CPU time the test&#39;s .NET client itself used for each search, measured in the same pass as the figure beside it. Where it is close to the latency, the client library is a large part of what is measured.</p>", BenchSummaryHtml.ClientCpuNote( one ) );
+      Assert.Contains( BenchSummaryHtml.ClientCpuNote( one ), BenchSummaryHtml.Block( one, "note", null ) );
+
+      JsonObject target = Summary( "qdrant", 3000, 2900, 3100, 1.5, 1.0 );
+      target["clientCpuMsPerSearch"] = new JsonObject { ["1"] = Spread( 0.6, 0.55, 0.65 ), ["8"] = Spread( 0.3, 0.25, 0.35 ) };
+      BenchSummary report = BenchSummaryReader.FromConsolidated( ReportJson( 2, Settings( "performance", PARTITION, "Release", 524 ), new[] { target, Summary( "sql", 900, 850, 950, 4.5, 1.0 ) }, Array.Empty<( string, string, string, int )>() ) );
+      Assert.Equal( 0.6, report.Ranked.Single( r => r.Key == "qdrant" ).ClientCpuMs );
+      Assert.Null( report.Ranked.Single( r => r.Key == "sql" ).ClientCpuMs );
+      Assert.Contains( "Client CPU per search ms", BenchSummaryHtml.Table( report ) );
+
+      BenchSummary none = BenchSummaryReader.FromRunResults( """{ "targets": [ { "name": "sql", "search": { "qps": { "8": 50 }, "p50Ms": 6.8 } }, { "name": "oracle" } ] }""" );
+      string plain = BenchSummaryHtml.Table( none );
+      Assert.DoesNotContain( "Client CPU", plain );
+      Assert.Contains( "<td class=\"n\">6.8</td>", plain );
+      Assert.Contains( "<td colspan=\"3\" class=\"muted\">no result</td>", plain );
+      Assert.Equal( string.Empty, BenchSummaryHtml.ClientCpuNote( none ) );
+      Assert.DoesNotContain( "bench-client-cpu", BenchSummaryHtml.Block( BenchSummaryReader.FromConsolidated( File.ReadAllText( RepoFile( PUBLISHED ) ) ), "note", null ) );
+   }
+
+   /// <summary>
+   /// A damaged client CPU figure (negative, or not a number) reads as not recorded, and the level
+   /// may be spelled "default@1".
+   /// </summary>
+   [Fact]
+   public void ClientCpu_IgnoresDamagedValues_AndReadsDefaultSpelling()
+   {
+      BenchSummary summary = BenchSummaryReader.FromRunResults( """{ "targets": [ { "name": "a", "search": { "qps": { "8": 50 }, "clientCpuMsPerSearch": { "1": -2 } } }, { "name": "b", "search": { "qps": { "8": 40 }, "clientCpuMsPerSearch": { "1": "fast" } } }, { "name": "c", "search": { "qps": { "8": 30 }, "clientCpuMsPerSearch": { "default@1": 0.7 } } } ] }""" );
+
+      Assert.Equal( new double?[] { null, null, 0.7 }, summary.Ranked.Select( r => r.ClientCpuMs ).ToArray() );
+   }
+
+   /// <summary>
+   /// The native comparison targets say so in their names ("SQL Server 2025 (native service)",
+   /// "Qdrant (native service, exact)"), the bench MariaDB target keeps the name MariaDB whether it
+   /// is called "mariadb" or "mariadb-bench" (the container is where it runs, not what is compared),
+   /// and a name that is neither known nor a known engine in a container is shown as written.
+   /// </summary>
+   [Fact]
+   public void FriendlyNames_SayNativeServices_AndKeepMariaDb()
+   {
+      Assert.Equal( "SQL Server 2025 (native service)", BenchSummaryReader.FriendlyName( "sql-native" ) );
+      Assert.Equal( "Qdrant (native service, exact)", BenchSummaryReader.FriendlyName( "qdrant-native" ) );
+      Assert.Equal( "SQL Server 2025", BenchSummaryReader.FriendlyName( "sql" ) );
+      Assert.Equal( "Qdrant (exact)", BenchSummaryReader.FriendlyName( "qdrant" ) );
+      Assert.Equal( "MariaDB", BenchSummaryReader.FriendlyName( "mariadb" ) );
+      Assert.Equal( "MariaDB", BenchSummaryReader.FriendlyName( "mariadb-bench" ) );
+      Assert.Equal( "MariaDB", BenchSummaryReader.FriendlyName( "MariaDB-Container" ) );
+      Assert.Equal( "mystery-bench", BenchSummaryReader.FriendlyName( "mystery-bench" ) );
+      Assert.Equal( "-bench", BenchSummaryReader.FriendlyName( "-bench" ) );
+      BenchSummary summary = BenchSummaryReader.FromRunResults( """{ "targets": [ { "name": "sql-native", "search": { "qps": { "8": 60 } } }, { "name": "mariadb", "search": { "qps": { "8": 50 } } } ] }""" );
+      Assert.Equal( new[] { "SQL Server 2025 (native service)", "MariaDB" }, summary.Ranked.Select( r => r.Name ).ToArray() );
+      Assert.Contains( "<summary>SQL Server 2025 (native service) <span class=\"muted\">sql-native</span></summary>", BenchMarkdown.Render( "## Details per target\n\n### sql-native\n\n- Engine: x\n" ) );
    }
 
    /// <summary>

@@ -1,0 +1,359 @@
+{
+  "createdUtc": "2026-10-05T04:39:55Z",
+  "commandLine": "consolidate --targets mongodb --runs /home/dan/ForClaude/GenericVectorBuilder/bench-results/20261005-035711-eshoponweb --out /home/dan/ForClaude/GenericVectorBuilder/bench-results/published-2026-10-05/mongodb-2-segments",
+  "targets": [
+    "mongodb"
+  ],
+  "settings": {
+    "pipeline": "eshoponweb",
+    "command": "run-all",
+    "host": "linus7795",
+    "rows": 524,
+    "dimension": 1024,
+    "queryKind": "golden",
+    "queryCount": 20,
+    "top": 10,
+    "concurrency": [
+      1,
+      8
+    ],
+    "secondsPerLevel": 20,
+    "buildConfiguration": "Release",
+    "machineControl": "on",
+    "governor": "performance",
+    "cpuPartition": "client 0-1,4-5; engines 2-3,6-7",
+    "warmupSearches": 20,
+    "exactSeconds": 60,
+    "searchSettings": {
+      "mongodb": null
+    },
+    "derived": {}
+  },
+  "runs": [
+    {
+      "name": "20261005-035711-eshoponweb",
+      "folder": "/home/dan/ForClaude/GenericVectorBuilder/bench-results/20261005-035711-eshoponweb",
+      "startedUtc": "2026-10-05T03:57:11Z",
+      "runSeed": 503,
+      "targetOrder": [
+        "sqlitevec",
+        "sql",
+        "oracle",
+        "qdrant-hnsw",
+        "weaviate",
+        "redis",
+        "mariadb",
+        "sql-diskann",
+        "opensearch",
+        "qdrant",
+        "elasticsearch",
+        "duckdb",
+        "chroma",
+        "vespa",
+        "typesense",
+        "mongodb",
+        "pgvector",
+        "clickhouse",
+        "milvus"
+      ],
+      "loadAverage": "3.86 3.17 2.88"
+    }
+  ],
+  "dropped": [],
+  "targetSummaries": [
+    {
+      "name": "mongodb",
+      "engines": [
+        "MongoDB 8.0.32 Atlas Local (mongod \u002B mongot Vector Search)"
+      ],
+      "indexes": [
+        "vectorSearch index, HNSW maxEdges=16 numEdgeCandidates=128, float32 binData, cosine, numCandidates=20x hits (min 100); exact mode = $vectorSearch exact:true"
+      ],
+      "hosting": [
+        "compose"
+      ],
+      "p50Ms": {
+        "median": 1.3831,
+        "min": 1.3831,
+        "max": 1.3831,
+        "n": 1,
+        "perRun": [
+          1.3831
+        ]
+      },
+      "p95Ms": {
+        "median": 1.5993799999999998,
+        "min": 1.5993799999999998,
+        "max": 1.5993799999999998,
+        "n": 1,
+        "perRun": [
+          1.5993799999999998
+        ]
+      },
+      "qps": {
+        "1": {
+          "median": 709.2399642545058,
+          "min": 709.2399642545058,
+          "max": 709.2399642545058,
+          "n": 1,
+          "perRun": [
+            709.2399642545058
+          ]
+        },
+        "8": {
+          "median": 2038.137691679081,
+          "min": 2038.137691679081,
+          "max": 2038.137691679081,
+          "n": 1,
+          "perRun": [
+            2038.137691679081
+          ]
+        }
+      },
+      "qpsRatio": {
+        "8/1": {
+          "median": 2.873692677232877,
+          "min": 2.873692677232877,
+          "max": 2.873692677232877,
+          "n": 1,
+          "perRun": [
+            2.873692677232877
+          ]
+        }
+      },
+      "clientCpuMsPerSearch": {
+        "1": {
+          "median": 0.3097,
+          "min": 0.3097,
+          "max": 0.3097,
+          "n": 1,
+          "perRun": [
+            0.3097
+          ]
+        },
+        "8": {
+          "median": 0.2814,
+          "min": 0.2814,
+          "max": 0.2814,
+          "n": 1,
+          "perRun": [
+            0.2814
+          ]
+        }
+      },
+      "loadRowsPerSecond": {
+        "median": 3314.8989525172356,
+        "min": 3314.8989525172356,
+        "max": 3314.8989525172356,
+        "n": 1,
+        "perRun": [
+          3314.8989525172356
+        ]
+      },
+      "recall": {
+        "median": 1,
+        "min": 1,
+        "max": 1,
+        "n": 1,
+        "perRun": [
+          1
+        ]
+      },
+      "ndcg": {
+        "median": 0.5181699774768911,
+        "min": 0.5181699774768911,
+        "max": 0.5181699774768911,
+        "n": 1,
+        "perRun": [
+          0.5181699774768911
+        ]
+      },
+      "exactP50Ms": {
+        "median": 1.2338,
+        "min": 1.2338,
+        "max": 1.2338,
+        "n": 1,
+        "perRun": [
+          1.2338
+        ]
+      },
+      "errors": 0,
+      "warmupErrors": 0,
+      "ranks": {
+        "p50Ms": {
+          "perRun": [
+            1
+          ],
+          "median": 1
+        },
+        "p95Ms": {
+          "perRun": [
+            1
+          ],
+          "median": 1
+        },
+        "qps@1": {
+          "perRun": [
+            1
+          ],
+          "median": 1
+        },
+        "qps@8": {
+          "perRun": [
+            1
+          ],
+          "median": 1
+        },
+        "recall": {
+          "perRun": [
+            1
+          ],
+          "median": 1
+        },
+        "ndcg": {
+          "perRun": [
+            1
+          ],
+          "median": 1
+        }
+      },
+      "perRun": [
+        {
+          "run": "20261005-035711-eshoponweb",
+          "orderInRun": 16,
+          "passOrder": [
+            "default@8",
+            "default@1",
+            "exact"
+          ],
+          "warmupErrors": 0,
+          "errors": 0,
+          "exactRecall": 1,
+          "afterLoad": {
+            "ready": true,
+            "indexedVectors": 524,
+            "totalVectors": 524,
+            "detail": "index status READY, queryable True; mongot holds 524 of 524 documents in 2 segment(s), 2 searched through the HNSW graph (Approximate)"
+          },
+          "afterSearch": {
+            "ready": true,
+            "indexedVectors": 524,
+            "totalVectors": 524,
+            "detail": "index status READY, queryable True; mongot holds 524 of 524 documents in 2 segment(s), 2 searched through the HNSW graph (Approximate)"
+          },
+          "segmentLayoutAfterLoad": "2 segments",
+          "segmentLayoutAfterSearch": "2 segments",
+          "durability": "Acknowledged writes are journaled before the acknowledgement. The sink sets no write concern, so the server default applies: getDefaultRWConcern gives w majority and the one-member replica set (--replSet gvbmongo in the image) has writeConcernMajorityJournalDefault true, with WiredTiger journaling on (journalCommitInterval 100 ms is only the interval for unacknowledged work). Measured 2026-10-04: 30 acknowledged single-document inserts raised WiredTiger \u0027log sync operations\u0027 by 30 and strace showed fdatasync on /data/db/journal/WiredTigerLog files. A crash loses no acknowledged write. mongot\u0027s search index is not part of that promise: it follows the collection asynchronously and is rebuilt from it.",
+          "loadIndexNote": "index status READY, queryable True; mongot holds 524 of 524 documents in 2 segment(s), 2 searched through the HNSW graph (Approximate); wait took 1.1 s",
+          "searchSettings": null,
+          "settled": true,
+          "settleDetail": null,
+          "meanMs": 1.4099600281988014,
+          "meanSource": "1000 / QPS@1"
+        }
+      ],
+      "engineNotes": []
+    }
+  ],
+  "pairs": [],
+  "exactVsDefault": [
+    {
+      "target": "mongodb",
+      "runs": [
+        {
+          "run": "20261005-035711-eshoponweb",
+          "defaultP50Ms": 1.3831,
+          "exactP50Ms": 1.2338,
+          "differenceMs": -0.1493,
+          "ratio": 0.8920540814113224,
+          "exactRecall": 1,
+          "exactRanFirst": false
+        }
+      ],
+      "ratio": {
+        "median": 0.8920540814113224,
+        "min": 0.8920540814113224,
+        "max": 0.8920540814113224,
+        "n": 1,
+        "perRun": [
+          0.8920540814113224
+        ]
+      },
+      "differenceMs": {
+        "median": -0.1493,
+        "min": -0.1493,
+        "max": -0.1493,
+        "n": 1,
+        "perRun": [
+          -0.1493
+        ]
+      },
+      "runsExactSlower": 0,
+      "declaredPair": null,
+      "note": null
+    }
+  ],
+  "flags": [],
+  "notes": [
+    "Load rows/s is reported but not ranked and does not feed any comparison: each load wrote 524 rows, which is too few to separate engines from connection set-up and first-call cost.",
+    "Runs were used together only when their build configuration, CPU governor, CPU partition, warm-up count, exact-mode seconds, seconds per level and every listed target\u0027s search settings matched; runs that differed are listed under Runs dropped. Spread is flagged when the largest value is more than 1.15 times the smallest across runs.",
+    "Engines in different bands never overlap: every run of an engine in a faster band beat every run of an engine in a slower band, and the medians on either side of a band boundary are at least 3% apart. Engines in one band are linked by overlapping slowest-to-fastest ranges or by neighboring medians less than 3% apart (an engine varies about 2% from run to run), so these runs do not separate them cleanly. Inside a band they are listed by median, and that order is not a ranking. Bands are drawn only from two runs or more.",
+    "Runs of different commands (run-all against bench), a different engine hosting (container against native) or a different segment layout reported by an engine are refused, never merged: the largest-group rule does not apply to them."
+  ],
+  "bands": [
+    {
+      "metric": "p50Ms",
+      "title": "p50 latency, one search at a time (lower is faster)",
+      "higherIsBetter": false,
+      "runs": 1,
+      "banded": false,
+      "entries": [
+        {
+          "target": "mongodb",
+          "band": null,
+          "orderInBand": 1,
+          "median": 1.3831,
+          "min": 1.3831,
+          "max": 1.3831,
+          "n": 1
+        }
+      ]
+    },
+    {
+      "metric": "qps@8",
+      "title": "QPS with 8 searchers at once (higher is faster)",
+      "higherIsBetter": true,
+      "runs": 1,
+      "banded": false,
+      "entries": [
+        {
+          "target": "mongodb",
+          "band": null,
+          "orderInBand": 1,
+          "median": 2038.137691679081,
+          "min": 2038.137691679081,
+          "max": 2038.137691679081,
+          "n": 1
+        }
+      ]
+    },
+    {
+      "metric": "qps@1",
+      "title": "QPS with one searcher (higher is faster)",
+      "higherIsBetter": true,
+      "runs": 1,
+      "banded": false,
+      "entries": [
+        {
+          "target": "mongodb",
+          "band": null,
+          "orderInBand": 1,
+          "median": 709.2399642545058,
+          "min": 709.2399642545058,
+          "max": 709.2399642545058,
+          "n": 1
+        }
+      ]
+    }
+  ]
+}

@@ -12,8 +12,11 @@ namespace GenericVectorBuilder.Bench.Report;
 /// file is the evidence a writeup cites, and any explanation belongs in the writeup, tagged as such.
 /// A field a run did not record prints as "missing"; a metric that does not apply prints "-".
 /// The speed ranking is printed as tie bands under a title that says it is request speed on a
-/// small collection (see <see cref="ConsolidateFraming"/>); no ranking table shows a strict rank
-/// across runs. The rank-per-run tables show each run's own order, with the band beside them.
+/// small collection, measured through each engine's .NET client (see <see cref="ConsolidateFraming"/>);
+/// no ranking table shows a strict rank across runs. The rank-per-run tables show each run's own
+/// order, with the band beside them. Where the results carry the client's CPU per search it is
+/// shown beside the latency and the QPS it belongs to, so a reader can see how much of a
+/// fast engine's time is the client library.
 /// </summary>
 public static class ConsolidatedMarkdown
 {
@@ -132,6 +135,8 @@ public static class ConsolidatedMarkdown
       var header = new List<string> { "target", "n", "p50 ms", "p95 ms" };
       header.AddRange( levels.Select( l => $"QPS@{l}" ) );
       header.AddRange( ratios.Select( r => $"QPS ratio {r}" ) );
+      List<string> cpuLevels = ClientCpuLevels( report );
+      header.AddRange( cpuLevels.Select( l => $"client CPU ms/search@{l}" ) );
       header.AddRange( new[] { "load rows/s (not ranked)", $"recall@{Int( top )}", $"nDCG@{Int( top )}", "exact p50 ms", "errors", "warm-up errors" } );
       md.AppendLine( "## Per target: median [min, max]" ).AppendLine();
       Table( md, header, report.TargetSummaries.Select( t =>
@@ -139,6 +144,7 @@ public static class ConsolidatedMarkdown
          var cells = new List<string> { t.Name, t.P50Ms.N.ToString( CultureInfo.InvariantCulture ), Range( t.P50Ms, MsFormat ), Range( t.P95Ms, MsFormat ) };
          cells.AddRange( levels.Select( l => t.Qps.TryGetValue( l, out Spread? q ) ? Range( q, _ => "0.0" ) : "-" ) );
          cells.AddRange( ratios.Select( r => t.QpsRatio.TryGetValue( r, out Spread? q ) ? Range( q, _ => "0.00" ) : "-" ) );
+         cells.AddRange( cpuLevels.Select( l => t.ClientCpuMsPerSearch.TryGetValue( l, out Spread? c ) ? Range( c, MsFormat ) : "-" ) );
          cells.AddRange( new[] { Range( t.LoadRowsPerSecond, _ => "0" ), Range( t.Recall, _ => "0.000" ), Range( t.Ndcg, _ => "0.000" ), Range( t.ExactP50Ms, MsFormat ), Int( t.Errors ), Int( t.WarmupErrors ) } );
          return cells.ToArray();
       } ) );
@@ -164,6 +170,12 @@ public static class ConsolidatedMarkdown
       {
          md.AppendLine( $"## Per run: QPS ratio {ratio}" ).AppendLine();
          PerRunTable( md, report, "median", t => t.QpsRatio.TryGetValue( ratio, out Spread? s ) ? s : null, "0.00" );
+      }
+
+      foreach( string level in ClientCpuLevels( report ) )
+      {
+         md.AppendLine( $"## Per run: client CPU ms per search@{level}" ).AppendLine();
+         PerRunTable( md, report, "median", t => t.ClientCpuMsPerSearch.TryGetValue( level, out Spread? s ) ? s : null, "0.000" );
       }
    }
 
@@ -299,26 +311,74 @@ public static class ConsolidatedMarkdown
       md.AppendLine( $"## {ConsolidateFraming.Title( rows )}" ).AppendLine();
       md.AppendLine( ConsolidateFraming.Line( rows ) ).AppendLine();
       md.AppendLine( report.Runs.Count >= 2 ? ConsolidateFraming.BANDS_LINE : ConsolidateFraming.ONE_RUN_LINE ).AppendLine();
+      bool shownCpu = false;
       foreach( MetricBands metric in report.Bands )
       {
          md.AppendLine( $"### {metric.Title}" ).AppendLine();
-         string[] header = { metric.Banded ? "band" : "order in this run", "target", metric.Banded ? "median [min, max]" : "value", "runs", "engine notes" };
-         Table( md, header, metric.Entries.Select( e => RankingRow( report, metric, e ) ) );
+         string? cpuLevel = ClientCpuLevelOf( report, metric );
+         shownCpu |= cpuLevel != null;
+         var header = new List<string> { metric.Banded ? "band" : "order in this run", "target", metric.Banded ? "median [min, max]" : "value" };
+         if( cpuLevel != null )
+         {
+            header.Add( "client CPU ms/search" );
+         }
+
+         header.AddRange( new[] { "runs", "engine notes" } );
+         Table( md, header, metric.Entries.Select( e => RankingRow( report, metric, e, cpuLevel ) ) );
+      }
+
+      if( shownCpu )
+      {
+         md.AppendLine( ConsolidateFraming.CLIENT_CPU_LINE ).AppendLine();
       }
    }
 
    /// <summary>
-   /// One row of a ranking table: band (or order in a one-run report), target, value, runs, note kinds.
+   /// The concurrency level whose client CPU per search belongs beside a metric (one searcher for
+   /// the latency, the level itself for a QPS table), or null when no target recorded one.
+   /// </summary>
+   /// <param name="report">The report.</param>
+   /// <param name="metric">The metric's bands.</param>
+   /// <returns>The level key ("1", "8"), or null when the table has no such column.</returns>
+   private static string? ClientCpuLevelOf( ConsolidatedReport report, MetricBands metric )
+   {
+      string level = metric.Metric == "p50Ms" ? "1" : metric.Metric.StartsWith( "qps@", StringComparison.Ordinal ) ? metric.Metric["qps@".Length..] : string.Empty;
+      return level.Length > 0 && report.TargetSummaries.Any( t => t.ClientCpuMsPerSearch.ContainsKey( level ) ) ? level : null;
+   }
+
+   /// <summary>
+   /// The concurrency levels at which at least one target recorded the client's CPU per search, lowest first.
+   /// </summary>
+   /// <param name="report">The report.</param>
+   /// <returns>The level keys; empty when no run recorded it.</returns>
+   private static List<string> ClientCpuLevels( ConsolidatedReport report )
+   {
+      return report.TargetSummaries.SelectMany( t => t.ClientCpuMsPerSearch.Keys ).Distinct()
+         .OrderBy( k => int.TryParse( k, NumberStyles.Integer, CultureInfo.InvariantCulture, out int l ) ? l : int.MaxValue ).ToList();
+   }
+
+   /// <summary>
+   /// One row of a ranking table: band (or order in a one-run report), target, value, the client
+   /// CPU per search when the table shows it, runs, note kinds.
    /// </summary>
    /// <param name="report">The report.</param>
    /// <param name="metric">The metric's bands.</param>
    /// <param name="entry">The target's place.</param>
+   /// <param name="cpuLevel">Level whose client CPU per search is shown, or null for no such column.</param>
    /// <returns>The cells.</returns>
-   private static string[] RankingRow( ConsolidatedReport report, MetricBands metric, BandEntry entry )
+   private static string[] RankingRow( ConsolidatedReport report, MetricBands metric, BandEntry entry, string? cpuLevel )
    {
       bool higher = metric.HigherIsBetter;
       string value = entry.Median.HasValue ? ( metric.Banded ? $"{Speed( entry.Median, higher )} [{Speed( entry.Min, higher )}, {Speed( entry.Max, higher )}]" : Speed( entry.Median, higher ) ) : "-";
-      return new[] { metric.Banded ? Int( entry.Band, "-" ) : Int( entry.OrderInBand, "-" ), entry.Target, value, entry.N.ToString( CultureInfo.InvariantCulture ), NoteKinds( report, entry.Target ) };
+      var cells = new List<string> { metric.Banded ? Int( entry.Band, "-" ) : Int( entry.OrderInBand, "-" ), entry.Target, value };
+      if( cpuLevel != null )
+      {
+         Spread? cpu = report.TargetSummaries.FirstOrDefault( t => t.Name == entry.Target )?.ClientCpuMsPerSearch.GetValueOrDefault( cpuLevel );
+         cells.Add( cpu == null ? "-" : metric.Banded ? Range( cpu, MsFormat ) : Ms( cpu.Median ) );
+      }
+
+      cells.AddRange( new[] { entry.N.ToString( CultureInfo.InvariantCulture ), NoteKinds( report, entry.Target ) } );
+      return cells.ToArray();
    }
 
    /// <summary>

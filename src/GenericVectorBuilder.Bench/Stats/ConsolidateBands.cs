@@ -4,7 +4,8 @@ namespace GenericVectorBuilder.Bench.Stats;
 
 /// <summary>
 /// Tie bands for the request-speed metrics: targets whose slowest-to-fastest ranges over the
-/// runs overlap share a band, and bands are numbered from the fastest (band 1).
+/// runs overlap share a band, and so do neighbours whose medians are less than
+/// <see cref="MIN_MEDIAN_GAP"/> apart; bands are numbered from the fastest (band 1).
 /// Why bands and not strict ranks: at 524 vectors the targets within a few percent of each other
 /// swap places from run to run, so "3rd" and "4th" claim a difference the runs do not show.
 /// Why overlap is chained (a band is a connected group of overlapping ranges): then two targets
@@ -12,6 +13,13 @@ namespace GenericVectorBuilder.Bench.Stats;
 /// so "band 1 is faster than band 2" is true of every pair across them (every run of the faster
 /// one beat every run of the slower one). The price is that a band can be linked through a target
 /// with a wide range, so its two ends may be separated even though the band as a whole is not.
+/// Why a minimum gap as well: ranges drawn from three runs can fail to overlap by a hair, and the
+/// v4 review found band boundaries resting on gaps of 2.2% or less between neighbours, inside the
+/// roughly 2% repeatability the same engine shows from run to run. A boundary the repeatability
+/// could move is not a finding, so neighbours (next to each other in median order) whose medians
+/// differ by less than 3%, the measured repeatability plus a margin, share a band even when their
+/// ranges do not overlap. A band boundary now means no overlap AND the nearest medians on either
+/// side are at least 3% apart (the faster is at least 3% faster than the slower).
 /// Inside a band the targets stay in median order, and every consumer says that this order is not
 /// a ranking.
 /// The same rule is written again in the web page's BenchBands, because the web project does not
@@ -19,10 +27,25 @@ namespace GenericVectorBuilder.Bench.Stats;
 /// </summary>
 public static class ConsolidateBands
 {
+   #region Data Members
+
+   /// <summary>
+   /// Smallest gap between the medians of two neighbouring targets that may separate them into two
+   /// bands, as a share of the worse median: QPS, the better median is at least 3% higher; latency,
+   /// the worse p50 is at least 3% above the better one. It sits above the roughly 2% run-to-run
+   /// repeatability measured on the same engine at the same settings (v4 review of 2026-10-05) and
+   /// is the same for every metric.
+   /// </summary>
+   public const double MIN_MEDIAN_GAP = 0.03;
+
+   #endregion Data Members
+
    #region Public Methods
 
    /// <summary>
-   /// Assigns bands to targets from their value ranges.
+   /// Assigns bands to targets from their value ranges: overlapping ranges are chained into one
+   /// band, then neighbouring bands whose nearest medians are less than <see cref="MIN_MEDIAN_GAP"/>
+   /// apart are joined.
    /// </summary>
    /// <param name="targets">Target name and the metric's spread over the runs, in any order.</param>
    /// <param name="higherIsBetter">True for QPS (a larger value is faster), false for latency.</param>
@@ -46,6 +69,7 @@ public static class ConsolidateBands
          reach = Math.Min( reach, item.Worst );
       }
 
+      bands = MergeCloseMedians( bands );
       var entries = new List<BandEntry>();
       for( int b = 0; b < bands.Count; b++ )
       {
@@ -86,6 +110,50 @@ public static class ConsolidateBands
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// Joins neighbouring bands whose nearest medians are less than <see cref="MIN_MEDIAN_GAP"/> apart.
+   /// Why only the two medians at the boundary: the bands do not overlap, so every median of a band
+   /// is better than every median of the band after it, and the two targets next to each other in
+   /// median order across a boundary are the band's slowest median and the next band's fastest.
+   /// A merged band is compared by its slowest median, so a chain of close neighbours joins into
+   /// one band however long it is.
+   /// </summary>
+   /// <param name="bands">Bands of overlapping ranges, best first.</param>
+   /// <returns>The bands after joining, best first.</returns>
+   private static List<List<Candidate>> MergeCloseMedians( List<List<Candidate>> bands )
+   {
+      var merged = new List<List<Candidate>>();
+      foreach( List<Candidate> band in bands )
+      {
+         if( merged.Count > 0 && MedianGap( merged[^1].Min( c => c.Median ), band.Max( c => c.Median ) ) < MIN_MEDIAN_GAP )
+         {
+            merged[^1].AddRange( band );
+         }
+         else
+         {
+            merged.Add( band );
+         }
+      }
+
+      return merged;
+   }
+
+   /// <summary>
+   /// How much faster the better of two medians is than the worse, as a share of the worse
+   /// (0.03 is 3% faster). Both are given as numbers where larger is better, so a latency arrives
+   /// negated; the share is the ratio of the larger magnitude to the smaller one, minus 1, which is
+   /// the same whether the metric is QPS or a latency.
+   /// </summary>
+   /// <param name="a">One median, larger is better.</param>
+   /// <param name="b">The other median.</param>
+   /// <returns>The gap; infinite when one median is zero and the other is not, 0 for two zeros.</returns>
+   private static double MedianGap( double a, double b )
+   {
+      double high = Math.Max( Math.Abs( a ), Math.Abs( b ) );
+      double low = Math.Min( Math.Abs( a ), Math.Abs( b ) );
+      return high == low ? 0 : low == 0 ? double.PositiveInfinity : high / low - 1;
+   }
 
    /// <summary>
    /// One metric's bands, or its single-run order when there is no spread.

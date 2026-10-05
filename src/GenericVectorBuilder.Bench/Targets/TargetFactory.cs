@@ -36,6 +36,10 @@ namespace GenericVectorBuilder.Bench.Targets;
 /// docker-proxy serves.
 /// Where the pipeline's vectors come from is unchanged: the native GenericVectorBuilder database
 /// (see the Data folder); only the copies the benchmark searches live in the containers.
+/// The "mariadb" target runs in its own container gvbbench-mariadb (deploy/engines/mariadb-bench.compose.yaml,
+/// data in ~/gvb-data/engines/mariadb-bench, see <see cref="MariaBench"/>), created on the engine CPUs and
+/// started and stopped by run-all like every other engine; the daily gvb-mariadb is never used, asked about
+/// or changed by a run.
 /// </summary>
 public sealed class TargetFactory : IDisposable
 {
@@ -500,14 +504,17 @@ public sealed class TargetFactory : IDisposable
    }
 
    /// <summary>
-   /// An engine sink from the Engines assembly, hosted by compose, in process, or always on.
+   /// An engine sink from the Engines assembly, hosted by compose, in process, or always on. A
+   /// compose-hosted engine's data folder is named after its compose file; MariaDB's compose file is the
+   /// benchmark's own (<see cref="MariaBench.COMPOSE_FILE"/>, not the sink's mariadb.compose.yaml of the daily
+   /// container), so its disk figure is read from the benchmark container's folder.
    /// </summary>
    /// <param name="sink">The sink.</param>
    /// <returns>The target.</returns>
    private BenchTarget EngineTarget( ISink sink )
    {
       var description = sink as IEngineDescription;
-      string composeFile = description?.ComposeFile ?? "always-on";
+      string composeFile = ( MariaBench.Owns( sink.Name ) ? MariaBench.COMPOSE_FILE : description?.ComposeFile ) ?? "always-on";
       string engine = description?.Engine ?? sink.GetType().Name;
       string index = description?.IndexDescription ?? "not described";
       if( composeFile == "embedded" )

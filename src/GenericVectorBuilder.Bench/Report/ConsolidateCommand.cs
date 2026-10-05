@@ -14,7 +14,8 @@ namespace GenericVectorBuilder.Bench.Report;
 /// not from a one-off script that each writeup rewrites.
 /// It refuses to merge runs that are not the same kind of experiment (different command, engine
 /// hosting or segment layout) and prints the speed ranking as tie bands under a title that says
-/// what it ranks (see <see cref="ConsolidateIdentity"/> and <see cref="ConsolidateBands"/>).
+/// what it ranks (see <see cref="ConsolidateIdentity"/> and <see cref="ConsolidateBands"/>); bands
+/// join targets with overlapping ranges and neighbours whose medians are less than 3% apart.
 /// It touches no engine and makes no network call; it only reads files and writes two.
 /// </summary>
 public static class ConsolidateCommand
@@ -94,7 +95,9 @@ public static class ConsolidateCommand
   seconds per level or search settings of a listed target are never mixed: the largest consistent group is used.
   Runs of different commands (run-all against bench), a different engine hosting (container against native) or a different segment
   layout reported by an engine are refused, not merged: the command stops (exit 1) and names the runs on each side.
-  Targets whose min-max ranges overlap on a speed metric share a tie band (band 1 is the fastest); no strict rank is printed.
+  Targets whose min-max ranges overlap on a speed metric share a tie band (band 1 is the fastest), and so do neighbours whose
+  medians are less than 3% apart (above the roughly 2% an engine varies from run to run); no strict rank is printed.
+  Where the results carry the client's CPU per search (search.clientCpuMsPerSearch by concurrency level) it is shown beside the latency and the QPS.
   GLOB may use * and ? in any path segment and {x,y} alternatives, e.g. 'bench-results/2026100{3,4}-*-eshoponweb'.
   --out defaults to a new consolidated-<UTC time> folder beside the first run used.
   --pairs a:b[,c:d] compares two targets run by run; there is no default pair, because two targets hold separate copies of the data.

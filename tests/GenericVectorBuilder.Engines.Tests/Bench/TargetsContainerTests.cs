@@ -3,7 +3,7 @@ namespace GenericVectorBuilder.Engines.Tests.Bench;
 /// <summary>
 /// How the benchmark finds a compose-hosted engine's container and connects to its own address
 /// instead of the published 127.0.0.1 port that docker-proxy serves, checked without starting
-/// anything: "docker inspect" text (one real capture of gvb-mariadb, the rest built to match what
+/// anything: "docker inspect" text (real captures of gvb-mariadb and of the benchmark's gvbbench-mariadb, the rest built to match what
 /// Docker prints) and the repository's own compose files stand in for Docker.
 /// Why this matters: SQL Server and Qdrant run on this host and have no proxy hop, so a container
 /// engine measured through docker-proxy pays for a hop they do not, and its latency and throughput
@@ -17,6 +17,10 @@ public class TargetsContainerTests
 
    // Trimmed from "docker inspect gvb-mariadb" on this box (the fields the benchmark reads, plus a few it ignores).
    private const string REAL_INSPECT = """[{"Id":"b115140380d05c5d4ab5d4e123b77af39bb22c23649fa35e3789e06bf0c3fbd0","Name":"/gvb-mariadb","State":{"Status":"running","Running":true,"Paused":false,"Restarting":false,"Dead":false,"ExitCode":0,"StartedAt":"2026-10-04T14:18:30.610916687Z","Health":{"Status":"healthy"}},"NetworkSettings":{"Ports":{"3306/tcp":[{"HostIp":"127.0.0.1","HostPort":"3306"}]},"Networks":{"gvb-mariadb_default":{"NetworkID":"fb3abb8901cdc12f2541614d0069535593bfc293a15ac1ea61fc39b6f5743fbc","Gateway":"172.18.0.1","IPAddress":"172.18.0.2","MacAddress":"8e:d4:fe:2e:81:6f"}}}}]""";
+
+   // Trimmed from "docker inspect gvbbench-mariadb" on this box (2026-10-05), the benchmark's own MariaDB container
+   // that the "mariadb" target binds to; the environment values are replaced by "x".
+   private const string BENCH_INSPECT = """[{"Id":"8cefe0e722eddce51fa5e0fce4af968ea596214aab41f77fcda81c5d4bca4882","Name":"/gvbbench-mariadb","State":{"Status":"running","Running":true,"Paused":false,"Restarting":false,"Dead":false,"ExitCode":0,"StartedAt":"2026-10-05T01:20:59.991216637Z","Health":{"Status":"healthy"}},"HostConfig":{"CpusetCpus":"2-3,6-7","Memory":8589934592},"Config":{"Image":"mariadb:11.8.9","Env":["MARIADB_ROOT_PASSWORD=x","PATH=x"]},"NetworkSettings":{"Ports":{"3306/tcp":[{"HostIp":"127.0.0.1","HostPort":"13306"}]},"Networks":{"gvbbench-mariadb_default":{"NetworkID":"47a9006ed9604913dcdb9ed791fa1baa32b57215fad69944dd07022b8acd991b","Gateway":"172.24.0.1","IPAddress":"172.24.0.2","MacAddress":"36:50:ae:20:f6:e9"}}}}]""";
 
    // Captured from "sudo ss -tnpH state established" on this box while a client held one connection through
    // docker-proxy (127.0.0.1:3306, first three lines) and another straight to the container (last line).
@@ -142,7 +146,7 @@ public class TargetsContainerTests
       Assert.Contains( "remapped 9201->9200", Line( "opensearch" ) );
       Assert.Contains( "remapped 8090->8080", Line( "vespa" ) );
       Assert.Contains( "remapped 8085->8080", Line( "weaviate" ) );
-      Assert.Contains( "remapped none", Line( "mariadb" ) );
+      Assert.Contains( "remapped 13306->3306", Line( "mariadb" ) );
       Assert.Contains( "recorded 2", Line( "vespa" ) );
       Assert.Contains( "recorded 2", Line( "milvus" ) );
       Assert.Contains( "recorded 1", Line( "pgvector" ) );
@@ -161,16 +165,16 @@ public class TargetsContainerTests
    [Fact]
    public async Task Target_BindsOnceAfterTheEngineIsUp()
    {
-      string[] lines = await TargetsHarness.CallContainerAsync( "BindingAsync", LIMIT, TargetsHarness.RepoRoot(), REAL_INSPECT );
+      string[] lines = await TargetsHarness.CallContainerAsync( "BindingAsync", LIMIT, TargetsHarness.RepoRoot(), BENCH_INSPECT );
       string Line( string prefix ) => lines.Single( l => l.StartsWith( prefix, StringComparison.Ordinal ) );
       Assert.Equal( "before binding|asks 0|connections 0|mariadb|True|compose|True|True|True", Line( "before binding" ) );
       Assert.Equal( "8 concurrent binds|distinct sinks 1|asks 1", Line( "8 concurrent binds" ) );
       Assert.Equal( "sink getter|same object True|asks 1", Line( "sink getter" ) );
-      Assert.Equal( "connections|1|gvb-mariadb (b115140380d0) on network gvb-mariadb_default at 172.18.0.2:3306, not through docker-proxy 127.0.0.1:3306", Line( "connections|" ) );
-      Assert.Equal( "endpoints|172.18.0.2:3306", Line( "endpoints|" ) );
-      Assert.StartsWith( "container missing, index state|ready False|could not read the index state: There is no container named gvb-mariadb", Line( "container missing, index state" ) );
-      Assert.StartsWith( "container missing, sink getter|InvalidOperationException: There is no container named gvb-mariadb", Line( "container missing, sink getter" ) );
-      Assert.StartsWith( "container missing, bind|InvalidOperationException: There is no container named gvb-mariadb", Line( "container missing, bind" ) );
+      Assert.Equal( "connections|1|gvbbench-mariadb (8cefe0e722ed) on network gvbbench-mariadb_default at 172.24.0.2:3306, not through docker-proxy 127.0.0.1:13306", Line( "connections|" ) );
+      Assert.Equal( "endpoints|172.24.0.2:3306", Line( "endpoints|" ) );
+      Assert.StartsWith( "container missing, index state|ready False|could not read the index state: There is no container named gvbbench-mariadb", Line( "container missing, index state" ) );
+      Assert.StartsWith( "container missing, sink getter|InvalidOperationException: There is no container named gvbbench-mariadb", Line( "container missing, sink getter" ) );
+      Assert.StartsWith( "container missing, bind|InvalidOperationException: There is no container named gvbbench-mariadb", Line( "container missing, bind" ) );
       Assert.Equal( "container missing, name still works|mariadb", Line( "container missing, name still works" ) );
    }
 

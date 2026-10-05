@@ -4,6 +4,27 @@
 # The embedded etcd config is inlined below so no extra file has to live beside this one.
 # Start:  sudo docker compose -f deploy/engines/milvus.compose.yaml up -d
 # Stop:   sudo docker compose -f deploy/engines/milvus.compose.yaml down   (data is kept)
+#
+# Two facts about this engine's start-up and stop (measured 2026-10-05, Milvus v2.6.25):
+# 1. A stop always ends with exit code 134 ("panic: context canceled", Milvus closing its etcd client
+#    while the embedded etcd shuts down). That is how a clean stop looks here, not a failure.
+# 2. A start can exit with 134 and "panic: etcdserver: leader changed". The restarted embedded etcd
+#    needs 1 to 2 seconds to elect itself leader, Milvus's coordinator reads etcd at once, and when that
+#    read is in flight at the election it fails and Milvus panics. Whether the read is caught depends on
+#    how long etcd takes to replay its log, and etcd replays everything since its last snapshot, which by
+#    default is up to 100000 entries. Measured on a fresh folder: restarts were fine up to about 6000
+#    log entries and failed every time from about 10000 (a 9.9 GB folder at 12900 entries failed 14 of 14
+#    starts). It is not host load and not the size of the data (emptying either data directory changed nothing).
+#    snapshot-count below keeps the replay short for good: a folder at 17000 entries failed once (the
+#    failed start still wrote the snapshot), then started every time, and 18 restarts in a row were
+#    healthy while the log grew to 79000 entries. The bench's ComposeRunner retries a start whose
+#    container exited, so that one failed start is absorbed. If a folder still cannot start, it holds only
+#    benchmark data: stop the engine, move the folder aside (mv /home/dan/gvb-data/engines/milvus
+#    /home/dan/gvb-data/engines/milvus.broken-YYYYMMDD), create an empty one and start again.
+# 3. A start soon after a stop was seen once to hang under host load 7 to 10: unhealthy reported at 230 s,
+#    healthy by itself at 320 s. Inferred, not proven: a session lease of the previous run (300 s, see
+#    COMMON_SESSION_TTL) kept the new coordinator in standby until it lapsed. The health check below
+#    therefore waits well past 300 s instead of giving up at 240 s.
 name: gvb-milvus
 
 configs:
@@ -14,6 +35,8 @@ configs:
       quota-backend-bytes: 4294967296
       auto-compaction-mode: revision
       auto-compaction-retention: '1000'
+      # Snapshot every 1000 log entries (etcd's default is 100000) so a restart replays a short log; see the header.
+      snapshot-count: 1000
 
 services:
   milvus:
@@ -47,5 +70,5 @@ services:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9091/healthz"]
       interval: 15s
       timeout: 5s
-      retries: 12
+      retries: 30
       start_period: 60s

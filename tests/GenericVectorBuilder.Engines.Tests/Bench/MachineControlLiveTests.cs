@@ -94,6 +94,72 @@ public class MachineControlLiveTests
    }
 
    /// <summary>
+   /// The outside-load figure tracks a synthetic outside load during an 8-searcher pass, on the
+   /// real box with the real sampler: a loopback echo engine in its own cgroup, 8 searcher threads
+   /// in this process, and a CPU-quota-held busy loop (0.2 CPU, then 0.5 CPU, six times each, in its
+   /// own cgroup so its CPU is exact) between quiet phases. Two checks, both over exactly the span of
+   /// sampler intervals the figure covers. (1) Against the stress's own CPU: each stress phase's
+   /// figure, less the mean of the quiet phases either side, less the stress's CPU, is that phase's
+   /// error; the median error over the six phases of each level is within 0.05 CPUs. (The box's
+   /// background drifts by hundredths of a CPU between phases and bursts by whole CPUs now and then,
+   /// which is why the median of six is judged, not one phase.) (2) Against an observer that never
+   /// reads /proc/stat (the top-level cgroups' CPU, less this process and the engine): the figure
+   /// less the observer's, in each stress phase against the mean of its neighbours, is within 0.05
+   /// CPUs in every phase; the background cancels out of this one, so it holds on a busy box. Takes
+   /// about five minutes; changes nothing on the machine; every scope has a timeout and is stopped
+   /// at the end.
+   /// </summary>
+   [Fact]
+   public async Task OutsideLoad_TracksASyntheticLoadDuringAnEightSearcherPass()
+   {
+      string folder = Path.Combine( AppContext.BaseDirectory, "machine-control-live", Guid.NewGuid().ToString( "N" ) );
+      Directory.CreateDirectory( folder );
+      try
+      {
+         dynamic r = await MachineControlCompiler.CallAsync( TimeSpan.FromMinutes( 8 ), "LiveOutsideLoadAsync", folder );
+         _output.WriteLine( "phase        tool   oldFormula  cgroupObserver  stressTruth  client  engine  QPS    clientMs/search  window(s) intervals" );
+         dynamic[] phases = ( (IEnumerable<dynamic>)r.Phases ).ToArray();
+         foreach( dynamic p in phases )
+         {
+            _output.WriteLine( string.Create( System.Globalization.CultureInfo.InvariantCulture,
+               $"{(string)p.Name,-12} {(double)p.Tool,6:0.000} {(double)p.OldFormula,10:0.000} {(double)p.Observer,15:0.000} {(double)p.Truth,12:0.000} {(double)p.OwnCpu,7:0.000} {(double)p.EngineCpu,7:0.000} {(double)p.Qps,6:0} {(double)p.ClientMsPerSearch,15:0.0000} {(double)p.Seconds,9:0.0} {(int)p.Intervals,9}" ) );
+         }
+
+         _output.WriteLine( string.Create( System.Globalization.CultureInfo.InvariantCulture, $"sampler alone, no searches: client {(double)r.IdleClientCpu:0.0000} CPUs (includes this test's own 20 Hz ledger)" ) );
+         _output.WriteLine( "accounting: " + (string)r.Accounting );
+         Assert.Null( (string?)r.SamplingError );
+         var errors = new Dictionary<double, List<double>> { [0.2] = new(), [0.5] = new() };
+         for( int i = 1; i < phases.Length - 1; i++ )
+         {
+            if( phases[i].Quota == null )
+            {
+               continue;
+            }
+
+            double truth = phases[i].Truth;
+            double before = phases[i - 1].Tool;
+            double after = phases[i + 1].Tool;
+            double tracked = (double)phases[i].Tool - ( before + after ) / 2 - truth;
+            double relative = ( (double)phases[i].Tool - (double)phases[i].Observer ) - ( ( before - (double)phases[i - 1].Observer ) + ( after - (double)phases[i + 1].Observer ) ) / 2;
+            _output.WriteLine( string.Create( System.Globalization.CultureInfo.InvariantCulture, $"{(string)phases[i].Name}: stress {truth:0.000} CPUs; error against the stress's CPU {tracked:+0.000;-0.000}; against the cgroup observer {relative:+0.000;-0.000}" ) );
+            Assert.InRange( relative, -0.05, 0.05 );
+            errors[(double)phases[i].Quota!].Add( tracked );
+         }
+
+         foreach( ( double level, List<double> list ) in errors )
+         {
+            double median = list.OrderBy( e => e ).ElementAt( list.Count / 2 );
+            _output.WriteLine( string.Create( System.Globalization.CultureInfo.InvariantCulture, $"stress {level:0.0} CPUs: median error {median:+0.000;-0.000} over {list.Count} phases (mean {list.Average():+0.000;-0.000}, worst {list.OrderByDescending( Math.Abs ).First():+0.000;-0.000})" ) );
+            Assert.InRange( median, -0.05, 0.05 );
+         }
+      }
+      finally
+      {
+         Directory.Delete( folder, true );
+      }
+   }
+
+   /// <summary>
    /// The real host's answer about a start on the engine CPUs matches Docker: when it returns a
    /// read-back line, the throwaway container has cpuset 2-3,6-7, every thread of its main process
    /// is allowed only those CPUs and the process inside sees 4 CPUs (so an engine sizes its pools

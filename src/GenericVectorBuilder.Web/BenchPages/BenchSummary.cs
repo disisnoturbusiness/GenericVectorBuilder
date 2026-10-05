@@ -14,9 +14,10 @@ namespace GenericVectorBuilder.Web.BenchPages;
 /// <param name="Recall">Share of the exact top 10 the engine returned (1 = same answers), or null when missing.</param>
 /// <param name="InMemory">True when the engine holds everything in memory, which the chart marks.</param>
 /// <param name="Flags">Warnings about this engine's numbers (spread, unsettled, ...); null or empty when there are none.</param>
-/// <param name="Band">Tie band by searches per second with 8 at once (1 is the fastest band; engines whose min to max ranges overlap share one); null when only one run was used, so no spread is known.</param>
+/// <param name="Band">Tie band by searches per second with 8 at once (1 is the fastest band; engines whose min to max ranges overlap, or whose neighboring medians are less than 3% apart, share one); null when only one run was used, so no spread is known.</param>
 /// <param name="Notes">What to know about this engine to read its speed (a CPU cap, an exact-by-design search); null or empty when there is none.</param>
-public sealed record BenchEngineRow( string Key, string Name, double Qps8, double? Qps8Min, double? Qps8Max, double? P50Ms, double? Recall, bool InMemory, IReadOnlyList<BenchFlag>? Flags = null, int? Band = null, IReadOnlyList<BenchEngineNote>? Notes = null );
+/// <param name="ClientCpuMs">CPU time the test's .NET client itself used per search with one searcher, in milliseconds (the median across runs, or the one run's value); null when the results did not record it. Why shown: for the fastest engines it is about as large as the latency, so the speed order partly reflects each engine's client library.</param>
+public sealed record BenchEngineRow( string Key, string Name, double Qps8, double? Qps8Min, double? Qps8Max, double? P50Ms, double? Recall, bool InMemory, IReadOnlyList<BenchFlag>? Flags = null, int? Band = null, IReadOnlyList<BenchEngineNote>? Notes = null, double? ClientCpuMs = null );
 
 /// <summary>
 /// One note about an engine, as the consolidate command wrote it.
@@ -56,12 +57,16 @@ public static class BenchSummaryReader
 
    private const string EIGHT_AT_ONCE = "8";
 
+   private static readonly string[] CLIENT_CPU_NAMES = { "clientCpuMsPerSearch", "clientCpuPerSearchMs" };
+
    private static readonly Dictionary<string, string> FRIENDLY = new( StringComparer.OrdinalIgnoreCase )
    {
       ["sql"] = "SQL Server 2025",
       ["sql-diskann"] = "SQL Server 2025 + DiskANN",
+      ["sql-native"] = "SQL Server 2025 (native service)",
       ["qdrant"] = "Qdrant (exact)",
       ["qdrant-hnsw"] = "Qdrant (HNSW)",
+      ["qdrant-native"] = "Qdrant (native service, exact)",
       ["pgvector"] = "pgvector",
       ["mariadb"] = "MariaDB",
       ["oracle"] = "Oracle 23ai Free",
@@ -79,6 +84,9 @@ public static class BenchSummaryReader
       ["sqlitevec"] = "sqlite-vec",
    };
 
+   /// <summary>Endings a benchmark target name may carry to say it runs in the benchmark's own container ("mariadb-bench"); the engine's name is what precedes it.</summary>
+   private static readonly string[] CONTAINER_SUFFIXES = { "-bench", "-container", "-compose" };
+
    private static readonly HashSet<string> IN_MEMORY = new( StringComparer.OrdinalIgnoreCase ) { "redis" };
 
    #endregion Data Members
@@ -87,12 +95,22 @@ public static class BenchSummaryReader
 
    /// <summary>
    /// The name a reader sees for a Bench target, or the target name itself when unknown.
+   /// The two native comparison targets say so ("sql-native" is "SQL Server 2025 (native service)"),
+   /// and a target that runs in the benchmark's own container keeps its engine's name: "mariadb"
+   /// and "mariadb-bench" are both "MariaDB", because the container is where it runs and not what
+   /// the reader is comparing.
    /// </summary>
    /// <param name="key">Target name, e.g. "sqlitevec".</param>
    /// <returns>Friendly name, e.g. "sqlite-vec".</returns>
    public static string FriendlyName( string key )
    {
-      return FRIENDLY.TryGetValue( key, out string? name ) ? name : key;
+      if( FRIENDLY.TryGetValue( key, out string? name ) )
+      {
+         return name;
+      }
+
+      string? suffix = CONTAINER_SUFFIXES.FirstOrDefault( x => key.EndsWith( x, StringComparison.OrdinalIgnoreCase ) );
+      return suffix != null && FRIENDLY.TryGetValue( key[..^suffix.Length], out string? engine ) ? engine : key;
    }
 
    /// <summary>
@@ -168,7 +186,7 @@ public static class BenchSummaryReader
          }
 
          rows.Add( new BenchEngineRow( key, FriendlyName( key ), qps.Value, null, null, Number( search, "p50Ms" ), Number( search, "recall" ), IN_MEMORY.Contains( key ),
-            t.ValueKind == JsonValueKind.Object ? BenchFlagInfo.FromTarget( t ) : null ) );
+            t.ValueKind == JsonValueKind.Object ? BenchFlagInfo.FromTarget( t ) : null, ClientCpuMs: ClientCpuAtOne( search, false ) ) );
       }
 
       return new BenchSummary( Rank( rows ), missing, 1, BenchConditions.FromRun( doc.RootElement ), WholeNumber( doc.RootElement, "rows" ) );
@@ -205,7 +223,7 @@ public static class BenchSummaryReader
 
          JsonElement eight = qps.GetProperty( EIGHT_AT_ONCE );
          rows.Add( new BenchEngineRow( key, FriendlyName( key ), median.Value, Number( eight, "min" ), Number( eight, "max" ), Stat( t, "p50Ms", "median" ), Stat( t, "recall", "median" ),
-            IN_MEMORY.Contains( key ), flags.GetValueOrDefault( key ), null, EngineNotes( t ) ) );
+            IN_MEMORY.Contains( key ), flags.GetValueOrDefault( key ), null, EngineNotes( t ), ClientCpuAtOne( t, true ) ) );
       }
 
       bool hasSettings = root.TryGetProperty( "settings", out JsonElement settings ) && settings.ValueKind == JsonValueKind.Object;
@@ -223,6 +241,45 @@ public static class BenchSummaryReader
    private static List<BenchEngineRow> WithBands( List<BenchEngineRow> ranked, int runs )
    {
       return runs > 1 ? BenchBands.Assign( ranked ) : ranked;
+   }
+
+   /// <summary>
+   /// The client's CPU per search with one searcher, in milliseconds: "clientCpuMsPerSearch" keyed by
+   /// level ("1" or "default@1"), read from one run's search section (a number per level) or from a
+   /// consolidated target (a median, min and max per level, of which the median is shown).
+   /// </summary>
+   /// <param name="holder">One run's search section, or one targetSummaries entry.</param>
+   /// <param name="spread">True when each level holds a median/min/max object, false when it holds a number.</param>
+   /// <returns>The milliseconds, or null when the results did not record it.</returns>
+   private static double? ClientCpuAtOne( JsonElement holder, bool spread )
+   {
+      foreach( string name in CLIENT_CPU_NAMES )
+      {
+         if( holder.ValueKind != JsonValueKind.Object || !holder.TryGetProperty( name, out JsonElement levels ) || levels.ValueKind != JsonValueKind.Object )
+         {
+            continue;
+         }
+
+         foreach( string level in new[] { "1", "default@1" } )
+         {
+            if( levels.TryGetProperty( level, out JsonElement one ) && ( spread ? Number( one, "median" ) : PlainNumber( one ) ) is double value )
+            {
+               return value;
+            }
+         }
+      }
+
+      return null;
+   }
+
+   /// <summary>
+   /// A JSON number as a finite, non-negative double, or null.
+   /// </summary>
+   /// <param name="element">The element.</param>
+   /// <returns>The value, or null when it is not such a number.</returns>
+   private static double? PlainNumber( JsonElement element )
+   {
+      return element.ValueKind == JsonValueKind.Number && element.TryGetDouble( out double d ) && double.IsFinite( d ) && d >= 0 ? d : null;
    }
 
    /// <summary>

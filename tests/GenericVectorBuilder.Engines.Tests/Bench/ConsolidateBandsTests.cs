@@ -19,6 +19,7 @@ public sealed partial class ConsolidateTests
 
    private const string FRAMING_TYPE = "GenericVectorBuilder.Bench.Stats.ConsolidateFraming";
    private const string LAYOUT_TYPE = "GenericVectorBuilder.Bench.Stats.SegmentLayout";
+   private const string BANDS_TYPE = "GenericVectorBuilder.Bench.Stats.ConsolidateBands";
    private const string REFUSAL = "Refusing to merge runs that are not the same kind of experiment.";
    private const string QDRANT_2 = "status Green, optimizer ok, indexed_vectors_count 524 of 524 points, 2 segments, indexing_threshold_kb 1, full_scan_threshold_kb 10; every one of 1 non-empty segments has a complete HNSW graph; 98,871 segment searches walked the graph and none scanned";
 
@@ -89,6 +90,44 @@ public sealed partial class ConsolidateTests
    }
 
    /// <summary>
+   /// Neighbours whose medians are less than 3% apart share a band even when their slowest-to-fastest
+   /// ranges do not overlap (the v4 review found boundaries resting on gaps of 2.2% or less, inside
+   /// the roughly 2% repeatability). Each target here varies by only 0.1% between runs, so no two
+   /// ranges touch. The gap is measured the same way for QPS (higher is faster) and p50 (lower is
+   /// faster): the faster median is less than 3% faster than the slower.
+   /// </summary>
+   [Fact]
+   public void Bands_JoinNeighboursWithinThreePercent_EvenWhenRangesDoNotOverlap()
+   {
+      WriteTightRuns( ( "a", 1.00, 1000 ), ( "b", 1.02, 1020 ), ( "c", 1.06, 1100 ), ( "d", 1.09, 1130 ) );
+
+      JsonElement json = Consolidate( "--targets", "a,b,c,d", Path.Combine( _root, "r?" ) );
+
+      Assert.Equal( new[] { "a:1:1", "b:1:2", "c:2:1", "d:2:2" }, BandList( json, "p50Ms" ) );
+      Assert.Equal( new[] { "d:1:1", "c:1:2", "b:2:1", "a:2:2" }, BandList( json, "qps@8" ) );
+      Assert.Equal( new[] { "d:1:1", "c:1:2", "b:2:1", "a:2:2" }, BandList( json, "qps@1" ) );
+      JsonElement[] pair = Metric( json, "qps@8" ).GetProperty( "entries" ).EnumerateArray().Where( e => e.GetProperty( "target" ).GetString() is "a" or "b" ).ToArray();
+      Assert.True( pair[0].GetProperty( "min" ).GetDouble() > pair[1].GetProperty( "max" ).GetDouble(), "b and a must not overlap, or the case proves nothing" );
+   }
+
+   /// <summary>
+   /// The limit is "less than 3%": 2.9% apart share a band, 3.1% apart do not. A chain of
+   /// neighbours each under 3% apart is one band however far its ends are apart (2.4% and 2.5%
+   /// steps make 5%), and the next engine 3.8% above the chain's top is its own band: only the two
+   /// nearest medians at a boundary count.
+   /// </summary>
+   [Fact]
+   public void Bands_ThreePercentLimit_IsStrict_AndChainsThroughCloseNeighbours()
+   {
+      WriteTightRuns( ( "s", 1.0, 3093 ), ( "r", 1.0, 3000 ), ( "q", 1.0, 2058 ), ( "p", 1.0, 2000 ), ( "w", 1.0, 1090 ), ( "z", 1.0, 1050 ), ( "y", 1.0, 1025 ), ( "x", 1.0, 1000 ) );
+
+      JsonElement json = Consolidate( "--targets", "s,r,q,p,w,z,y,x", Path.Combine( _root, "r?" ) );
+
+      Assert.Equal( new[] { "s:1:1", "r:2:1", "q:3:1", "p:3:2", "w:4:1", "z:5:1", "y:5:2", "x:5:3" }, BandList( json, "qps@8" ) );
+      Assert.Equal( 0.03, (double)COMPILED.Value.GetType( BANDS_TYPE )!.GetField( "MIN_MEDIAN_GAP" )!.GetRawConstantValue()!, 12 );
+   }
+
+   /// <summary>
    /// A target with no value for a metric (here no QPS with one searcher) has no band and comes
    /// last, while its other metrics are banded.
    /// </summary>
@@ -150,8 +189,8 @@ public sealed partial class ConsolidateTests
       Consolidate( "--targets", "a,b,c,d,e", Path.Combine( _root, "r?" ) );
 
       string md = File.ReadAllText( Path.Combine( _root, "out", "consolidated.md" ) );
-      Assert.Contains( "## Request speed on a small collection (524 vectors)\n\nAt this size the numbers measure per-request cost, not index scaling.\n\n", md.Replace( "\r", string.Empty ) );
-      Assert.Contains( "Engines in different bands never overlap: every run of an engine in a faster band beat every run of an engine in a slower band. Engines in one band are linked by overlapping slowest-to-fastest ranges, so these runs do not separate them cleanly. Inside a band they are listed by median, and that order is not a ranking.", md );
+      Assert.Contains( "## Request speed on a small collection (524 vectors)\n\nMeasured end to end through each engine's .NET client; at this size it reflects per-request cost including the client library, not index scaling.\n\n", md.Replace( "\r", string.Empty ) );
+      Assert.Contains( "Engines in different bands never overlap: every run of an engine in a faster band beat every run of an engine in a slower band, and the medians on either side of a band boundary are at least 3% apart. Engines in one band are linked by overlapping slowest-to-fastest ranges or by neighboring medians less than 3% apart (an engine varies about 2% from run to run), so these runs do not separate them cleanly. Inside a band they are listed by median, and that order is not a ranking.", md );
       Assert.Contains( "### p50 latency, one search at a time (lower is faster)", md );
       Assert.Contains( "### QPS with 8 searchers at once (higher is faster)", md );
       Assert.Contains( "| band | target | median [min, max] | runs | engine notes |", md );
@@ -175,12 +214,12 @@ public sealed partial class ConsolidateTests
 
       Assert.Equal( "Request speed on a small collection (524 vectors)", Call( "Title", 524 ) );
       Assert.Equal( "Request speed on a small collection (10,000 vectors)", Call( "Title", 10000 ) );
-      Assert.Equal( "At this size the numbers measure per-request cost, not index scaling.", Call( "Line", 524 ) );
+      Assert.Equal( "Measured end to end through each engine's .NET client; at this size it reflects per-request cost including the client library, not index scaling.", Call( "Line", 524 ) );
       Assert.Equal( "Request speed at 100,000 vectors", Call( "Title", 100000 ) );
-      Assert.Equal( "Measured at 100,000 vectors; the order applies to this size only.", Call( "Line", 100000 ) );
+      Assert.Equal( "Measured end to end through each engine's .NET client at 100,000 vectors; the order applies to this size only.", Call( "Line", 100000 ) );
       Assert.DoesNotContain( "per-request", Call( "Line", 100000 ) );
       Assert.Equal( "Request speed (collection size not recorded)", Call( "Title", null ) );
-      Assert.Equal( "The collection size was not recorded in these results.", Call( "Line", null ) );
+      Assert.Equal( "The collection size was not recorded in these results. Measured end to end through each engine's .NET client.", Call( "Line", null ) );
       Assert.Equal( "Request speed (collection size not recorded)", Call( "Title", 0 ) );
    }
 
@@ -449,6 +488,21 @@ public sealed partial class ConsolidateTests
       for( int run = 0; run < 3; run++ )
       {
          WriteRun( $"r{run + 1}", $"2026-10-05T1{run}:00:00Z", BAND_CASE.Select( c => Target( c.Name, c.P50[run], c.Qps8[run], c.Qps8[run] / 4 ) ).ToArray() );
+      }
+   }
+
+   /// <summary>
+   /// Writes three runs (r1, r2, r3) of targets that vary by only 0.1% from run to run (factors
+   /// 0.999, 1.000, 1.001 on both p50 and QPS), so that ranges which are not within 0.2% of each
+   /// other cannot overlap and only the medians decide the bands.
+   /// </summary>
+   /// <param name="cases">Name, median p50 ms, median QPS at 8 (QPS at 1 is a quarter of it).</param>
+   private void WriteTightRuns( params (string Name, double P50, double Qps8)[] cases )
+   {
+      double[] factors = { 0.999, 1.0, 1.001 };
+      for( int run = 0; run < 3; run++ )
+      {
+         WriteRun( $"r{run + 1}", $"2026-10-05T1{run}:00:00Z", cases.Select( c => Target( c.Name, c.P50 * factors[run], c.Qps8 * factors[run], c.Qps8 * factors[run] / 4 ) ).ToArray() );
       }
    }
 

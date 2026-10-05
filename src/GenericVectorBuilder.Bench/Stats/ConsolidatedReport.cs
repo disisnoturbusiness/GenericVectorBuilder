@@ -198,6 +198,14 @@ public sealed class TargetSummary
    /// <summary>Per-run QPS ratio of each higher level to the lowest ("8/1"), computed inside each run.</summary>
    public Dictionary<string, Spread> QpsRatio { get; set; } = new();
 
+   /// <summary>
+   /// CPU time the benchmark client itself used per search, in milliseconds, by concurrency level
+   /// ("1", "8"); a level appears only when at least one run recorded it, and the dictionary is empty
+   /// when no run did. Why: for the fastest engines it is about as large as the latency, so the speed
+   /// order partly reflects each engine's .NET client library.
+   /// </summary>
+   public Dictionary<string, Spread> ClientCpuMsPerSearch { get; set; } = new();
+
    /// <summary>Load rows per second.</summary>
    public Spread LoadRowsPerSecond { get; set; } = new();
 

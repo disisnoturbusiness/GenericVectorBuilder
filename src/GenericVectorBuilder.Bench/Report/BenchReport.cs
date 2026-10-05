@@ -213,7 +213,7 @@ public sealed class SearchReport
    /// <summary>The first failure message.</summary>
    public string? FirstError { get; set; }
 
-   /// <summary>Exact-mode queries timed (engines with an exact mode).</summary>
+   /// <summary>Exact-mode searches timed (engines with an exact mode); every one is a single search, and the JSON name keeps "queries" so older readers still load it.</summary>
    public int ExactQueries { get; set; }
 
    /// <summary>Exact-mode median latency, ms.</summary>
@@ -224,6 +224,14 @@ public sealed class SearchReport
 
    /// <summary>Exact-mode recall (should be 1.0; anything else means the engine or the yardstick is wrong).</summary>
    public double? ExactRecall { get; set; }
+
+   /// <summary>
+   /// CPU time the benchmark client itself used per search, in milliseconds, by concurrency level
+   /// (the pass with that many searchers); null when the run did not measure it, which leaves it
+   /// out of results.json. Why: for the fastest engines it is about as large as the latency, so the
+   /// speed order partly reflects each engine's .NET client library.
+   /// </summary>
+   public Dictionary<int, double>? ClientCpuMsPerSearch { get; set; }
 
    #endregion Public Methods
 }

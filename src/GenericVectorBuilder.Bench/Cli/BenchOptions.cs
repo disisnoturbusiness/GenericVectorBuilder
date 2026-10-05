@@ -149,6 +149,9 @@ public sealed class BenchOptions
    /// <returns>Usage text.</returns>
    public static string Usage()
    {
+      var busy = new MachineControlOptions();
+      string held = string.Create( CultureInfo.InvariantCulture,
+         $"hold each pass's warm-up (up to {busy.BusyWait.TotalMinutes:0.#} min per pass) while processes outside the benchmark use more than {busy.BusyThreshold:0.0#} CPUs on average over the last {busy.BusyWindow.TotalSeconds:0} s or the last {busy.RecentWindow.TotalSeconds:0} s" );
       return @"GenericVectorBuilder.Bench: compare vector engines on the same vectors and the same queries.
 
   list      [--targets a,b]
@@ -165,9 +168,10 @@ Targets run in a random order, and each target's timed passes (default search at
 level, exact mode) run in a random order, each after its own warm-up. --seed N repeats an order;
 without it the seed comes from the start time and is written to results.json as runSeed.
 bench and run-all set every CPU's governor to performance, run the engine under test on the upper half
-of the physical cores and this client on the lower half, and hold each timed pass (up to 60 s) while
-other work uses more than 1.5 CPUs; everything is put back at the end and recorded under 'conditions'
-in results.json. --no-machine-control changes nothing on the machine.";
+of the physical cores and this client on the lower half, and " + held + @"; a box that stays busy
+past that deadline runs the pass anyway, flagged 'busy box'. Everything is put back at the end and recorded under 'conditions'
+in results.json, with each pass's outside load and this client's own CPU time per search. --no-machine-control changes
+nothing on the machine.";
    }
 
    #endregion Public Methods

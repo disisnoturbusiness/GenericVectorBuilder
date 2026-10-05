@@ -61,6 +61,11 @@ public static class ResultsWriter
          md.AppendLine( $"- {ConsolidateFraming.Title( report.Rows )}: {ConsolidateFraming.Line( report.Rows )}" );
       }
 
+      if( ClientCpuLevels( report ).Count > 0 )
+      {
+         md.AppendLine( $"- {ConsolidateFraming.CLIENT_CPU_LINE}" );
+      }
+
       if( report.TruthSeconds.HasValue )
       {
          md.AppendLine( $"- Ground truth: brute force over every vector in memory, {report.TruthSeconds:0.0} s for all {report.QueryCount} queries." );
@@ -97,6 +102,8 @@ public static class ResultsWriter
       bool golden = report.Targets.Any( t => t.Search?.Ndcg != null ) || report.TruthNdcg.HasValue;
       var header = new List<string> { "engine", "index", "load rows/s", "p50 ms", "p95 ms", "p99 ms" };
       header.AddRange( report.Concurrency.Select( c => $"QPS@{c}" ) );
+      List<int> cpuLevels = ClientCpuLevels( report );
+      header.AddRange( cpuLevels.Select( c => $"client CPU ms/search@{c}" ) );
       header.Add( $"recall@{report.Top}" );
       if( golden )
       {
@@ -111,6 +118,7 @@ public static class ResultsWriter
          SearchReport? s = t.Search;
          var cells = new List<string> { t.Name, Cell( t.Index ), Number( t.Load?.RowsPerSecond, "N0" ), Ms( s?.P50Ms ), Ms( s?.P95Ms ), Ms( s?.P99Ms ) };
          cells.AddRange( report.Concurrency.Select( c => s != null && s.Qps.TryGetValue( c, out double q ) ? Number( q, "0.0" ) : "-" ) );
+         cells.AddRange( cpuLevels.Select( c => s?.ClientCpuMsPerSearch != null && s.ClientCpuMsPerSearch.TryGetValue( c, out double cpu ) ? Ms( cpu ) : "-" ) );
          cells.Add( Number( s?.Recall, "0.000" ) );
          if( golden )
          {
@@ -121,6 +129,16 @@ public static class ResultsWriter
          cells.Add( t.Disk?.Bytes is long disk ? Measurement.Format( disk ) : "-" );
          md.AppendLine( "| " + string.Join( " | ", cells ) + " |" );
       }
+   }
+
+   /// <summary>
+   /// The concurrency levels at which at least one target recorded the client's CPU per search, lowest first.
+   /// </summary>
+   /// <param name="report">The run.</param>
+   /// <returns>The levels; empty when no target recorded it.</returns>
+   private static List<int> ClientCpuLevels( BenchReport report )
+   {
+      return report.Targets.Where( t => t.Search?.ClientCpuMsPerSearch != null ).SelectMany( t => t.Search!.ClientCpuMsPerSearch!.Keys ).Distinct().OrderBy( l => l ).ToList();
    }
 
    /// <summary>
@@ -146,9 +164,14 @@ public static class ResultsWriter
          if( t.Search is SearchReport s )
          {
             md.AppendLine( $"- Search: {s.LatencySamples} latency samples, target held {s.CountInTarget?.ToString( "N0" ) ?? "?"} rows, {s.Errors} errors{( s.FirstError != null ? $" (first: {s.FirstError})" : string.Empty )}" );
+            if( s.ClientCpuMsPerSearch is { Count: > 0 } cpu )
+            {
+               md.AppendLine( "- Client CPU per search: " + string.Join( ", ", cpu.OrderBy( p => p.Key ).Select( p => $"{p.Key} searcher{( p.Key == 1 ? string.Empty : "s" )} {Ms( p.Value )} ms" ) ) );
+            }
+
             if( s.ExactQueries > 0 )
             {
-               md.AppendLine( $"- Exact mode: {s.ExactQueries} queries, p50 {Ms( s.ExactP50Ms )} ms, p95 {Ms( s.ExactP95Ms )} ms, recall {Number( s.ExactRecall, "0.000" )}" );
+               md.AppendLine( $"- Exact mode: {s.ExactQueries:N0} searches, p50 {Ms( s.ExactP50Ms )} ms, p95 {Ms( s.ExactP95Ms )} ms, recall {Number( s.ExactRecall, "0.000" )}" );
             }
          }
 

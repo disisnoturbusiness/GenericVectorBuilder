@@ -24,7 +24,7 @@ public static class ContainerRoutes
       ["chroma"] = new( new[] { "gvb-chroma" }, Chroma ),
       ["clickhouse"] = new( new[] { "gvb-clickhouse" }, ClickHouse ),
       ["elasticsearch"] = new( new[] { "gvb-elasticsearch" }, Elasticsearch ),
-      ["mariadb"] = new( new[] { "gvb-mariadb" }, MariaDb ),
+      [MariaBench.TARGET] = new( new[] { MariaBench.CONTAINER }, MariaDb ),
       ["milvus"] = new( new[] { "gvb-milvus" }, Milvus ),
       ["mongodb"] = new( new[] { "gvb-mongodb" }, MongoDb ),
       ["opensearch"] = new( new[] { "gvb-opensearch" }, OpenSearch ),
@@ -87,13 +87,18 @@ public static class ContainerRoutes
       return new ElasticsearchSink( options with { BaseUrl = router.Url( "gvb-elasticsearch", options.BaseUrl ) } );
    }
 
-   /// <summary>MariaDB on its container address.</summary>
+   /// <summary>
+   /// MariaDB on the address of the benchmark's own container gvbbench-mariadb, never the daily
+   /// gvb-mariadb: the sink's default port (3306) is the daily container's, so the host port the
+   /// benchmark's compose file publishes is set first and the router maps it to the container's port.
+   /// </summary>
    /// <param name="router">Addresses read from Docker.</param>
    /// <returns>The sink.</returns>
    private static ISink MariaDb( ContainerRouter router )
    {
       MariaDbSinkOptions options = MariaDbSinkOptions.LocalDefaults();
-      ContainerAddress address = router.Address( "gvb-mariadb", options.Port );
+      options.Port = MariaBench.HOST_PORT;
+      ContainerAddress address = router.Address( MariaBench.CONTAINER, options.Port );
       options.Host = address.Ip;
       options.Port = address.ContainerPort;
       return new MariaDbSink( options );

@@ -427,6 +427,168 @@ public class MachineControlTests
    }
 
    /// <summary>
+   /// Busy time is counted the way the totals subtracted from it are. Counters shaped like the
+   /// real box (the machine busy 3.0 CPUs plus 0.4 of softirq, this process 0.9 and the engine's
+   /// cgroup 2.4 with the softirq that hit them, one outside process 0.1): a kernel without
+   /// CONFIG_IRQ_TIME_ACCOUNTING, or one whose build options cannot be read, gives 0.1 by adding
+   /// irq, softirq and steal (user + nice + system alone gives -0.3); a kernel with it, whose
+   /// process and cgroup totals leave softirq out, gives 0.1 without adding it. Each says which it
+   /// did and why.
+   /// </summary>
+   /// <param name="kernel">default, irqtime or unreadable.</param>
+   [Theory]
+   [InlineData( "default" )]
+   [InlineData( "unreadable" )]
+   [InlineData( "irqtime" )]
+   public void Sampler_CountsTheColumnsTheSubtractedTotalsCount( string kernel )
+   {
+      dynamic r = MachineControlCompiler.Call( "SamplerAccounting", kernel );
+      Assert.Null( (string?)r.Error );
+      Assert.Equal( 0.1, (double)r.Outside, 6 );
+      string description = r.Description;
+      Assert.Equal( kernel != "irqtime", (bool)r.CountIrq );
+      Assert.Contains( kernel switch
+      {
+         "default" => "CONFIG_IRQ_TIME_ACCOUNTING is not set",
+         "irqtime" => "CONFIG_IRQ_TIME_ACCOUNTING=y",
+         _ => "ASSUMED",
+      }, description );
+      Assert.StartsWith( kernel == "irqtime" ? "busy = user + nice + system + steal (guest" : "busy = user + nice + system + irq + softirq + steal (guest", description );
+   }
+
+   /// <summary>
+   /// A negative outside load is never rounded to zero: counters that cannot be right give -0.3
+   /// and the pass says so. Below -0.05 (any of its three loads) the pass is an accounting
+   /// mismatch, recorded in the pass and flagged in the run; -0.04 and exactly -0.05 are not.
+   /// </summary>
+   [Fact]
+   public void Sampler_NegativeIsKeptAndFlagged()
+   {
+      dynamic r = MachineControlCompiler.Call( "SamplerNegative" );
+      Assert.Equal( -0.3, (double)r.Outside, 6 );
+      string[] perPass = r.PerPass;
+      Assert.Equal( new[]
+      {
+         "ok mismatch=False flagged=False", "minus04 mismatch=False flagged=False", "minus05 mismatch=False flagged=False", "minus051 mismatch=True flagged=True",
+         "start mismatch=True flagged=True", "recent mismatch=True flagged=True", "during mismatch=True flagged=True",
+      }, perPass );
+      Assert.Contains( (string[])r.Flags, f => f.StartsWith( "WARNING: accounting mismatch in a minus051:", StringComparison.Ordinal ) && f.Contains( "-0.051 CPUs, below -0.05", StringComparison.Ordinal ) && f.Contains( "cannot be trusted", StringComparison.Ordinal ) );
+      using JsonDocument json = JsonDocument.Parse( (string)r.Json );
+      Assert.True( json.RootElement.GetProperty( "accountingMismatch" ).GetBoolean() );
+      Assert.Equal( -0.051, json.RootElement.GetProperty( "outsideLoadDuring" ).GetDouble(), 6 );
+      Assert.Contains( "-0.051", json.RootElement.GetProperty( "accountingMismatchReason" ).GetString() );
+   }
+
+   /// <summary>
+   /// The client's own CPU over a window comes from the process's utime + stime only (0.5 CPU per
+   /// second here, not the 0.7 that includes its finished children), by interpolation between
+   /// samples; a window under four samples, or outside what was sampled, says why it has no figure.
+   /// </summary>
+   [Fact]
+   public void ClientCpu_LedgerExcludesChildrenAndSaysWhyNot()
+   {
+      dynamic r = MachineControlCompiler.Call( "ClientCpuLedger" );
+      Assert.Equal( 1.1, (double)r.Seconds, 1 );
+      Assert.Equal( 9, (int)r.Samples );
+      string[] problems = r.Problems;
+      Assert.Contains( "shorter than 4 samples", problems[0] );
+      Assert.Contains( "outside the sampled span", problems[1] );
+      Assert.Contains( "outside the sampled span", problems[2] );
+   }
+
+   /// <summary>
+   /// Client CPU per search per pass, from the pass notes TargetRunner.DescribePass writes:
+   /// 1.1 s of CPU over 65,759 searches is 0.0167 ms per search; a pass of no searches, a window
+   /// too short to measure and a pass with no note each carry a problem and no figure.
+   /// </summary>
+   [Fact]
+   public void ClientCpu_PerSearchFromThePassNotes()
+   {
+      dynamic[] r = ( (IEnumerable<dynamic>)MachineControlCompiler.Call( "ClientCpuPerSearch" ) ).ToArray();
+      Assert.Equal( 65759, (int)r[0].Searches );
+      Assert.Equal( 1.1, (double)r[0].Seconds, 1 );
+      Assert.Equal( 1.1 * 1000 / 65759, (double)r[0].MsPerSearch, 3 );
+      Assert.Contains( "this process's threads", (string)r[0].Basis );
+      Assert.Contains( "65759 completed searches", (string)r[0].Basis );
+      Assert.Null( (string?)r[0].Problem );
+      Assert.Equal( 0, (int)r[1].Searches );
+      Assert.Null( (double?)r[1].MsPerSearch );
+      Assert.Equal( "no search completed in the pass", (string)r[1].Problem );
+      Assert.Null( (double?)r[2].MsPerSearch );
+      Assert.Contains( "shorter than 4 samples", (string)r[2].Problem );
+      Assert.Null( (int?)r[3].Searches );
+      Assert.Null( (double?)r[3].MsPerSearch );
+      Assert.Contains( "no 'Pass exact after ...' note", (string)r[3].Problem );
+   }
+
+   /// <summary>
+   /// The client CPU per search that goes into a target's search section is keyed by concurrency
+   /// level the way the consolidation reads it: "default@8" is level 8, the exact pass and a pass
+   /// without a figure are left out.
+   /// </summary>
+   [Fact]
+   public void ClientCpu_LevelsForTheSearchSection()
+   {
+      Assert.Equal( new[] { "1=0.500", "8=0.300" }, (string[])MachineControlCompiler.Call( "ClientCpuLevels" ) );
+   }
+
+   /// <summary>
+   /// The pass-note reader reads what the real TargetRunner.DescribePass writes (with thousands
+   /// separators, a first pass with no predecessor, a million searches) and skips notes of other
+   /// kinds. A change to either side that breaks this fails here, not silently in a results file.
+   /// </summary>
+   [Fact]
+   public void PassNotes_ReadWhatTheTargetRunnerWrites()
+   {
+      Assert.Equal( new[]
+      {
+         "default@8 00:45:47.020 00:46:07.020 65759", "default@1 00:45:47.020 00:46:07.020 22681", "exact 00:45:47.020 00:46:07.020 987", "default@8 00:45:47.020 00:46:07.020 1234567",
+      }, (string[])MachineControlCompiler.Call( "PassNotes" ) );
+   }
+
+   /// <summary>
+   /// The usage text states the busy-box rule the code applies (the defaults of
+   /// MachineControlOptions), not an old one: no "1.5 CPUs", no "up to 60 s".
+   /// </summary>
+   [Fact]
+   public void Usage_StatesTheRealBusyRule()
+   {
+      string[] r = (string[])MachineControlCompiler.Call( "UsageAndDefaults" );
+      string usage = r[0];
+      Assert.Contains( $"up to {r[2]} min per pass", usage );
+      Assert.Contains( $"more than {r[1]} CPUs on average over the last {r[3]} s or the last {r[4]} s", usage );
+      Assert.Contains( "flagged 'busy box'", usage );
+      Assert.Contains( "client's own CPU time per search", usage );
+      Assert.DoesNotContain( "1.5 CPUs", usage );
+      Assert.DoesNotContain( "up to 60 s", usage );
+      Assert.Equal( new[] { "0.3", "10", "60", "5" }, r.Skip( 1 ) );
+   }
+
+   /// <summary>
+   /// The whole path on a fake machine whose client works 0.5 CPUs: the pass machine control
+   /// recorded gets its searches from the target's pass note and its client CPU per search from the
+   /// ledger (0.5 CPU for the window over 1,000 searches), the client's own work is not counted as
+   /// outside work, conditions.cpuAccounting says how busy time was counted, and the target's search
+   /// section carries the figure by level (search.clientCpuMsPerSearch, which the consolidation reads). Needs the wiring
+   /// in MachineControl.AnnotateTarget and RestoreAsync.
+   /// </summary>
+   [Fact]
+   public async Task Wiring_ClientCpuPerSearchLandsInTheConditions()
+   {
+      dynamic r = await MachineControlCompiler.InFolderAsync( folder => MachineControlCompiler.CallAsync( "ClientCpuWiringAsync", folder ) );
+      Assert.True( (int?)r.Searches != null, "MachineControl.AnnotateTarget does not call MachineSampler.AttachClientCpu: apply v5-machine-accounting.wiring.patch" );
+      Assert.Null( (string?)r.Problem );
+      Assert.Equal( 1000, (int)r.Searches );
+      double expectedSeconds = 0.5 * (double)r.WindowSeconds;
+      Assert.InRange( (double)r.Seconds, expectedSeconds * 0.9, expectedSeconds * 1.1 );
+      Assert.InRange( (double)r.MsPerSearch, expectedSeconds * 0.9, expectedSeconds * 1.1 );
+      Assert.InRange( (double)r.OutsideDuring, -0.1, 0.1 );
+      Assert.Contains( "busy = user + nice + system", (string)r.Accounting );
+      Assert.Contains( "ms per search", (string)r.ClockLine );
+      Assert.Equal( (double)r.MsPerSearch, (double)r.SearchLevel8, 6 );
+   }
+
+   /// <summary>
    /// A clean run has no warning; a bad one names every problem; machine control off says so.
    /// </summary>
    [Fact]
@@ -437,7 +599,7 @@ public class MachineControlTests
       string all = string.Join( "\n", bad );
       foreach( string expected in new[] { "governor was performance during the run and mixed", "governor schedutil during a default@8", "Debug build of the client with the JIT optimiser off",
          "CPUs not split", "b not fully pinned", "duckdb is embedded", "busy box during a default@8", "no timed pass of b was seen", "nearest their middle: a default@8",
-         "CPU sampling failed", "NOT fully put back", "restore-machine" } )
+         "CPU sampling failed", "NOT fully put back", "restore-machine", "accounting mismatch in a default@8", "no client CPU per search for a default@8: it was never recorded" } )
       {
          Assert.Contains( expected, all );
       }
@@ -519,7 +681,7 @@ public class MachineControlTests
 }
 
 /// <summary>
-/// Compiles the benchmark's sources with MachineControlScenarios.cs into one in-memory assembly
+/// Compiles the benchmark's sources with MachineControlScenarios.cs and MachineControlAccountingScenarios.cs into one in-memory assembly
 /// and calls its scenarios. Why Roslyn: the benchmark is a console project this test project
 /// does not reference (the same approach as RunnerTests).
 /// </summary>
@@ -565,9 +727,21 @@ internal static class MachineControlCompiler
    /// <returns>Its result.</returns>
    public static async Task<dynamic> CallAsync( string method, params object[] arguments )
    {
+      return await CallAsync( SCENARIO_DEADLINE, method, arguments );
+   }
+
+   /// <summary>
+   /// Calls an async scenario with its own deadline (the live outside-load proof runs for minutes).
+   /// </summary>
+   /// <param name="deadline">Longest the scenario may take.</param>
+   /// <param name="method">Method name.</param>
+   /// <param name="arguments">Arguments.</param>
+   /// <returns>Its result.</returns>
+   public static async Task<dynamic> CallAsync( TimeSpan deadline, string method, params object[] arguments )
+   {
       var task = (Task)COMPILED.Value.GetType( SCENARIOS_TYPE )!.GetMethod( method )!.Invoke( null, arguments )!;
-      Task finished = await Task.WhenAny( task, Task.Delay( SCENARIO_DEADLINE ) );
-      Assert.True( finished == task, $"{method} did not finish within {SCENARIO_DEADLINE.TotalMinutes:0} minutes" );
+      Task finished = await Task.WhenAny( task, Task.Delay( deadline ) );
+      Assert.True( finished == task, $"{method} did not finish within {deadline.TotalMinutes:0.#} minutes" );
       await task;
       return task.GetType().GetProperty( "Result" )!.GetValue( task )!;
    }
@@ -624,7 +798,7 @@ internal static class MachineControlCompiler
    }
 
    /// <summary>
-   /// Compiles every benchmark source plus MachineControlScenarios.cs.
+   /// Compiles every benchmark source plus the two scenario files.
    /// </summary>
    /// <returns>The assembly.</returns>
    private static Assembly Compile()
@@ -635,8 +809,12 @@ internal static class MachineControlCompiler
       List<SyntaxTree> trees = Directory.EnumerateFiles( bench, "*.cs", SearchOption.AllDirectories )
          .Where( f => Path.GetRelativePath( bench, f ).Split( Path.DirectorySeparatorChar )[0] is not ( "bin" or "obj" ) )
          .Select( f => CSharpSyntaxTree.ParseText( File.ReadAllText( f ), parse, f ) ).ToList();
-      string scenarios = Path.Combine( root, "tests", "GenericVectorBuilder.Engines.Tests", "Bench", "MachineControlScenarios.cs" );
-      trees.Add( CSharpSyntaxTree.ParseText( File.ReadAllText( scenarios ), parse.WithPreprocessorSymbols( "BENCH_UNDER_TEST" ), scenarios ) );
+      foreach( string file in new[] { "MachineControlScenarios.cs", "MachineControlAccountingScenarios.cs" } )
+      {
+         string scenarios = Path.Combine( root, "tests", "GenericVectorBuilder.Engines.Tests", "Bench", file );
+         trees.Add( CSharpSyntaxTree.ParseText( File.ReadAllText( scenarios ), parse.WithPreprocessorSymbols( "BENCH_UNDER_TEST" ), scenarios ) );
+      }
+
       trees.Add( CSharpSyntaxTree.ParseText( IMPLICIT_USINGS, parse ) );
       List<string> platform = ( (string)AppContext.GetData( "TRUSTED_PLATFORM_ASSEMBLIES" )! ).Split( Path.PathSeparator ).ToList();
       List<string> extra = BenchOnlyPackages( bench, platform.Select( Path.GetFileName ).ToHashSet( StringComparer.OrdinalIgnoreCase ) );
