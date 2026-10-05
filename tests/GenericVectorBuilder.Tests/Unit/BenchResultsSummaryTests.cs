@@ -279,7 +279,7 @@ public partial class BenchResultsSummaryTests
       Assert.Single( Regex.Matches( legend, ">Sp</abbr>" ) );
       Assert.Contains( "Spread: the best and worst runs differ by more than 15%", legend );
       Assert.Contains( "(2 of 3 engines)", legend );
-      Assert.Contains( "Unsettled: the engine was still starting, building or compacting when it was timed. <span class=\"muted\">(1 of 3 engines)</span>", legend );
+      Assert.Contains( "Unsettled: the engine had not settled when timing began, so its numbers may still have been moving; the evidence names the check that failed. <span class=\"muted\">(1 of 3 engines)</span>", legend );
       Assert.True( legend.IndexOf( ">Sp</abbr>", StringComparison.Ordinal ) < legend.IndexOf( ">Un</abbr>", StringComparison.Ordinal ) );
       Assert.Contains( "<details class=\"bench-evidence\"><summary>Evidence behind the markers</summary>", legend );
       Assert.Contains( "<li><strong>SQL Server 2025</strong> Un unsettled-target: not settled: compaction running [1 of 3 runs]</li>", legend );

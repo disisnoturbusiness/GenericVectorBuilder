@@ -67,12 +67,6 @@ public sealed class ConsolidateEngineStartNoteTests : IDisposable
                var notes = new List<string>();
                await lifecycle.SnapshotAsync( new[] { composePath }, CancellationToken.None );
                await lifecycle.EnsureRunningAsync( target, notes, CancellationToken.None );
-               string? files = lifecycle.FilesNote( target );
-               if( files != null )
-               {
-                  notes.Add( files );
-               }
-
                return notes.ToArray();
             }
 
@@ -195,6 +189,69 @@ public sealed class ConsolidateEngineStartNoteTests : IDisposable
       Assert.NotEqual( before.Split( ']' )[0], after.Split( ']' )[0] );
       Assert.EndsWith( "The engine was already running at its turn, so it may have been created from other files than these.", after );
       Assert.Contains( "gone.conf missing", withMissing );
+   }
+
+   /// <summary>
+   /// The lifecycle records the engine files itself, whichever way the engine came up (started on a CPU set,
+   /// started unrestricted, down at its turn, already up), so no caller has to ask for the note and a result
+   /// can never carry a start note without the files; an engine with no compose file on disk gets no such note.
+   /// </summary>
+   [Fact]
+   public async Task EveryStartPath_RecordsTheEngineFilesNote_WithoutTheCallerAskingForIt()
+   {
+      string compose = WriteEngine( out _ );
+
+      string[] onCpuSet = await Start( new[] { false }, "2-3,6-7", "read back", compose );
+      string[] unrestricted = await Start( new[] { false }, null, null, compose );
+      string[] downAtItsTurn = await Start( new[] { true, false }, "2-3,6-7", null, compose );
+      string[] alreadyUp = await Start( new[] { true }, null, null, compose );
+      string[] noFile = await Start( new[] { false }, null, null );
+
+      foreach( string[] notes in new[] { onCpuSet, unrestricted, downAtItsTurn, alreadyUp } )
+      {
+         Assert.Equal( 2, notes.Length );
+         Assert.StartsWith( "Engine files (SHA-256, first 12 hex digits): [", notes[1] );
+      }
+
+      Assert.EndsWith( "This run created the engine from these files.", onCpuSet[1] );
+      Assert.EndsWith( "This run created the engine from these files.", unrestricted[1] );
+      Assert.EndsWith( "so it may have been created from other files than these.", downAtItsTurn[1] );
+      Assert.EndsWith( "so it may have been created from other files than these.", alreadyUp[1] );
+      Assert.Single( noFile );
+   }
+
+   /// <summary>
+   /// Every compose file of deploy/engines gets a files note that names the compose file with its SHA-256
+   /// (computed here independently) and lists each read-only config file it mounts (the ClickHouse log TTL
+   /// file, the Oracle init script) without a "missing" entry, so a mount that points at nothing is caught
+   /// here and not by a reader of a report. When GVB_EVIDENCE_FILES_OUT names a file, the notes are written there.
+   /// </summary>
+   [Fact]
+   public void EveryComposeFileOfTheRepository_GetsAFilesNote_WithoutAMissingMount()
+   {
+      string engines = Path.Combine( RepoRoot(), "deploy", "engines" );
+      string[] composeFiles = Directory.GetFiles( engines, "*.compose.yaml" ).OrderBy( f => f, StringComparer.Ordinal ).ToArray();
+      var evidence = new List<string>();
+
+      Assert.NotEmpty( composeFiles );
+      foreach( string compose in composeFiles )
+      {
+         string? note = Scenario<string?>( "Files", new object?[] { compose } );
+
+         Assert.NotNull( note );
+         Assert.StartsWith( "Engine files (SHA-256, first 12 hex digits): [", note );
+         Assert.Contains( $"{Path.GetFileName( compose )} {Hash( compose )}", note );
+         Assert.DoesNotContain( " missing", note );
+         Assert.DoesNotContain( "too large", note );
+         evidence.Add( $"{Path.GetFileName( compose )} => {note}" );
+      }
+
+      string clickhouse = Scenario<string?>( "Files", new object?[] { Path.Combine( engines, "clickhouse.compose.yaml" ) } )!;
+      Assert.Contains( "clickhouse-config/gvb-system-logs.xml " + Hash( Path.Combine( engines, "clickhouse-config", "gvb-system-logs.xml" ) ), clickhouse );
+      if( Environment.GetEnvironmentVariable( "GVB_EVIDENCE_FILES_OUT" ) is string output && output.Length > 0 )
+      {
+         File.WriteAllLines( output, evidence );
+      }
    }
 
    /// <summary>

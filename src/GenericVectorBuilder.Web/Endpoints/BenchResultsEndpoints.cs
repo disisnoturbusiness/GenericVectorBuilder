@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -28,7 +27,7 @@ public static class BenchResultsEndpoints
    /// newest of them; a folder with any other name (blocked-2026-10-05-v6, published-2026-10-05b, a run
    /// folder) is never the summary, so a set that was blocked stops being served by renaming it.
    /// </summary>
-   public const string PUBLISHED_PREFIX = "published-";
+   public const string PUBLISHED_PREFIX = BenchFolderNames.PUBLISHED_PREFIX;
 
    private const string DEFAULT_ROOT = "/home/dan/ForClaude/GenericVectorBuilder/bench-results";
    private const string CONFIG_KEY = "Gvb:BenchResultsPath";
@@ -38,8 +37,8 @@ public static class BenchResultsEndpoints
    private const int MAX_RUNS_LISTED = 500;
    private const string SUMMARY_NOTE = "Method problems are listed below the table.";
    private const string RUN_NOTE = "Known method problems are listed on <a href=\"/bench-results\">the summary page</a>.";
+   private const string BLOCKED_NOTE = "<p class=\"errors\">An independent review blocked this set of results. It is kept as evidence of what was measured and what was wrong with it; the summary page does not use it and its numbers are not the published ones.</p>";
    private static readonly Regex SAFE_NAME = new( "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$", RegexOptions.Compiled );
-   private static readonly Regex PUBLISHED_NAME = new( "^published-(?<date>[0-9]{4}-[0-9]{2}-[0-9]{2})$", RegexOptions.Compiled );
    private static readonly HashSet<string> RAW_EXTENSIONS = new( StringComparer.OrdinalIgnoreCase ) { ".md", ".json" };
    private static readonly string[] REPORTS = { "results.md", "consolidated.md" };
 
@@ -107,9 +106,9 @@ public static class BenchResultsEndpoints
       try
       {
          return new DirectoryInfo( root ).GetDirectories()
-            .Select( d => ( d.Name, Match: PUBLISHED_NAME.Match( d.Name ) ) )
-            .Where( x => x.Match.Success && SAFE_NAME.IsMatch( x.Name ) && IsDate( x.Match.Groups["date"].Value ) && File.Exists( Path.Combine( root, x.Name, CONSOLIDATED_JSON ) ) )
-            .OrderByDescending( x => x.Match.Groups["date"].Value, StringComparer.Ordinal )
+            .Select( d => ( d.Name, Date: BenchFolderNames.PublishedDate( d.Name ) ) )
+            .Where( x => x.Date != null && SAFE_NAME.IsMatch( x.Name ) && File.Exists( Path.Combine( root, x.Name, CONSOLIDATED_JSON ) ) )
+            .OrderByDescending( x => x.Date, StringComparer.Ordinal )
             .Select( x => x.Name ).ToList();
       }
       catch( Exception ex ) when( ex is IOException or UnauthorizedAccessException )
@@ -172,6 +171,7 @@ public static class BenchResultsEndpoints
       ( string? title, string rest ) = md == null ? ( null, string.Empty ) : BenchMarkdown.SplitTitle( BenchRunList.ReadCapped( md ) );
       var body = new StringBuilder( "<p><a href=\"/bench-results\">Summary and all runs</a></p>" );
       body.Append( "<h1>" ).Append( BenchMarkdown.Inline( title ?? run ) ).Append( "</h1>" );
+      body.Append( BenchFolderNames.IsBlocked( run ) ? BLOCKED_NOTE : string.Empty );
       body.Append( RunSummary( folder, run ) );
       body.Append( md == null ? "<p class=\"muted\">This run has no Markdown report.</p>" : "<h2>Full results</h2>" + BenchMarkdown.Render( rest ) );
       body.Append( "<h2>Raw files</h2><ul>" );
@@ -280,16 +280,6 @@ public static class BenchResultsEndpoints
       {
          return null;
       }
-   }
-
-   /// <summary>
-   /// True when the text is a real calendar date written yyyy-mm-dd.
-   /// </summary>
-   /// <param name="text">The text.</param>
-   /// <returns>True for a valid date.</returns>
-   private static bool IsDate( string text )
-   {
-      return DateOnly.TryParseExact( text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _ );
    }
 
    /// <summary>

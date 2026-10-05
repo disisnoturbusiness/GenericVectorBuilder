@@ -25,6 +25,9 @@ namespace GenericVectorBuilder.Bench.Running;
 /// <see cref="FilesNote"/> records which files the engine is configured from (its compose file and every
 /// read-only config file or folder it mounts) with a short SHA-256 each, so a change to a config file shows
 /// in the results and the consolidate command refuses to merge runs made under different files.
+/// <see cref="EnsureRunningAsync"/> adds that note to the target's notes itself, in every case where the engine
+/// has a compose file (started by the run, already running, or down at its turn), so no caller has to
+/// remember to ask for it and a result file can never carry the start note without the files.
 /// </summary>
 public sealed class EngineLifecycle
 {
@@ -94,10 +97,12 @@ public sealed class EngineLifecycle
    }
 
    /// <summary>
-   /// Makes sure a compose-hosted target's engine is up before it is measured.
+   /// Makes sure a compose-hosted target's engine is up before it is measured, and records in the target's
+   /// notes what was done (the start note) and which files the engine is configured from (the
+   /// <see cref="FilesNote"/>, last, so its sentence about who created the engine is true).
    /// </summary>
    /// <param name="target">The target.</param>
-   /// <param name="notes">The target's notes (what was started, and why it stays up).</param>
+   /// <param name="notes">The target's notes (what was started, why it stays up, and the engine files).</param>
    /// <param name="ct">Cancellation.</param>
    /// <exception cref="InvalidOperationException">Not run-all and the engine is not running, or it would not start.</exception>
    public async Task EnsureRunningAsync( BenchTarget target, List<string> notes, CancellationToken ct )
@@ -116,6 +121,7 @@ public sealed class EngineLifecycle
       if( runningNow )
       {
          notes.Add( _runningBefore[path] ? "Engine was already running before the run; left running." : "Engine was not running when the run began but was already up at its turn; run-all did not start it now, so it leaves it running." );
+         AddFilesNote( target, notes );
          return;
       }
 
@@ -138,6 +144,7 @@ public sealed class EngineLifecycle
       }
 
       notes.Add( StartNote( _runningBefore[path], cpuset, started ) );
+      AddFilesNote( target, notes );
    }
 
    /// <summary>
@@ -150,7 +157,9 @@ public sealed class EngineLifecycle
    /// runs made under different files are refused. Why the hashes: ClickHouse's server configuration
    /// changed between two runs (21 system log tables switched off, QPS@8 up 16%) and no field of the
    /// results said so.
-   /// Call it after <see cref="EnsureRunningAsync"/>, so the sentence about who created the engine is true.
+   /// <see cref="EnsureRunningAsync"/> adds it to the notes; it is public so a test can read it for a
+   /// compose file without starting anything. It must be called after the start, so the sentence about who
+   /// created the engine is true.
    /// </summary>
    /// <param name="target">The target.</param>
    /// <returns>The note; null when the target has no compose file on disk (the host already fails on a missing file); a note that says the files could not be read when they exist but cannot be.</returns>
@@ -204,6 +213,19 @@ public sealed class EngineLifecycle
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// Adds the engine-files note to a target's notes when the target has a compose file on disk.
+   /// </summary>
+   /// <param name="target">The target.</param>
+   /// <param name="notes">The target's notes.</param>
+   private void AddFilesNote( BenchTarget target, List<string> notes )
+   {
+      if( FilesNote( target ) is string files )
+      {
+         notes.Add( files );
+      }
+   }
 
    /// <summary>
    /// The compose file and every file under its read-only relative mounts, with the short SHA-256 of each,

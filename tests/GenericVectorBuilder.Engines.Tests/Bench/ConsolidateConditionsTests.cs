@@ -49,7 +49,7 @@ public sealed partial class ConsolidateTests
       Assert.Contains( "| build configuration | Release |", md );
       Assert.Contains( "| CPU governor | performance |", md );
       Assert.Contains( $"| CPU partition | {PARTITION_TEXT} |", md );
-      Assert.Contains( "| fewest searches in a warm-up (the --warmup count) | 20 |", md );
+      Assert.Contains( "| least searches a warm-up must run (the --warmup setting, besides the time above) | 20 |", md );
       Assert.Contains( "| warm-up before each timed pass | time based: the pass's own search at the pass's own concurrency for at least 15 s and at least 20 searches (at most 120 s), read in windows of at least 2 s and 100 searches |", md );
       Assert.DoesNotContain( "warm-up searches before each timed pass", md );
       Assert.Contains( "| exact mode seconds | 60 |", md );
@@ -361,7 +361,7 @@ public sealed partial class ConsolidateTests
       Assert.Equal( "Debug build (from the path of the binary in the command line)", Flags( json, "a" )["not-release-build"] );
       string md = File.ReadAllText( Path.Combine( _root, "out", "consolidated.md" ) );
       Assert.Contains( "| build configuration | Debug (from the path of the binary in the command line) |", md );
-      Assert.Contains( "| fewest searches in a warm-up (the --warmup count) | 25 (from the method note) |", md );
+      Assert.Contains( "| least searches a warm-up must run (the --warmup setting, besides the time above) | 25 (from the method note) |", md );
       Assert.Contains( "| warm-up before each timed pass | a fixed count of 25 searches before each timed pass (older run: no warm-up time, settle trial or extension recorded) |", md );
    }
 

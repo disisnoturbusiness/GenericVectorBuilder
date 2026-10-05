@@ -31,7 +31,7 @@ public static class BenchFlagInfo
    {
       ( "spread", "Sp", "Spread: the best and worst runs differ by more than 15%, in p50 or in searches per second, so one run's number does not repeat." ),
       ( "p50-mean-inconsistent", "Pm", "p50 and mean disagree: the median latency and the mean from the one-searcher pass differ by more than expected, which usually means the two passes ran under different conditions." ),
-      ( "unsettled-target", "Un", "Unsettled: the engine was still starting, building or compacting when it was timed." ),
+      ( "unsettled-target", "Un", "Unsettled: the engine had not settled when timing began, so its numbers may still have been moving; the evidence names the check that failed." ),
       ( "busy-box", "Bz", "Busy box: other work was using the CPUs when the run started, so latencies may be worse than the box can do." ),
       ( "governor-not-performance", "Gv", "CPU governor was not performance: the CPU may have run slower than its top speed, most of all with one searcher." ),
       ( "client-engine-share-cores", "Sh", "The test client and the engine ran on the same CPU cores and may have slowed each other." ),

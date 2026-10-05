@@ -53,11 +53,40 @@ public sealed partial class ConsolidateTests
       Assert.Contains( "| warm-up before each timed pass | time based: the pass's own search at the pass's own concurrency for at least 12 s and at least 40 searches (at most 90 s), read in windows of at least 2 s and 100 searches |", md );
       Assert.Contains( "| settle check before each timed pass | a 4 s trial of the same pass must land within 8% of the warm-up's settled figure (the median of its last 3 windows, which must agree within 5%); if not, the warm-up is extended once (at least 25 s, at most 80 s) and a second trial is taken; a pass whose trial still disagrees flags its target as unsettled |", md );
       Assert.Contains( "| rehearsal before the first timed pass | every pass type at its own concurrency for 45 s each, untimed |", md );
-      Assert.Contains( "| fewest searches in a warm-up (the --warmup count) | 20 |", md );
+      Assert.Contains( "| least searches a warm-up must run (the --warmup setting, besides the time above) | 20 |", md );
       Assert.DoesNotContain( "warm-up searches before each timed pass", md );
       string section = md[md.IndexOf( "## Warm-up method as the runs recorded it", StringComparison.Ordinal )..md.IndexOf( "## Runs used", StringComparison.Ordinal )];
       Assert.Contains( $"- {notes[0]}", section );
       Assert.Contains( $"- {notes[1]}", section );
+   }
+
+   /// <summary>
+   /// The method notes a real run wrote (the raw folder of run 601 of 5 Oct 2026, which is evidence and is
+   /// never renamed) give the real numbers: a warm-up of at least 15 s and 20 searches (at most 120 s) at the
+   /// pass's own concurrency, read in windows of at least 2 s and 100 searches, a 3 s trial within 10% of
+   /// the median of the last 3 windows (which agree within 5%), one extension of 30 to 120 s and a 30 s
+   /// rehearsal. This ties the parser to the text the runner really wrote, not to a copy of it in a test.
+   /// </summary>
+   [Fact]
+   public void WarmupMethod_ParsesTheNotesOfARealRun()
+   {
+      string real = Path.Combine( RepoRoot(), "bench-results", "20261005-073329-eshoponweb", "results.json" );
+      Directory.CreateDirectory( Path.Combine( _root, "real" ) );
+      File.Copy( real, Path.Combine( _root, "real", "results.json" ) );
+
+      JsonElement json = Consolidate( "--targets", "sql", Path.Combine( _root, "real" ) );
+
+      JsonElement method = json.GetProperty( "settings" ).GetProperty( "warmupMethod" );
+      Assert.Equal( new double[] { 15, 20, 120, 2, 100, 3, 10, 3, 5, 30, 120, 30 }, new[]
+      {
+         method.GetProperty( "minSeconds" ).GetDouble(), method.GetProperty( "minSearches" ).GetDouble(), method.GetProperty( "capSeconds" ).GetDouble(),
+         method.GetProperty( "windowSeconds" ).GetDouble(), method.GetProperty( "windowSearches" ).GetDouble(), method.GetProperty( "trialSeconds" ).GetDouble(),
+         method.GetProperty( "trialPercent" ).GetDouble(), method.GetProperty( "settleWindows" ).GetDouble(), method.GetProperty( "settlePercent" ).GetDouble(),
+         method.GetProperty( "extensionMinSeconds" ).GetDouble(), method.GetProperty( "extensionCapSeconds" ).GetDouble(), method.GetProperty( "rehearsalSeconds" ).GetDouble(),
+      } );
+      Assert.True( method.GetProperty( "flagsUnsettled" ).GetBoolean() );
+      Assert.DoesNotContain( "missing", method.GetProperty( "description" ).GetString()! );
+      Assert.Equal( 2, method.GetProperty( "recorded" ).GetArrayLength() );
    }
 
    /// <summary>

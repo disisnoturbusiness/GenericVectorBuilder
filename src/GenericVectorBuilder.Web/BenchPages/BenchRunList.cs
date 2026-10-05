@@ -143,7 +143,22 @@ public static class BenchRunList
    {
       BenchSummary summary = BenchSummaryReader.FromConsolidated( json );
       int engines = summary.Ranked.Count + summary.NoResult.Count;
-      return new BenchRunInfo( folder, WhenFromName( folder ), $"Published medians of {summary.Runs} runs", engines.ToString( CultureInfo.InvariantCulture ), "-" );
+      return new BenchRunInfo( folder, WhenFromName( folder ), ConsolidatedLabel( folder, summary.Runs ), engines.ToString( CultureInfo.InvariantCulture ), "-" );
+   }
+
+   /// <summary>
+   /// What a folder of medians is, by its name: only an exact "published-yyyy-mm-dd" is called published, a
+   /// "blocked-" folder says it was blocked, and any other name says it is not a published set.
+   /// Why not "Published" for all of them: a blocked set listed as published medians reads as the result.
+   /// </summary>
+   /// <param name="folder">Folder name.</param>
+   /// <param name="runs">How many runs the medians are over.</param>
+   /// <returns>The text for the Data column.</returns>
+   private static string ConsolidatedLabel( string folder, int runs )
+   {
+      return BenchFolderNames.PublishedDate( folder ) != null ? $"Published medians of {runs} runs"
+         : BenchFolderNames.IsBlocked( folder ) ? $"Blocked medians of {runs} runs (an independent review blocked them; not published)"
+         : $"Medians of {runs} runs (not a published set)";
    }
 
    /// <summary>

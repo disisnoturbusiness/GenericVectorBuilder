@@ -259,6 +259,46 @@ public class BenchResultsPageTests : IDisposable
    }
 
    /// <summary>
+   /// The "All runs" list names a folder of medians for what its name says it is: a published folder
+   /// is published medians, a blocked one says an independent review blocked it, and any other name
+   /// says it is not a published set. A blocked set listed as published medians would read as the result.
+   /// </summary>
+   [Fact]
+   public void RunList_LabelsAFolderOfMedians_ByItsName()
+   {
+      WriteRun();
+      WritePublished( CONSOLIDATED );
+      WritePublishedFolder( "blocked-2026-10-05-v6", NEWER );
+      WritePublishedFolder( "consolidated-scratch", NEWER );
+      WritePublishedFolder( "published-2026-10-05b", NEWER );
+
+      string html = BenchResultsEndpoints.ListPageHtml( _root );
+
+      Assert.Contains( "<td>Published medians of 3 runs</td>", html );
+      Assert.Contains( "<td>Blocked medians of 3 runs (an independent review blocked them; not published)</td>", html );
+      Assert.Contains( "<td>Medians of 3 runs (not a published set)</td>", html );
+      Assert.Equal( 1, Regex.Matches( html, "Published medians of" ).Count );
+   }
+
+   /// <summary>
+   /// The page of a blocked folder says at the top that the set was blocked and is not the published
+   /// result; the page of a published folder says nothing of the kind.
+   /// </summary>
+   [Fact]
+   public void RunPage_OfABlockedFolder_SaysItWasBlocked_AndAPublishedOneDoesNot()
+   {
+      WritePublishedFolder( "blocked-2026-10-05-v6", NEWER );
+      WritePublishedFolder( "published-2026-10-05", NEWER );
+
+      string blocked = BenchResultsEndpoints.RunPageHtml( _root, "blocked-2026-10-05-v6" )!;
+      string published = BenchResultsEndpoints.RunPageHtml( _root, "published-2026-10-05" )!;
+
+      Assert.Contains( "<p class=\"errors\">An independent review blocked this set of results.", blocked );
+      Assert.Contains( "the summary page does not use it", blocked );
+      Assert.DoesNotContain( "blocked this set", published );
+   }
+
+   /// <summary>
    /// The summary page is built from the newest published folder, its own caveats follow it, and a
    /// line names the folder; the older folder's numbers and problems are not shown.
    /// </summary>

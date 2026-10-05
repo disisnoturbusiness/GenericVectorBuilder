@@ -92,7 +92,7 @@ public static class ConsolidatedMarkdown
          new[] { "CPU partition", Recorded( s.CpuPartition, s, "cpuPartition" ) },
       };
       rows.AddRange( WarmupRows( s ) );
-      rows.Add( new[] { "fewest searches in a warm-up (the --warmup count)", Recorded( s.WarmupSearches?.ToString( CultureInfo.InvariantCulture ), s, "warmupSearches" ) } );
+      rows.Add( new[] { "least searches a warm-up must run (the --warmup setting, besides the time above)", Recorded( s.WarmupSearches?.ToString( CultureInfo.InvariantCulture ), s, "warmupSearches" ) } );
       rows.Add( new[] { "exact mode seconds", Recorded( s.ExactSeconds?.ToString( CultureInfo.InvariantCulture ), s, "exactSeconds" ) } );
       Table( md, new[] { "item", "value" }, rows );
    }

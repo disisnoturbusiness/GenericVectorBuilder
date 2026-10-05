@@ -263,7 +263,7 @@ public sealed class TargetResult
    /// </summary>
    public string? SearchSettings { get; init; }
 
-   /// <summary>True when the engine was idle and warm before it was timed, false when it was still starting, building or compacting; null when not recorded.</summary>
+   /// <summary>True when the engine had settled before it was timed, false when it had not (a run before the v6 method: still starting, building or compacting; a run of the v6 method: a trial of the same pass still landed outside the allowed margin of the warm-up's settled figure); null when not recorded.</summary>
    public bool? Settled { get; init; }
 
    /// <summary>The run's own words on why the target was or was not settled; null when not recorded.</summary>

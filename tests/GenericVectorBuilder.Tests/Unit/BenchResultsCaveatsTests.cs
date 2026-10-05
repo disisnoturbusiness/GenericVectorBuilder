@@ -40,7 +40,7 @@ public partial class BenchResultsSummaryTests
       Assert.Contains( "(client 0-1,4-5; engines 2-3,6-7)", html );
       Assert.Equal( 1, System.Text.RegularExpressions.Regex.Matches( html, "did not report a finished index" ).Count );
       Assert.Contains( "so the search may have been a scan or a half-built index. Engines: Oracle 23ai Free.", html );
-      Assert.Contains( "Unsettled: the engine was still starting, building or compacting when it was timed. Engines: Redis and Oracle 23ai Free.", html );
+      Assert.Contains( "Unsettled: the engine had not settled when timing began, so its numbers may still have been moving; the evidence names the check that failed. Engines: Redis and Oracle 23ai Free.", html );
       Assert.Contains( "The test client and the engine ran on the same CPU cores and may have slowed each other. Engines: sqlite-vec.", html );
       Assert.Contains( "<li>1 run was left out of the medians: run4: settings differ from the runs used: warmupMethod missing vs a time based method.</li>", html );
       Assert.Contains( "<li>MongoDB Atlas Local was measured but is not in the table; the reason is listed under it.</li>", html );
