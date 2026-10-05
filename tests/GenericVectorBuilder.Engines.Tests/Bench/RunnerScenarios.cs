@@ -73,7 +73,7 @@ public static class RunnerScenarios
       var sink = new FakeFullSink( "fake", trace ) { FailFirst = failFirst };
       await sink.UpsertAsync( COLLECTION, data.Records( 0, data.Count ), CancellationToken.None );
       QuerySet queries = QuerySet.Random( data, 5 );
-      var runner = new SearchRunner( data, queries, BruteForce.Compute( data, queries, options.Top ), options, seed );
+      var runner = new SearchRunner( data, queries, BruteForce.Compute( data, queries, options.Top ), options, seed ) { WarmupTime = TimeSpan.Zero };
       SearchOutcome outcome = await runner.RunAsync( Target( sink, null ), COLLECTION, line => trace.Add( "LOG " + line ), CancellationToken.None );
       string[] searching = trace.ToArray().Where( e => e != "upsert" ).ToArray();
       return new SearchScenario( searching, outcome.PassOrder.ToArray(), outcome.WarmupErrors, outcome.Report.Errors );
@@ -189,7 +189,10 @@ public static class RunnerScenarios
    }
 
    /// <summary>
-   /// A search runner over random queries from the data.
+   /// A search runner over random queries from the data, with rehearsal, warm-up, window, trial
+   /// and extension lengths of a fraction of a second. Why: these scenarios check which engines
+   /// start and stop and what the results say, and the benchmark's own lengths (30 s per
+   /// rehearsal, 15 s per warm-up) would make every target take minutes.
    /// </summary>
    /// <param name="data">Rows.</param>
    /// <param name="options">Options.</param>
@@ -197,7 +200,15 @@ public static class RunnerScenarios
    private static SearchRunner Runner( PipelineData data, BenchOptions options )
    {
       QuerySet queries = QuerySet.Random( data, options.RandomCount );
-      return new SearchRunner( data, queries, BruteForce.Compute( data, queries, options.Top ), options, 42 );
+      return new SearchRunner( data, queries, BruteForce.Compute( data, queries, options.Top ), options, 42 )
+      {
+         RehearsalTime = TimeSpan.FromSeconds( 0.2 ),
+         WarmupTime = TimeSpan.FromSeconds( 0.3 ),
+         WindowTime = TimeSpan.FromSeconds( 0.05 ),
+         TrialTime = TimeSpan.FromSeconds( 0.1 ),
+         ExtensionMinimum = TimeSpan.FromSeconds( 0.1 ),
+         ExtensionCap = TimeSpan.FromSeconds( 0.5 ),
+      };
    }
 
    /// <summary>

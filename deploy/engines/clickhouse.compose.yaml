@@ -2,6 +2,18 @@
 # with the password from secrets.env (CLICKHOUSE_PASSWORD) through env_file.
 # The image starts as root and gives the data dir to its clickhouse user (uid 101) itself.
 # Own project name so this file never sees (or removes) the other engines' containers.
+#
+# System logs: clickhouse-config/gvb-system-logs.xml is mounted into config.d. It adds a TTL of 1 hour
+# to every system log table the 26.3 image switches on and changes nothing else, so the engine runs
+# with its default logging (query_log, text_log, trace_log, processors_profile_log and the rest, all
+# on, at the image's flush intervals). Those logs cost the engine real work on every search, which is
+# why they are not switched off: a benchmark has to measure the default engine. The TTL only bounds
+# the disk, and only over time: a run writes about 30 KB per search, far more than a TTL expires while
+# the run lasts, so after a run the logs stay until the next start, then go. When a TTL changes,
+# ClickHouse renames the old table to <name>_0 and the copy never expires: once, after the first start
+# with a changed TTL, run clickhouse-config/clear-system-logs.sh. A change to the config needs
+# `docker compose up -d --force-recreate`. The ClickHouseLogHygiene tests fail while a renamed copy is
+# left over.
 name: gvb-clickhouse
 services:
   clickhouse:
@@ -16,6 +28,7 @@ services:
       - "127.0.0.1:8123:8123"
     volumes:
       - /home/dan/gvb-data/engines/clickhouse:/var/lib/clickhouse
+      - ./clickhouse-config/gvb-system-logs.xml:/etc/clickhouse-server/config.d/gvb-system-logs.xml:ro
     ulimits:
       nofile:
         soft: 262144

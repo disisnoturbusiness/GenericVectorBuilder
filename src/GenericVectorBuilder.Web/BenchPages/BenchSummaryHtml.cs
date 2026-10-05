@@ -53,13 +53,18 @@ public static class BenchSummaryHtml
    public const string BANDS_LINE = "Engines in different bands never overlap: every run of an engine in a faster band beat every run of an engine in a slower band, and the medians on either side of a band boundary are at least 3% apart. Engines in one band are linked by overlapping slowest-to-fastest ranges or by neighboring medians less than 3% apart (an engine varies about 2% from run to run), so these runs do not separate them cleanly. Inside a band they are listed by median, and that order is not a ranking.";
 
    /// <summary>What the client CPU per search column is and why it sits beside the latency; printed under a table that shows it.</summary>
-   public const string CLIENT_CPU_LINE = "Client CPU per search is the CPU time the test's .NET client itself used for each search, measured in the same pass as the figure beside it. Where it is close to the latency, the client library is a large part of what is measured.";
+   public const string CLIENT_CPU_LINE = "Client CPU per search is the CPU time the test's .NET client itself used for each search, measured in the same pass as the figure beside it. Where it is close to the latency, the client library is a large part of what is measured. For an embedded engine (DuckDB, sqlite-vec) the engine runs inside the client process, so its figure is the engine's own CPU time, not client overhead.";
 
    /// <summary>Printed under the table of a single run, which has no spread and so no bands.</summary>
    public const string ONE_RUN_LINE = "One run: no spread is known, so no band can be drawn. The order shows this run only.";
 
-   /// <summary>The known problems with the published runs, one plain sentence each.</summary>
-   public static readonly IReadOnlyList<string> CAVEATS = new[]
+   /// <summary>
+   /// The known problems with the first published runs (4 Oct 2026), one plain sentence each. Shown only
+   /// for a consolidated.json in the first published shape (an object keyed by engine), which carries no
+   /// flags, settings or notes and so cannot say anything about itself; every other file gets its caveats
+   /// from its own data (<see cref="BenchCaveats"/>), never from a table keyed by a folder name.
+   /// </summary>
+   public static readonly IReadOnlyList<string> CAVEATS_OLD_FORMAT = new[]
    {
       "These runs are not final. Checks on 4 Oct 2026 found problems in how they were run.",
       "Run order changed the timings.",
@@ -177,7 +182,7 @@ public static class BenchSummaryHtml
          html.Append( $"<figure class=\"bench-figure\">{svg}<figcaption>{Enc( Caption( summary ) )}</figcaption></figure>" );
       }
 
-      html.Append( Table( summary ) ).Append( BandsNote( summary ) ).Append( ClientCpuNote( summary ) ).Append( EngineNotes( summary ) ).Append( Legend( summary ) ).Append( "</section>" );
+      html.Append( Table( summary ) ).Append( WithheldNote( summary ) ).Append( BandsNote( summary ) ).Append( ClientCpuNote( summary ) ).Append( EngineNotes( summary ) ).Append( EngineSettings( summary ) ).Append( Legend( summary ) ).Append( "</section>" );
       return html.ToString();
    }
 
@@ -239,17 +244,12 @@ public static class BenchSummaryHtml
          $"CPU partition {Value( conditions.Partition, false )}",
          conditions.Build == null ? "build not recorded" : conditions.BuildIsWrong ? $"<span class=\"bench-no\">{Enc( conditions.Build )} build</span>" : $"{Enc( conditions.Build )} build",
       };
-      if( conditions.WarmupSearches != null )
-      {
-         parts.Add( $"{Enc( conditions.WarmupSearches )} warm-up searches before each timed pass" );
-      }
-
       if( conditions.ExactSeconds != null )
       {
          parts.Add( $"exact mode up to {Enc( conditions.ExactSeconds )} s" );
       }
 
-      return $"<p class=\"bench-conditions muted\">Machine: {string.Join( "; ", parts )}.</p>";
+      return $"<p class=\"bench-conditions muted\">Machine: {string.Join( "; ", parts )}.</p>{WarmupLine( conditions )}";
    }
 
    /// <summary>
@@ -312,6 +312,28 @@ public static class BenchSummaryHtml
    }
 
    /// <summary>
+   /// The engines the report names as left out of the table above, each with the reason it gives.
+   /// Empty when the file lists none (older files do not).
+   /// </summary>
+   /// <param name="summary">Ranked engines and the engines left out.</param>
+   /// <returns>HTML fragment.</returns>
+   public static string WithheldNote( BenchSummary summary )
+   {
+      if( summary.Withheld is not { Count: > 0 } withheld )
+      {
+         return string.Empty;
+      }
+
+      var html = new StringBuilder( "<div class=\"bench-withheld\"><p class=\"muted\">Measured, but not in the table above:</p><ul>" );
+      foreach( BenchWithheld engine in withheld )
+      {
+         html.Append( $"<li><strong>{Enc( engine.Name )}</strong> {Enc( engine.Reason )}</li>" );
+      }
+
+      return html.Append( "</ul></div>" ).ToString();
+   }
+
+   /// <summary>
    /// The line under the table that says what the first column means: what a band is and that the
    /// order inside it is not a ranking, or that one run has no spread and so no bands.
    /// </summary>
@@ -368,13 +390,47 @@ public static class BenchSummaryHtml
    }
 
    /// <summary>
-   /// The boxed list of known problems, shown under the summary table.
+   /// Each engine's setup as the runs recorded it, closed by default: its description, index and search
+   /// settings, any recorded engine settings, the files it was configured from (SHA-256) and its
+   /// durability statement. Empty when the file carries none (older files do not).
+   /// Why on the page: an engine's non-default settings are part of what its numbers mean; the consolidate
+   /// command refuses to merge runs whose setup differs, and this is where a reader can see what it was.
    /// </summary>
+   /// <param name="summary">Ranked engines and their configurations.</param>
    /// <returns>HTML fragment.</returns>
-   public static string Caveats()
+   public static string EngineSettings( BenchSummary summary )
    {
+      if( summary.Configs is not { Count: > 0 } configs )
+      {
+         return string.Empty;
+      }
+
+      var html = new StringBuilder( "<details class=\"bench-engine-config\"><summary>Engine settings as the runs recorded them</summary>" );
+      html.Append( "<p class=\"muted\">What each run wrote about how the engine was set up. Runs that differ in any of it are refused for that engine, never merged; a cell that reads not recorded was not recorded by any run.</p>" );
+      html.Append( "<div class=\"preview\"><table class=\"bench-table\"><thead><tr><th>Engine</th><th>Description</th><th>Index</th><th>Search settings</th><th>Engine settings</th><th>Durability</th><th>Engine files (SHA-256)</th></tr></thead><tbody>" );
+      foreach( BenchEngineConfig c in configs )
+      {
+         html.Append( $"<tr><td>{Enc( c.Name )}</td><td>{Cell( c.Engine )}</td><td>{Cell( c.Index )}</td><td>{Cell( c.SearchSettings )}</td><td>{Cell( c.EngineSettings )}</td><td>{Cell( c.Durability )}</td><td>{Cell( c.EngineFiles )}</td></tr>" );
+      }
+
+      return html.Append( "</tbody></table></div></details>" ).ToString();
+   }
+
+   /// <summary>
+   /// The boxed list of known problems, shown under the summary table: built from the data of the
+   /// summary being shown (see <see cref="BenchCaveats"/>), so it is always about the folder the numbers
+   /// came from and never about another. A file in the first published shape, which records nothing about
+   /// itself, gets the list written for it (<see cref="CAVEATS_OLD_FORMAT"/>). With no summary (its numbers
+   /// could not be read) the box says that no caveats could be derived.
+   /// </summary>
+   /// <param name="summary">The summary read from the published folder, or null when it could not be read.</param>
+   /// <returns>HTML fragment.</returns>
+   public static string Caveats( BenchSummary? summary )
+   {
+      IReadOnlyList<string> list = summary == null ? new[] { "The numbers above could not be read, so no list of problems could be derived from them." }
+         : summary.OldFormat ? CAVEATS_OLD_FORMAT : BenchCaveats.For( summary );
       var html = new StringBuilder( "<aside class=\"bench-caveats\"><h2>Read before quoting these numbers</h2><ul>" );
-      foreach( string caveat in CAVEATS )
+      foreach( string caveat in list )
       {
          html.Append( $"<li>{Enc( caveat )}</li>" );
       }
@@ -422,6 +478,25 @@ public static class BenchSummaryHtml
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// The line that says how each timed pass was warmed up, in the run's own numbers; when only the
+   /// count of searches was recorded it says so and does not call the count the method.
+   /// Why its own paragraph: the method is several clauses long and has semicolons of its own.
+   /// </summary>
+   /// <param name="conditions">The conditions.</param>
+   /// <returns>HTML fragment; empty when the results recorded neither the method nor a count.</returns>
+   private static string WarmupLine( BenchConditions conditions )
+   {
+      if( conditions.WarmupMethod != null )
+      {
+         return $"<p class=\"bench-warmup muted\">Before each timed pass: {Enc( conditions.WarmupMethod )}.</p>";
+      }
+
+      return conditions.WarmupSearches == null
+         ? string.Empty
+         : $"<p class=\"bench-warmup muted\">Before each timed pass: at least {Enc( conditions.WarmupSearches )} warm-up searches (the rest of the warm-up method was not recorded in these results).</p>";
+   }
 
    /// <summary>
    /// True when at least one engine carries the client's CPU per search.
@@ -514,6 +589,16 @@ public static class BenchSummaryHtml
       }
 
       return wrong ? $"<span class=\"bench-no\">{Enc( value )}</span>" : Enc( value );
+   }
+
+   /// <summary>
+   /// A table cell for a recorded text: encoded, or "not recorded" in muted type when null.
+   /// </summary>
+   /// <param name="text">The text, or null.</param>
+   /// <returns>HTML fragment.</returns>
+   private static string Cell( string? text )
+   {
+      return text == null ? "<span class=\"muted\">not recorded</span>" : Enc( text );
    }
 
    /// <summary>

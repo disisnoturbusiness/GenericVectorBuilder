@@ -94,6 +94,14 @@ public sealed class TargetReport
    /// <summary>compose, always-on or embedded.</summary>
    public string Hosting { get; set; } = string.Empty;
 
+   /// <summary>
+   /// The settings that set how the index was built and how hard the engine searched (search beam,
+   /// probes, ef, M), by name, as the engine's own index description states them; null when the
+   /// target was not searched. Why: two runs at another effort are different experiments, and the
+   /// consolidated report refuses to average them only when the runs say what they were run at.
+   /// </summary>
+   public SortedDictionary<string, string>? SearchSettings { get; set; }
+
    /// <summary>Load measurements, when this run loaded the target.</summary>
    public LoadReport? Load { get; set; }
 

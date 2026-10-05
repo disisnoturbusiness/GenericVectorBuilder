@@ -155,6 +155,11 @@ public static class ResultsWriter
          md.AppendLine( $"### {t.Name}" ).AppendLine();
          md.AppendLine( $"- Engine: {t.Engine} ({t.Hosting})" );
          md.AppendLine( $"- Index: {t.Index}" );
+         if( t.SearchSettings is { Count: > 0 } settings )
+         {
+            md.AppendLine( $"- Search settings: {string.Join( ", ", settings.Select( p => $"{p.Key}={p.Value}" ) )}" );
+         }
+
          if( t.Load is LoadReport l )
          {
             md.AppendLine( $"- Load: {l.Rows:N0} rows in batches of {l.Batch}, {l.UpsertSeconds:0.0} s of upserts ({l.RowsPerSecond:N0} rows/s); "

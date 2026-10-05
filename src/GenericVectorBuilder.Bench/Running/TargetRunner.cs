@@ -8,12 +8,12 @@ namespace GenericVectorBuilder.Bench.Running;
 
 /// <summary>
 /// Measures one target from start to finish: make sure its engine is up, load it (with its
-/// index step), read the engine's own index state, rehearse every pass type and let the latency
-/// settle (untimed; a trial right before the first timed pass confirms the settle or extends it
-/// once), run the timed passes, read the index state again, read memory and disk, then drop the
-/// copy and stop the engine if this run started it. Each timed pass is written into the target's
-/// notes with its UTC window, its searches and the pass that ran before it, and the settle note
-/// says what the settle check found.
+/// index step), read the engine's own index state, rehearse every pass type (untimed), run the
+/// timed passes (each right after its own warm-up and settle check at its own concurrency; a
+/// check that disagrees extends the warm-up once), read the index state again, read memory and
+/// disk, then drop the copy and stop the engine if this run started it. Each timed pass is
+/// written into the target's notes with its UTC window, its searches and the pass that ran
+/// before it, and the settle note says what every settle check found.
 /// Why the index state is read on both sides of the searches: a number is only worth quoting
 /// when the engine itself says which index produced it. A target whose index is not ready after
 /// the load is still measured, and its notes say so in capitals, so the gap is visible instead
@@ -136,46 +136,30 @@ public sealed class TargetRunner
    public static string DescribePreparation( Preparation preparation, TimeSpan each )
    {
       string passes = string.Join( ", ", preparation.Rehearsals.Select( r => $"{r.Pass} {r.Searches:N0} searches in {r.Seconds:0.0} s{( r.Errors > 0 ? $" ({r.Errors} FAILED)" : string.Empty )}" ) );
-      return $"Rehearsal before any timed pass, untimed, every pass type for at least {each.TotalSeconds:0.#} s through the same code the timed passes use: {passes}.";
+      return $"Rehearsal before any timed pass, untimed, every pass type at its own concurrency for at least {each.TotalSeconds:0.#} s through the same code the timed passes use: {passes}.";
    }
 
    /// <summary>
-   /// One line for the settle and its check, a WARNING when the latency had not settled: the
-   /// settle's windows did not agree, or the trial right before the first timed pass still
-   /// disagreed with the settled p50 after the one extension. The words "NOT settled" appear only
-   /// in the warning, because the consolidation reads them.
+   /// One line for the settle checks, one made before each timed pass at that pass's own
+   /// concurrency: "Settle: settled ..." when every check confirmed its warm-up (with or without
+   /// the one extension), a WARNING naming the passes when any did not, or when none ran. The
+   /// words "NOT settled" appear only in the warning, because the consolidation reads them.
    /// </summary>
-   /// <param name="settle">The settle, or null when it did not run.</param>
-   /// <param name="check">The settle check, or null when none ran (no timed pass followed).</param>
+   /// <param name="checks">The checks, in pass order (empty when none ran).</param>
    /// <returns>The note.</returns>
-   public static string DescribeSettle( SettleResult? settle, SettleCheck? check = null )
+   public static string DescribeSettle( IReadOnlyList<SettleCheck> checks )
    {
-      if( settle == null )
+      if( checks.Count == 0 )
       {
          return "WARNING: no settle ran before the timed passes.";
       }
 
-      string how = SettleText( settle );
-      string agreed = $"within {SearchRunner.SETTLE_TOLERANCE:0%} across {SearchRunner.SETTLE_WINDOWS} windows";
-      const string RERUN = "Its numbers may still include warm-up; rerun before quoting them.";
-      if( check == null )
-      {
-         return settle.Settled ? $"Settle: settled after {how}, {agreed}." : $"WARNING: latency had NOT settled when timing began ({settle.StoppedBecause}) after {how}. {RERUN}";
-      }
-
-      string trial = check.Trial.Describe( "trial right before the first timed pass" );
-      if( check.Extension == null )
-      {
-         return check.Confirmed
-            ? $"Settle: settled after {how}, {agreed}; confirmed by a {trial}."
-            : $"WARNING: latency had NOT settled when timing began ({settle.StoppedBecause ?? "the trial disagreed"}) after {how}; {trial}; not extended, because the searches kept failing. {RERUN}";
-      }
-
-      string first = settle.Settled ? $"{how}, {agreed}" : $"{how}, stopped by {settle.StoppedBecause}";
-      string extension = $"so the settle was extended once ({SettleText( check.Extension )}{( check.Extension.Settled ? string.Empty : $", stopped by {check.Extension.StoppedBecause}" )}); {check.Retrial!.Describe( "second trial" )}";
-      return check.Confirmed
-         ? $"Settle: settled after the one extension. First settle {first}; {trial}, {extension}."
-         : $"WARNING: latency had NOT settled when timing began, even after the one extension. First settle {first}; {trial}, {extension}. {RERUN}";
+      string each = string.Join( "; ", checks.Select( DescribeCheck ) );
+      List<string> unsettled = checks.Where( c => !c.Confirmed ).Select( c => c.Pass ).ToList();
+      string rule = $"each by its own warm-up at its own concurrency and a trial of the same pass within {SearchRunner.TRIAL_TOLERANCE:0%} of the warm-up's settled figure";
+      return unsettled.Count == 0
+         ? $"Settle: settled before every timed pass, {rule}. {each}."
+         : $"WARNING: latency had NOT settled when timing began for {string.Join( ", ", unsettled )} ({rule}). {each}. Its numbers may still include warm-up; rerun before quoting them.";
    }
 
    /// <summary>
@@ -199,14 +183,36 @@ public sealed class TargetRunner
    #region Private Methods
 
    /// <summary>
-   /// A settle's length, searches and last window p50s as text.
+   /// One pass's settle check as text: its warm-up, its trial, and the extension when one ran.
    /// </summary>
-   /// <param name="settle">The settle.</param>
-   /// <returns>"1.3 s and 500 searches (0 failed); p50 of the last windows of 100: 2.91, 2.92, 2.82 ms".</returns>
+   /// <param name="check">The check.</param>
+   /// <returns>"default@8: warm-up 15.0 s and 22,431 searches (0 failed) at 8 searchers; QPS of the last windows 1,512, 1,530, 1,524 (...); trial of ...".</returns>
+   private static string DescribeCheck( SettleCheck check )
+   {
+      string warm = $"{check.Pass}: warm-up {SettleText( check.Settle )}{( check.Settle.Settled ? string.Empty : $" ({check.Settle.StoppedBecause})" )}";
+      string trial = check.Trial.Describe( "trial" );
+      if( check.Extension == null )
+      {
+         return check.Confirmed ? $"{warm}; {trial}" : $"{warm}; {trial}; not extended, because the searches kept failing";
+      }
+
+      string extension = $"{SettleText( check.Extension )}{( check.Extension.Settled ? string.Empty : $", {check.Extension.StoppedBecause}" )}";
+      string verdict = check.Confirmed ? "settled after the extension" : "still disagreeing after the extension";
+      return $"{warm}; {trial}, so the warm-up was EXTENDED once ({extension}); {check.Retrial!.Describe( "second trial" )}; {verdict}";
+   }
+
+   /// <summary>
+   /// A warm-up's or an extension's length, searches and last window figures as text.
+   /// </summary>
+   /// <param name="settle">The warm-up or extension, read as a settle.</param>
+   /// <returns>"15.0 s and 22,431 searches (0 failed) at 8 searchers; QPS of the last windows 1,512, 1,530, 1,524 (windows of at least 2 s and 100 searches)".</returns>
    private static string SettleText( SettleResult settle )
    {
-      string p50s = settle.WindowP50s.Count == 0 ? "no full window" : string.Join( ", ", settle.WindowP50s.TakeLast( SearchRunner.SETTLE_WINDOWS ).Select( p => $"{p:0.00}" ) ) + " ms";
-      return $"{settle.Seconds:0.0} s and {settle.Searches:N0} searches ({settle.Errors} failed); p50 of the last windows of {SearchRunner.SETTLE_WINDOW}: {p50s}";
+      IEnumerable<double> last = settle.WindowFigures.TakeLast( SearchRunner.SETTLE_WINDOWS );
+      string figures = settle.WindowFigures.Count == 0 ? "no full window"
+         : settle.Concurrency == 1 ? "p50 of the last windows " + string.Join( ", ", last.Select( p => $"{p:0.000}" ) ) + " ms"
+         : "QPS of the last windows " + string.Join( ", ", last.Select( q => $"{q:N0}" ) );
+      return $"{settle.Seconds:0.0} s and {settle.Searches:N0} searches ({settle.Errors} failed) at {SearchRunner.Searchers( settle.Concurrency )}; {figures} (windows of at least {settle.WindowSeconds:0.##} s and {SearchRunner.SETTLE_WINDOW} searches)";
    }
 
    /// <summary>
@@ -228,11 +234,12 @@ public sealed class TargetRunner
    }
 
    /// <summary>
-   /// Rehearses and settles the target, runs every timed pass, then reads the index state again
-   /// and writes the method notes, one record per pass and the measurement flags.
-   /// Why the preparation runs here, after the index state was read: the settle has to start
-   /// from the index the engine says it is using, and the timed passes have to start from a
-   /// settled engine and a client whose code for every pass is already compiled.
+   /// Rehearses the target, runs every timed pass (each after its warm-up and settle check),
+   /// then reads the index state again and writes the method notes, one record per pass and the
+   /// measurement flags.
+   /// Why the preparation runs here, after the index state was read: the warm-ups have to run on
+   /// the index the engine says it is using, and the timed passes have to start from a settled
+   /// engine and a client whose code for every pass is already compiled.
    /// </summary>
    /// <param name="target">The target.</param>
    /// <param name="runner">Search runner.</param>
@@ -250,13 +257,13 @@ public sealed class TargetRunner
       result.WarmupErrors = outcome.UntimedErrors;
       result.IndexState!.AfterSearch = await target.ReadIndexStateAsync( _options.Collection, STATE_TIMEOUT, ct );
       result.Notes.Add( DescribePreparation( preparation, runner.RehearsalTime ) );
-      result.Notes.Add( DescribeSettle( preparation.Settle, preparation.Check ) );
+      result.Notes.Add( DescribeSettle( preparation.Checks ) );
       result.Notes.AddRange( outcome.Passes.Select( DescribePass ) );
       result.Notes.Add( $"Passes in the order run: {string.Join( ", ", outcome.PassOrder )}; each after its own warm-up. "
-         + $"Untimed searches (rehearsal, settle, settle check and per-pass warm-ups): {outcome.UntimedSearches:N0} sent, {outcome.UntimedErrors} failed (warmupErrors)"
+         + $"Untimed searches (rehearsals, per-pass warm-ups, settle checks and extensions): {outcome.UntimedSearches:N0} sent, {outcome.UntimedErrors} failed (warmupErrors)"
          + $"{( outcome.FirstWarmupError != null ? $"; first warm-up failure {outcome.FirstWarmupError}" : string.Empty )}"
          + $"{( preparation.FirstError != null ? $"; first {preparation.FirstError}" : string.Empty )}"
-         + $"{( outcome.WarmupsCutShort.Count > 0 ? $"; warm-up stopped early by its time budget before {string.Join( ", ", outcome.WarmupsCutShort )}" : string.Empty )}. "
+         + $"{( outcome.WarmupsCutShort.Count > 0 ? $"; warm-up stopped by its time cap before its minimum of searches before {string.Join( ", ", outcome.WarmupsCutShort )}" : string.Empty )}. "
          + $"Index after the searches: {Describe( result.IndexState.AfterSearch )}." );
       result.Notes.AddRange( outcome.Flags );
       NoteIndexChange( result );

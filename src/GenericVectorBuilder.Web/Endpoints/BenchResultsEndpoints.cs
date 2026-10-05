@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -21,8 +22,13 @@ public static class BenchResultsEndpoints
 {
    #region Data Members
 
-   /// <summary>The folder whose consolidated.json the summary page is built from.</summary>
-   public const string PUBLISHED_FOLDER = "published-2026-10-04";
+   /// <summary>
+   /// Start of the name of every folder a consolidate output is published in: "published-" and the
+   /// date, e.g. "published-2026-10-05", and nothing after the date. The summary page is built from the
+   /// newest of them; a folder with any other name (blocked-2026-10-05-v6, published-2026-10-05b, a run
+   /// folder) is never the summary, so a set that was blocked stops being served by renaming it.
+   /// </summary>
+   public const string PUBLISHED_PREFIX = "published-";
 
    private const string DEFAULT_ROOT = "/home/dan/ForClaude/GenericVectorBuilder/bench-results";
    private const string CONFIG_KEY = "Gvb:BenchResultsPath";
@@ -33,6 +39,7 @@ public static class BenchResultsEndpoints
    private const string SUMMARY_NOTE = "Method problems are listed below the table.";
    private const string RUN_NOTE = "Known method problems are listed on <a href=\"/bench-results\">the summary page</a>.";
    private static readonly Regex SAFE_NAME = new( "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$", RegexOptions.Compiled );
+   private static readonly Regex PUBLISHED_NAME = new( "^published-(?<date>[0-9]{4}-[0-9]{2}-[0-9]{2})$", RegexOptions.Compiled );
    private static readonly HashSet<string> RAW_EXTENSIONS = new( StringComparer.OrdinalIgnoreCase ) { ".md", ".json" };
    private static readonly string[] REPORTS = { "results.md", "consolidated.md" };
 
@@ -83,8 +90,38 @@ public static class BenchResultsEndpoints
    }
 
    /// <summary>
-   /// Builds the /bench-results page: the summary from the published consolidated.json when it
-   /// exists, then every run. Without that file it falls back to the run list alone.
+   /// The published folders under the results root, newest first: names that read "published-" and a
+   /// valid date (yyyy-mm-dd) and nothing else, that hold a consolidated.json. Anything else in the
+   /// root (a run folder, blocked-*, a published folder with a suffix, no date or no file) is not a
+   /// candidate.
+   /// Why by the date in the name and not by file times: a copy or a checkout changes file times,
+   /// and the name is what the person who published it wrote. Why no suffix: a second publish on
+   /// the same day (published-2026-10-05b) was the blocked set of 5 Oct, and a name the page serves
+   /// must be one a reviewer can decide on; a blocked set is renamed out of the pattern.
+   /// Internal so tests can list a folder of their own.
+   /// </summary>
+   /// <param name="root">Results root.</param>
+   /// <returns>Folder names, newest first; empty when there are none or the root cannot be read.</returns>
+   internal static IReadOnlyList<string> PublishedFolders( string root )
+   {
+      try
+      {
+         return new DirectoryInfo( root ).GetDirectories()
+            .Select( d => ( d.Name, Match: PUBLISHED_NAME.Match( d.Name ) ) )
+            .Where( x => x.Match.Success && SAFE_NAME.IsMatch( x.Name ) && IsDate( x.Match.Groups["date"].Value ) && File.Exists( Path.Combine( root, x.Name, CONSOLIDATED_JSON ) ) )
+            .OrderByDescending( x => x.Match.Groups["date"].Value, StringComparer.Ordinal )
+            .Select( x => x.Name ).ToList();
+      }
+      catch( Exception ex ) when( ex is IOException or UnauthorizedAccessException )
+      {
+         return Array.Empty<string>();
+      }
+   }
+
+   /// <summary>
+   /// Builds the /bench-results page: the summary from the newest published consolidated.json that
+   /// can be read (see <see cref="PublishedFolders"/>), then every run. With no published folder it
+   /// falls back to the run list alone.
    /// Internal so tests can render it against a folder of their own.
    /// </summary>
    /// <param name="root">Results root.</param>
@@ -97,12 +134,12 @@ public static class BenchResultsEndpoints
       }
 
       var body = new StringBuilder();
-      string consolidated = Path.Combine( root, PUBLISHED_FOLDER, CONSOLIDATED_JSON );
-      if( File.Exists( consolidated ) )
+      IReadOnlyList<string> published = PublishedFolders( root );
+      if( published.Count > 0 )
       {
          body.Append( "<h1>Vector search benchmark</h1>" );
-         body.Append( SummaryOrError( () => BenchSummaryReader.FromConsolidated( BenchRunList.ReadCapped( consolidated ) ), SUMMARY_NOTE, BenchSummaryHtml.PUBLISHED_DATA ) );
-         body.Append( BenchSummaryHtml.Caveats() ).Append( "<h2>All runs</h2>" );
+         body.Append( PublishedSummary( root, published, out string caveats ) );
+         body.Append( caveats ).Append( "<h2>All runs</h2>" );
       }
       else
       {
@@ -183,10 +220,76 @@ public static class BenchResultsEndpoints
       }
 
       string consolidated = Path.Combine( folder, CONSOLIDATED_JSON );
-      string? published = run == PUBLISHED_FOLDER ? BenchSummaryHtml.PUBLISHED_DATA : null;
       return File.Exists( consolidated )
-         ? SummaryOrError( () => BenchSummaryReader.FromConsolidated( BenchRunList.ReadCapped( consolidated ) ), RUN_NOTE, published )
+         ? SummaryOrError( () => BenchSummaryReader.FromConsolidated( BenchRunList.ReadCapped( consolidated ) ), RUN_NOTE, DataLineOrNull( consolidated ) )
          : string.Empty;
+   }
+
+   /// <summary>
+   /// The summary of the newest published folder that can be read. When a newer folder cannot be
+   /// read, an older one is shown under a visible note that says which folder failed and why; when
+   /// none can be read, the error stands where the chart would be.
+   /// Why fall back at all: a publish that is half written (or one bad file) must not take the
+   /// whole page's numbers away; why say so: the older numbers are not the newest ones.
+   /// </summary>
+   /// <param name="root">Results root.</param>
+   /// <param name="folders">Published folder names, newest first (not empty).</param>
+   /// <param name="caveats">The known-problems box built from the data of the folder that was shown (or saying that none could be derived when no folder could be read).</param>
+   /// <returns>HTML fragment.</returns>
+   private static string PublishedSummary( string root, IReadOnlyList<string> folders, out string caveats )
+   {
+      string? failedFolder = null;
+      string? failure = null;
+      foreach( string folder in folders )
+      {
+         string path = Path.Combine( root, folder, CONSOLIDATED_JSON );
+         try
+         {
+            string json = BenchRunList.ReadCapped( path );
+            BenchSummary summary = BenchSummaryReader.FromConsolidated( json );
+            string block = BenchSummaryHtml.Block( summary, SUMMARY_NOTE, BenchSummaryReader.DataLine( json ) );
+            string source = $"<p class=\"bench-source muted\">Numbers from <a href=\"/bench-results/{Enc( folder )}\">{Enc( folder )}</a>.</p>";
+            string fallback = failedFolder == null ? string.Empty : $"<p class=\"errors\">The newest published results, {Enc( failedFolder )}, could not be read ({Enc( failure ?? "no reason given" )}), so the page shows the older {Enc( folder )}.</p>";
+            caveats = BenchSummaryHtml.Caveats( summary );
+            return fallback + source + block;
+         }
+         catch( Exception ex ) when( ex is JsonException or IOException or InvalidDataException or UnauthorizedAccessException )
+         {
+            failedFolder ??= folder;
+            failure ??= ex.Message;
+         }
+      }
+
+      caveats = BenchSummaryHtml.Caveats( null );
+      return $"<p class=\"errors\">The summary numbers could not be read: {Enc( failure ?? "no reason given" )}</p>";
+   }
+
+   /// <summary>
+   /// The line that says what a consolidated.json was measured on, or null when it cannot be built
+   /// (the summary then reports the unreadable file itself).
+   /// </summary>
+   /// <param name="path">Full path of the consolidated.json.</param>
+   /// <returns>The line, or null.</returns>
+   private static string? DataLineOrNull( string path )
+   {
+      try
+      {
+         return BenchSummaryReader.DataLine( BenchRunList.ReadCapped( path ) );
+      }
+      catch( Exception ex ) when( ex is JsonException or IOException or InvalidDataException or UnauthorizedAccessException )
+      {
+         return null;
+      }
+   }
+
+   /// <summary>
+   /// True when the text is a real calendar date written yyyy-mm-dd.
+   /// </summary>
+   /// <param name="text">The text.</param>
+   /// <returns>True for a valid date.</returns>
+   private static bool IsDate( string text )
+   {
+      return DateOnly.TryParseExact( text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _ );
    }
 
    /// <summary>

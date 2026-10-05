@@ -19,9 +19,16 @@ namespace GenericVectorBuilder.Bench.Stats;
 /// so the markdown and the web page show the same warnings.
 /// Rules added after the third review: targets whose min-max ranges overlap on a speed metric
 /// share a tie band and no strict rank is shown; runs of different commands (run-all against
-/// bench), different engine hosting (container against native) or different segment layouts are
-/// refused, not merged; and each target carries notes a reader needs next to its speed (a CPU
-/// cap, an exact-by-design search, a scan where an index was meant).
+/// bench) or different engine hosting (container against native) are refused, not merged; and each
+/// target carries notes a reader needs next to its speed (a CPU cap, an exact-by-design search, a
+/// scan where an index was meant).
+/// Rules changed after the v5 review: a segment layout that differs between runs is no longer a
+/// refusal but a flag on the target, which stays in every table; and the report always names every
+/// target the runs hold that it does not show (<see cref="ConsolidateWithheld"/>), so an engine can
+/// no longer vanish from a published report without a line saying why.
+/// Rules added after the v6 review: the warm-up method (time based warm-up, settle trial, extension, rehearsal, as the
+/// runs recorded it) is part of the settings runs must share and is printed in full, not as a bare count; and a target
+/// whose engine setup differs between runs is refused (<see cref="ConsolidateIdentity"/>).
 /// Rules added after the v4 review: neighbours whose medians are less than 3% apart share a band
 /// even when their ranges do not overlap (the repeatability of one engine is about 2%), and the
 /// client's CPU per search is carried through where a run recorded it.
@@ -76,16 +83,20 @@ public static class Consolidator
          throw new InvalidOperationException( refusal );
       }
 
-      report.Settings = SettingsOf( used[0], targets );
+      IReadOnlyList<RefusedTarget> refused = ConsolidateIdentity.RefusedTargets( used, targets );
+      IReadOnlyList<string> shown = targets.Where( t => refused.All( r => r.Target != t ) ).ToList();
+      report.Targets = shown.ToList();
+      report.Settings = SettingsOf( used[0], shown );
       report.Runs = used.Select( ToRunUsed ).ToList();
-      IReadOnlyList<int> levels = Levels( used, targets );
-      report.TargetSummaries = targets.Select( t => Summarize( t, used, levels ) ).ToList();
+      report.Withheld = ConsolidateWithheld.Build( used, targets, refused );
+      IReadOnlyList<int> levels = Levels( used, shown );
+      report.TargetSummaries = shown.Select( t => Summarize( t, used, levels ) ).ToList();
       AddRanks( report.TargetSummaries, used, levels );
       report.Bands = ConsolidateBands.Build( report.TargetSummaries, levels, used.Count );
       report.TargetSummaries.ForEach( t => t.EngineNotes = ConsolidateEngineNotes.For( t, used ) );
-      report.Pairs = pairs.Where( p => targets.Contains( p.A ) && targets.Contains( p.B ) && p.A != p.B )
+      report.Pairs = pairs.Where( p => shown.Contains( p.A ) && shown.Contains( p.B ) && p.A != p.B )
          .Select( p => Pair( p.A, p.B, used, levels ) ).ToList();
-      report.ExactVsDefault = targets.Select( t => Exact( t, used ) ).OfType<ExactVsDefault>().ToList();
+      report.ExactVsDefault = shown.Select( t => Exact( t, used ) ).OfType<ExactVsDefault>().ToList();
       report.Flags = ConsolidateFlags.Build( report.TargetSummaries, used );
       report.Notes = Notes( report );
       return report;
@@ -203,6 +214,7 @@ public static class Consolidator
       yield return ( "governor", c.Governor ?? "missing" );
       yield return ( "cpuPartition", c.Partition ?? "missing" );
       yield return ( "warmupSearches", c.WarmupSearches?.ToString() ?? "missing" );
+      yield return ( "warmupMethod", c.WarmupMethod?.Description ?? "missing" );
       yield return ( "exactSeconds", c.ExactSeconds?.ToString() ?? "missing" );
       foreach( string target in targets )
       {
@@ -251,6 +263,7 @@ public static class Consolidator
          Governor = c.Governor,
          CpuPartition = c.Partition,
          WarmupSearches = c.WarmupSearches,
+         WarmupMethod = c.WarmupMethod,
          ExactSeconds = c.ExactSeconds,
          SearchSettings = targets.ToDictionary( t => t, t => run.Find( t )?.SearchSettings, StringComparer.Ordinal ),
          Derived = c.Derived.ToDictionary( d => d.Key, d => d.Value, StringComparer.Ordinal ),
@@ -306,6 +319,9 @@ public static class Consolidator
          Engines = Distinct( results.Select( t => t.Engine ) ),
          Indexes = Distinct( results.Select( t => t.Index ) ),
          Hosting = Distinct( results.Select( t => t.Hosting ) ),
+         EngineSettings = Distinct( results.Select( t => t.EngineSettings ) ),
+         EngineFiles = Distinct( results.Select( t => t.EngineFiles ) ),
+         Durabilities = Distinct( results.Select( t => t.Durability ) ),
          P50Ms = Spread.Of( results.Select( t => t.P50Ms ) ),
          P95Ms = Spread.Of( results.Select( t => t.P95Ms ) ),
          LoadRowsPerSecond = Spread.Of( results.Select( t => t.LoadRowsPerSecond ) ),
@@ -568,10 +584,13 @@ public static class Consolidator
       var notes = new List<string>
       {
          $"Load rows/s is reported but not ranked and does not feed any comparison: each load wrote {rows}, which is too few to separate engines from connection set-up and first-call cost.",
-         $"Runs were used together only when their build configuration, CPU governor, CPU partition, warm-up count, exact-mode seconds, seconds per level and every listed target's search settings matched; runs that differed are listed under Runs dropped. Spread is flagged when the largest value is more than {ConsolidateFlags.SPREAD_RATIO.ToString( "0.00", System.Globalization.CultureInfo.InvariantCulture )} times the smallest across runs.",
+         $"Runs were used together only when their build configuration, CPU governor, CPU partition, warm-up method (the warm-up time and count, the settle trial, the extension and the rehearsal as the runs recorded them), exact-mode seconds, seconds per level and every listed target's index description and search settings matched; runs that differed are listed under Runs dropped. Spread is flagged when the largest value is more than {ConsolidateFlags.SPREAD_RATIO.ToString( "0.00", System.Globalization.CultureInfo.InvariantCulture )} times the smallest across runs.",
       };
       notes.Add( ConsolidateFraming.BANDS_LINE + " Bands are drawn only from two runs or more." );
-      notes.Add( "Runs of different commands (run-all against bench), a different engine hosting (container against native) or a different segment layout reported by an engine are refused, never merged: the largest-group rule does not apply to them." );
+      notes.Add( "Runs of different commands (run-all against bench) are refused, never merged, and nothing is written. A target whose engine hosting differs between the runs (container against native) is refused for that target alone, never merged: it has no row and is named under \"Targets not in this report\" with the reason. The largest-group rule does not apply to either." );
+      notes.Add( "A target whose engine description, recorded engine settings, configuration files (compose file and read-only mounted config, by SHA-256) or durability statement differs between the runs is refused for that target alone, like a different hosting: it has no row and is named under \"Targets not in this report\" with the differing values. A setting no run recorded cannot be compared and shows as missing." );
+      notes.Add( "A segment layout that differs between the runs (the engine's own count after the load or after the searches) does not refuse or drop anything: the target stays in every table and carries the segment-layout-differs-between-runs flag, which names each layout and the runs that had it." );
+      notes.Add( $"Every target the runs hold that has no row in this report (left out of --targets, or refused for a different hosting or engine setup) is named under \"Targets not in this report\" with its reason ({report.Withheld.Count} in this report), so no measured engine is left out unsaid." );
       if( report.Pairs.Count > 0 )
       {
          notes.Add( "Each pair compares two targets that hold their own copy of the data (a separate database, table or collection), so a difference mixes the engine setting with the copy. The exact-versus-default tables compare the two search methods inside one target." );

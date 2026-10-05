@@ -52,6 +52,31 @@ public sealed class DuckDbSinkOptions
    public int UpsertBatch { get; set; } = 2000;
 
    /// <summary>
+   /// The most searches that may run at once on one collection, which is also the most search
+   /// connections the sink opens for it. A connection is opened only when a searcher arrives and
+   /// finds none idle, so the pool ends up as large as the caller's concurrency, up to this limit;
+   /// searchers beyond the limit wait for a free connection. Values below 8 are raised to 8,
+   /// because the benchmark's widest pass uses 8 searchers and a smaller pool would quietly
+   /// serialize them.
+   /// </summary>
+   public int MaxSearchConnections { get; set; } = 32;
+
+   /// <summary>
+   /// True to run every search on the single write connection, one at a time, as the sink did
+   /// before it had a pool. Why it exists: it is the control the tests compare the concurrent
+   /// answers against, and the report says "searches run one at a time (single connection)" when
+   /// it is on, so a run made this way cannot be mistaken for a concurrent one.
+   /// </summary>
+   public bool SerializeSearches { get; set; }
+
+   /// <summary>
+   /// Longest, in seconds, that a call may wait for a free search connection or for exclusive use
+   /// of the collection before it fails with a plain message. Why a deadline: a stuck query must
+   /// end a run loudly, not hang it.
+   /// </summary>
+   public int ConnectionWaitSeconds { get; set; } = 120;
+
+   /// <summary>
    /// The default database folder, under the current user's home directory.
    /// </summary>
    /// <returns>~/gvb-data/engines/duckdb as an absolute path.</returns>

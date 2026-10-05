@@ -45,6 +45,7 @@ public static class BenchFlagInfo
       ( "fields-missing", "Ms", "Fields missing: the run did not record some of what is needed to judge it (see consolidated.md)." ),
       ( "engine-or-index-text-differs", "Ch", "The engine version or index description changed between the runs." ),
       ( "segment-layout-changed", "Sg", "The engine reported a different segment layout after the searches than after the load, so some timed passes may have run against another layout." ),
+      ( "segment-layout-differs-between-runs", "Sl", "The engine ended with a different segment layout in different runs, so the runs searched different layouts and the median mixes them." ),
    };
 
    #endregion Data Members

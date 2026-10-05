@@ -2,8 +2,10 @@ namespace GenericVectorBuilder.Engines.Sinks;
 
 /// <summary>
 /// Connection and index settings for <see cref="MariaDbSink"/>. The defaults point at the local
-/// gvb-mariadb container (deploy/engines/mariadb.compose.yaml) and read its root password from
-/// the shared secrets file, so a parameterless sink works on this box with nothing configured.
+/// gvb-mariadb container (deploy/engines/mariadb.compose.yaml, the daily one) and read its root
+/// password from the shared secrets file, so a parameterless sink works on this box with nothing
+/// configured. The benchmark never uses that container: its "mariadb" target connects to its own
+/// gvbbench-mariadb (deploy/engines/mariadb-bench.compose.yaml, the same image and server settings).
 /// Why the index numbers live here: the benchmark report prints them next to the timings, and
 /// a run with different numbers is a different experiment.
 /// </summary>

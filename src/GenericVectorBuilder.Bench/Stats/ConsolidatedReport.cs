@@ -1,3 +1,5 @@
+using GenericVectorBuilder.Bench.Report;
+
 namespace GenericVectorBuilder.Bench.Stats;
 
 /// <summary>
@@ -27,6 +29,13 @@ public sealed class ConsolidatedReport
 
    /// <summary>Runs left out and why.</summary>
    public List<RunDropped> Dropped { get; set; } = new();
+
+   /// <summary>
+   /// Targets the runs hold that have no row in this report, each with the reason. Always written,
+   /// empty when there are none. Why: a target dropped from the tables with no word said (MongoDB in
+   /// the v5 report) reads as an engine that was never measured.
+   /// </summary>
+   public List<WithheldTarget> Withheld { get; set; } = new();
 
    /// <summary>One summary per target, in the order asked for.</summary>
    public List<TargetSummary> TargetSummaries { get; set; } = new();
@@ -102,8 +111,14 @@ public sealed class RunSettings
    /// <summary>CPU partition (which CPUs the client and the engines could use) as one text; null when not recorded.</summary>
    public string? CpuPartition { get; set; }
 
-   /// <summary>Untimed warm-up searches before every timed pass; null when not recorded.</summary>
+   /// <summary>Fewest untimed warm-up searches in a warm-up before a timed pass (the --warmup minimum, not the whole method); null when not recorded.</summary>
    public int? WarmupSearches { get; set; }
+
+   /// <summary>
+   /// How each timed pass was warmed up and checked (time based warm-up, settle trial, extension, rehearsal), from the runs' own method notes;
+   /// null when the runs recorded none. Why a record of its own: the count above is only the minimum, and the report must say the method.
+   /// </summary>
+   public WarmupMethod? WarmupMethod { get; set; }
 
    /// <summary>Seconds each engine's exact mode was allowed; null when not recorded.</summary>
    public int? ExactSeconds { get; set; }
@@ -168,6 +183,30 @@ public sealed class RunDropped
 }
 
 /// <summary>
+/// A target that the runs hold but this report does not show, and why.
+/// Why a record of its own: the report must never leave a measured engine out without a line
+/// saying so, with the evidence the reader needs to judge whether leaving it out was fair.
+/// </summary>
+public sealed class WithheldTarget
+{
+   #region Public Methods
+
+   /// <summary>Target name.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>Why it has no row: "not-listed" (the target is in the runs but not in --targets) or "refused" (a listed target whose engine hosting differs between the runs).</summary>
+   public string Kind { get; set; } = string.Empty;
+
+   /// <summary>Runs used that hold a result for it.</summary>
+   public List<string> Runs { get; set; } = new();
+
+   /// <summary>The reason, in words, with the evidence found in the runs (failures, a different segment layout or hosting).</summary>
+   public string Reason { get; set; } = string.Empty;
+
+   #endregion Public Methods
+}
+
+/// <summary>
 /// Everything consolidated for one target.
 /// </summary>
 public sealed class TargetSummary
@@ -185,6 +224,18 @@ public sealed class TargetSummary
 
    /// <summary>Distinct hosting values seen.</summary>
    public List<string> Hosting { get; set; } = new();
+
+   /// <summary>
+   /// Distinct engine settings (non-default, as the runs recorded them) seen across the runs; empty when no run recorded any. More than one
+   /// cannot happen in a shown target: runs that differ are refused for it (<see cref="ConsolidateIdentity"/>).
+   /// </summary>
+   public List<string> EngineSettings { get; set; } = new();
+
+   /// <summary>Distinct lists of engine files with their short SHA-256 seen across the runs; empty when no run recorded any.</summary>
+   public List<string> EngineFiles { get; set; } = new();
+
+   /// <summary>Distinct durability statements (what a crash can lose with the engine's settings) seen across the runs.</summary>
+   public List<string> Durabilities { get; set; } = new();
 
    /// <summary>Median latency, ms.</summary>
    public Spread P50Ms { get; set; } = new();

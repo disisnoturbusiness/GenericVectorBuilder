@@ -1,0 +1,127 @@
+<?xml version="1.0"?>
+<!--
+   Bounds the disk use of ClickHouse's own system log tables with a TTL, and changes nothing else.
+
+   Mounted read-only into /etc/clickhouse-server/config.d/ by clickhouse.compose.yaml. ClickHouse
+   merges every file in config.d over config.xml (documented at
+   https://clickhouse.com/docs/operations/configuration-files), so each element below adds one
+   child to the image's own element of the same name and leaves its other children (flush interval,
+   buffer sizes, partition key, level) as the image has them.
+
+   The TTL setting used: the "ttl" element of a system log table. The system tables overview
+   (https://clickhouse.com/docs/operations/system-tables/overview) lists it among the elements a
+   config file may set ("ttl: specify table TTL expression") and says "By default, table growth is
+   unlimited. To control a size of a table, you can use TTL settings for removing outdated log
+   records." The expression is a MergeTree table TTL
+   (https://clickhouse.com/docs/reference/statements/alter/ttl); expired rows are removed when
+   ClickHouse merges data parts, and it starts an off-schedule merge when it sees data has
+   expired (https://clickhouse.com/docs/engines/table-engines/mergetree-family/mergetree, section
+   "Removing expired data"). Those pages are the live docs site, which is newer than 26.3 (it lists
+   settings added in 26.10); the same element, expression form and merge behaviour were checked on
+   the 26.3.39.7 server itself (system.tables.engine_full shows the TTL clause on every table).
+
+   Why this file exists: the v6 benchmark runs switched 21 of these tables off, which made
+   ClickHouse 16 percent faster at 8 searchers than at its defaults (423 to 493 QPS, v5 against v6)
+   and no report said so. The 26.3.39.7 image writes query_log, text_log, trace_log and
+   processors_profile_log rows for every search, and a search carries its 1024-float vector inline
+   in the SQL, so the logs run to about 30 KB per search (measured 2026-10-05: 12,300 searches left
+   364 MiB of active log parts, text_log 218 MiB and query_log 139 MiB of it). That is the engine's
+   real per-search cost at its defaults, and the benchmark has to pay it. What it must not do is fill the disk: a few
+   benchmark runs left 3.4 GiB of active parts (6.1 GB on disk) on 2026-10-05.
+
+   What it does: every log table the image config switches on gets "event_time + INTERVAL 1 HOUR
+   DELETE" (the span log has no event_time column and gets finish_date, see below). The 1 hour is
+   the same text the engine description prints (ClickHouseSink.LOG_TTL_TEXT); a test fails if they
+   differ. Every table is still on, flushed at its image-default interval, with its image-default
+   partitioning. The image already gives five of these tables a TTL of 3 or 30 days; those are
+   replaced by the 1 hour, so no table is left with a longer bound. Nothing is removed and nothing
+   else is changed, including the server's own log file, which keeps the image's rotation.
+
+   What it does not do: it does not keep a run's disk use under any fixed size. A benchmark search
+   writes more than a TTL can expire while the run lasts (three cycles of 4,000 searches wrote about
+   550 to 675 MB in about two minutes), and ClickHouse keeps expired parts on disk for
+   old_parts_lifetime, 480 s, before it deletes the files. The bound is time: log rows older than the
+   TTL are dropped by the next merge, and their files go about 8 minutes later. Rows are only dropped
+   while the server runs, so after a run the logs stay on disk until the next start.
+
+   The span log is the one table the image defines with an engine text, and ClickHouse refuses a
+   ttl element next to an engine element, so its TTL is added to the engine text itself, which
+   repeats the image's definition word for word. That table is empty unless tracing is on.
+   instrumentation_trace_log is in the image config but the 26.3.39.7 server does not create it.
+
+   When the TTL changes, ClickHouse renames the existing table to name_0 at the first flush and
+   starts a new one, and the renamed copy never expires. After the first start with a changed TTL
+   run clickhouse-config/clear-system-logs.sh once. A change to this file needs
+   docker compose up -d with the force-recreate flag.
+-->
+<clickhouse>
+   <query_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </query_log>
+   <trace_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </trace_log>
+   <query_thread_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </query_thread_log>
+   <query_views_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </query_views_log>
+   <part_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </part_log>
+   <background_schedule_pool_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </background_schedule_pool_log>
+   <text_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </text_log>
+   <metric_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </metric_log>
+   <error_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </error_log>
+   <instrumentation_trace_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </instrumentation_trace_log>
+   <query_metric_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </query_metric_log>
+   <asynchronous_metric_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </asynchronous_metric_log>
+   <iceberg_metadata_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </iceberg_metadata_log>
+   <delta_lake_metadata_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </delta_lake_metadata_log>
+   <opentelemetry_span_log>
+      <engine>engine MergeTree partition by toYYYYMM(finish_date) order by (finish_date, finish_time_us) ttl finish_date + INTERVAL 1 HOUR DELETE</engine>
+   </opentelemetry_span_log>
+   <crash_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </crash_log>
+   <processors_profile_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </processors_profile_log>
+   <asynchronous_insert_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </asynchronous_insert_log>
+   <backup_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </backup_log>
+   <s3queue_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </s3queue_log>
+   <blob_storage_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </blob_storage_log>
+   <aggregated_zookeeper_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </aggregated_zookeeper_log>
+   <zookeeper_connection_log>
+      <ttl>event_time + INTERVAL 1 HOUR DELETE</ttl>
+   </zookeeper_connection_log>
+</clickhouse>

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -18,7 +19,8 @@ namespace GenericVectorBuilder.Web.BenchPages;
 /// <param name="Build">Build configuration of the benchmark client, or null.</param>
 /// <param name="WarmupSearches">Warm-up searches before each timed pass, as text, or null.</param>
 /// <param name="ExactSeconds">Seconds of exact mode, as text, or null.</param>
-public sealed record BenchConditions( string? Governor, string? Partition, string? Build, string? WarmupSearches, string? ExactSeconds )
+/// <param name="WarmupMethod">How each timed pass was warmed up and checked (a time based warm-up, a settle trial, one extension, a rehearsal), in the run's own numbers, or null when the results did not record the method. The count in <paramref name="WarmupSearches"/> is only the fewest searches in a warm-up and is never shown as the method.</param>
+public sealed record BenchConditions( string? Governor, string? Partition, string? Build, string? WarmupSearches, string? ExactSeconds, string? WarmupMethod = null )
 {
    #region Data Members
 
@@ -28,6 +30,12 @@ public sealed record BenchConditions( string? Governor, string? Partition, strin
    private static readonly string[] CONTAINERS = { "conditions", "machine", "method", "environment", "options", "settings" };
    private static readonly Regex BUILD_IN_PATH = new( @"[/\\]bin[/\\](Debug|Release)[/\\]", RegexOptions.Compiled | RegexOptions.IgnoreCase );
    private static readonly Regex WARMUP_IN_NOTE = new( @"untimed warm-up of (\d+) searches", RegexOptions.Compiled );
+   private const string NUMBER = @"\d+(?:\.\d+)?";
+   private static readonly Regex WARM = new( $@"for at least (?<s>{NUMBER}) s and at least (?<n>\d+) searches \(at most (?<cap>{NUMBER}) s\)", RegexOptions.Compiled );
+   private static readonly Regex TRIAL = new( $@"then a (?<s>{NUMBER}) s trial of the same pass", RegexOptions.Compiled );
+   private static readonly Regex TOLERANCE = new( $@"must lie within (?<p>{NUMBER})% of the warm-up's settled figure", RegexOptions.Compiled );
+   private static readonly Regex EXTENSION = new( $@"extended once \(at least (?<min>{NUMBER}) s, until its windows agree, at most (?<cap>{NUMBER}) s\)", RegexOptions.Compiled );
+   private static readonly Regex REHEARSAL = new( $@"a rehearsal of every pass type at its own concurrency for (?<s>{NUMBER}) s each", RegexOptions.Compiled );
 
    #endregion Data Members
 
@@ -66,7 +74,7 @@ public sealed record BenchConditions( string? Governor, string? Partition, strin
       string? governor = start != null && end != null && !string.Equals( start, end, StringComparison.OrdinalIgnoreCase ) ? $"{start}, then {end}" : start ?? end;
       governor = Known( governor );
       return new BenchConditions( governor, RunPartition( root ), build is null ? null : char.ToUpperInvariant( build[0] ) + build[1..].ToLowerInvariant(),
-         Find( root, "warmupSearches", "warmup", "warmupCount" ) ?? WarmupFromNotes( root ), Find( root, "exactSeconds" ) ?? FromCommand( commandLine, "--exact-seconds" ) );
+         Find( root, "warmupSearches", "warmup", "warmupCount" ) ?? WarmupFromNotes( root ), Find( root, "exactSeconds" ) ?? FromCommand( commandLine, "--exact-seconds" ), MethodFromNotes( root ) );
    }
 
    /// <summary>
@@ -77,8 +85,33 @@ public sealed record BenchConditions( string? Governor, string? Partition, strin
    /// <returns>The conditions.</returns>
    public static BenchConditions FromSettings( JsonElement settings )
    {
+      JsonElement? method = ChildOf( settings, "warmupMethod" );
       return new BenchConditions( Text( settings, "governor" ), Text( settings, "cpuPartition" ), Text( settings, "buildConfiguration" ),
-         Scalar( settings, "warmupSearches" ), Scalar( settings, "exactSeconds" ) );
+         Scalar( settings, "warmupSearches" ), Scalar( settings, "exactSeconds" ), method is JsonElement m ? Text( m, "description" ) : null );
+   }
+
+   /// <summary>
+   /// The warm-up method as one line in the run's own numbers, read from a run's method notes: the
+   /// same words the Bench tool's consolidate command writes into consolidated.json (its WarmupMethod
+   /// description), so a run page and the summary describe the method alike. A part the notes do not
+   /// state is shown as "missing"; a run that recorded no such note gives null.
+   /// </summary>
+   /// <param name="notes">The run's notes (strings).</param>
+   /// <returns>The line, or null when the notes do not describe a time based warm-up.</returns>
+   public static string? DescribeMethod( IEnumerable<string> notes )
+   {
+      string text = string.Join( " ", notes.Where( n => n.StartsWith( "Preparation, untimed", StringComparison.Ordinal ) || n.StartsWith( "Warm-up and settle check", StringComparison.Ordinal ) ) );
+      Match warm = WARM.Match( text );
+      if( !warm.Success )
+      {
+         return null;
+      }
+
+      Match extension = EXTENSION.Match( text );
+      return $"warm-up at the pass's own concurrency for at least {Seconds( warm, "s" )} and at least {warm.Groups["n"].Value} searches (at most {Seconds( warm, "cap" )}); "
+         + $"then a {Seconds( TRIAL.Match( text ), "s" )} trial that must land within {Percent( TOLERANCE.Match( text ), "p" )} of the settled figure; "
+         + $"one extension of {Seconds( extension, "min" )} to {Seconds( extension, "cap" )} if it does not; "
+         + $"rehearsal of every pass type for {Seconds( REHEARSAL.Match( text ), "s" )} before the first timed pass";
    }
 
    #endregion Public Methods
@@ -134,6 +167,40 @@ public sealed record BenchConditions( string? Governor, string? Partition, strin
       }
 
       return null;
+   }
+
+   /// <summary>
+   /// The warm-up method line of a run, from its notes.
+   /// </summary>
+   /// <param name="root">The results.json root.</param>
+   /// <returns>The line, or null.</returns>
+   private static string? MethodFromNotes( JsonElement root )
+   {
+      return ChildOf( root, "notes" ) is { ValueKind: JsonValueKind.Array } notes
+         ? DescribeMethod( notes.EnumerateArray().Where( n => n.ValueKind == JsonValueKind.String ).Select( n => n.GetString()! ) )
+         : null;
+   }
+
+   /// <summary>
+   /// A captured number of seconds as "15 s", or "missing" when the pattern did not match.
+   /// </summary>
+   /// <param name="match">The match.</param>
+   /// <param name="group">Group name.</param>
+   /// <returns>The text.</returns>
+   private static string Seconds( Match match, string group )
+   {
+      return match.Success && double.TryParse( match.Groups[group].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double value ) ? value.ToString( "0.##", CultureInfo.InvariantCulture ) + " s" : "missing";
+   }
+
+   /// <summary>
+   /// A captured percentage as "10%", or "missing" when the pattern did not match.
+   /// </summary>
+   /// <param name="match">The match.</param>
+   /// <param name="group">Group name.</param>
+   /// <returns>The text.</returns>
+   private static string Percent( Match match, string group )
+   {
+      return match.Success && double.TryParse( match.Groups[group].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double value ) ? value.ToString( "0.##", CultureInfo.InvariantCulture ) + "%" : "missing";
    }
 
    /// <summary>

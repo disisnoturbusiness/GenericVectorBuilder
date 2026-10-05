@@ -45,7 +45,7 @@ public static class ConsolidateFraming
    public const string BANDS_LINE = "Engines in different bands never overlap: every run of an engine in a faster band beat every run of an engine in a slower band, and the medians on either side of a band boundary are at least 3% apart. Engines in one band are linked by overlapping slowest-to-fastest ranges or by neighboring medians less than 3% apart (an engine varies about 2% from run to run), so these runs do not separate them cleanly. Inside a band they are listed by median, and that order is not a ranking.";
 
    /// <summary>What the client CPU per search column is and why it sits beside the latency; printed under a table that shows it.</summary>
-   public const string CLIENT_CPU_LINE = "Client CPU per search is the CPU time the test's .NET client itself used for each search, measured in the same pass as the figure beside it. Where it is close to the latency, the client library is a large part of what is measured.";
+   public const string CLIENT_CPU_LINE = "Client CPU per search is the CPU time the test's .NET client itself used for each search, measured in the same pass as the figure beside it. Where it is close to the latency, the client library is a large part of what is measured. For an embedded engine (DuckDB, sqlite-vec) the engine runs inside the client process, so its figure is the engine's own CPU time, not client overhead.";
 
    /// <summary>Printed instead of <see cref="BANDS_LINE"/> when only one run was used.</summary>
    public const string ONE_RUN_LINE = "One run: no spread is known, so no band can be drawn. The order shows this run only.";

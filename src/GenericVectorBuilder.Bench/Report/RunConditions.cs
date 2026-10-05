@@ -81,6 +81,13 @@ public sealed class RunConditions
    /// <summary>Seconds each engine's exact mode was allowed, or null.</summary>
    public int? ExactSeconds { get; init; }
 
+   /// <summary>
+   /// How every timed pass was warmed up and checked (time based warm-up, settle trial, extension, rehearsal), as the run's own method notes
+   /// state it; null when the run recorded no such note. Why beside <see cref="WarmupSearches"/>: that count is only the minimum number of
+   /// searches in a warm-up, and printing it alone described a time based method as "20 searches".
+   /// </summary>
+   public WarmupMethod? WarmupMethod { get; init; }
+
    /// <summary>Logical CPUs of the box, or null.</summary>
    public int? LogicalCpus { get; init; }
 
@@ -147,6 +154,7 @@ public sealed class RunConditions
          ThreadSiblings = Find( root, SIBLING_NAMES ) is { ValueKind: JsonValueKind.Array } s ? s.EnumerateArray().Select( i => AsText( i ) ).OfType<string>().ToList() : Array.Empty<string>(),
          WarmupSearches = WholeNumber( root, WARMUP_NAMES ) ?? FromText( commandLine, WARMUP_IN_COMMAND, "warmupSearches", "from the command line", derived ) ?? FromNotes( notes, derived ),
          ExactSeconds = WholeNumber( root, EXACT_NAMES ) ?? FromText( commandLine, EXACT_IN_COMMAND, "exactSeconds", "from the command line", derived ),
+         WarmupMethod = WarmupMethod.From( notes ),
          LogicalCpus = WholeNumber( root, CPU_NAMES ),
          LoadAverage = Find( root, new[] { "loadAverage" } ) is JsonElement l ? AsText( l ) : null,
          MachineControl = Find( root, new[] { "machineControl" } ) is JsonElement m ? AsText( m ) : null,
@@ -483,6 +491,235 @@ public sealed class RunConditions
       }
 
       return text.ToString();
+   }
+
+   #endregion Private Methods
+}
+
+/// <summary>
+/// How every timed pass was warmed up and checked, as the run's own method notes state it: how long and
+/// how many searches the warm-up lasts at the pass's own concurrency, the settle trial and how closely it
+/// must agree, the one extension, and the rehearsal before the first timed pass.
+/// Why read from the run's recorded notes and never filled in by this program: the report once printed
+/// "warm-up searches before each timed pass | 20" for a method that is time based (at least 15 s, a settle
+/// trial, one extension of up to 120 s), because the only recorded number was the minimum count. The
+/// numbers here are the ones the run wrote into its own notes (SearchRunner.DescribeMethod writes them
+/// from the constants it runs with), so a change of method changes the report with no edit here. A part
+/// the notes do not state is null and prints as "missing"; the notes themselves are carried verbatim
+/// (<see cref="Recorded"/>) so the report can quote them whatever the wording.
+/// An older run that recorded only "untimed warm-up of N searches" loads as <see cref="Legacy"/>: a count,
+/// not a time based method.
+/// </summary>
+public sealed class WarmupMethod
+{
+   #region Data Members
+
+   /// <summary>Start of the run's note about the rehearsal before the first timed pass.</summary>
+   public const string REHEARSAL_NOTE_START = "Preparation, untimed";
+
+   /// <summary>Start of the run's note about the warm-up and the settle check before every timed pass.</summary>
+   public const string WARMUP_NOTE_START = "Warm-up and settle check";
+
+   private const string MISSING = "missing";
+   private const string NUMBER = @"\d+(?:\.\d+)?";
+
+   private static readonly Regex WARMUP = new( $@"for at least (?<s>{NUMBER}) s and at least (?<n>\d+) searches \(at most (?<cap>{NUMBER}) s\)", RegexOptions.Compiled );
+   private static readonly Regex WINDOW = new( $@"windows of at least (?<s>{NUMBER}) s and (?<n>\d+) searches", RegexOptions.Compiled );
+   private static readonly Regex TRIAL = new( $@"then a (?<s>{NUMBER}) s trial of the same pass", RegexOptions.Compiled );
+   private static readonly Regex TOLERANCE = new( $@"must lie within (?<p>{NUMBER})% of the warm-up's settled figure", RegexOptions.Compiled );
+   private static readonly Regex SETTLE = new( $@"median of its last (?<n>\d+) windows, which must agree within (?<p>{NUMBER})%", RegexOptions.Compiled );
+   private static readonly Regex EXTENSION = new( $@"extended once \(at least (?<min>{NUMBER}) s, until its windows agree, at most (?<cap>{NUMBER}) s\)", RegexOptions.Compiled );
+   private static readonly Regex REHEARSAL = new( $@"a rehearsal of every pass type at its own concurrency for (?<s>{NUMBER}) s each", RegexOptions.Compiled );
+   private static readonly Regex LEGACY = new( @"untimed warm-up of (?<n>\d+) searches", RegexOptions.Compiled );
+
+   #endregion Data Members
+
+   #region Public Methods
+
+   /// <summary>Shortest warm-up, seconds; null when the notes do not say.</summary>
+   public double? MinSeconds { get; init; }
+
+   /// <summary>Fewest searches in a warm-up; null when the notes do not say.</summary>
+   public int? MinSearches { get; init; }
+
+   /// <summary>Longest warm-up, seconds, before it stops waiting for the readings to agree; null when the notes do not say.</summary>
+   public double? CapSeconds { get; init; }
+
+   /// <summary>Shortest reading window, seconds; null when the notes do not say.</summary>
+   public double? WindowSeconds { get; init; }
+
+   /// <summary>Fewest searches in a reading window; null when the notes do not say.</summary>
+   public int? WindowSearches { get; init; }
+
+   /// <summary>Length of the settle trial, seconds; null when the notes do not say.</summary>
+   public double? TrialSeconds { get; init; }
+
+   /// <summary>How far, in percent, the trial's figure may lie from the warm-up's settled figure; null when the notes do not say.</summary>
+   public double? TrialPercent { get; init; }
+
+   /// <summary>How many of the last warm-up windows give the settled figure; null when the notes do not say.</summary>
+   public int? SettleWindows { get; init; }
+
+   /// <summary>How closely those windows must agree, in percent; null when the notes do not say.</summary>
+   public double? SettlePercent { get; init; }
+
+   /// <summary>Shortest extension of the warm-up, seconds; null when the notes do not say.</summary>
+   public double? ExtensionMinSeconds { get; init; }
+
+   /// <summary>Longest extension of the warm-up, seconds; null when the notes do not say.</summary>
+   public double? ExtensionCapSeconds { get; init; }
+
+   /// <summary>Length of the rehearsal of each pass type before the first timed pass, seconds; null when the notes do not say.</summary>
+   public double? RehearsalSeconds { get; init; }
+
+   /// <summary>True for an older run whose only note was "untimed warm-up of N searches": a count with no time, no trial and no extension.</summary>
+   public bool Legacy { get; init; }
+
+   /// <summary>True when the notes say a pass whose trial still disagrees flags its target as unsettled.</summary>
+   public bool FlagsUnsettled { get; init; }
+
+   /// <summary>The run's own method notes about the rehearsal and the warm-up, verbatim, in the order recorded.</summary>
+   public List<string> Recorded { get; init; } = new();
+
+   /// <summary>True when the warm-up is time based (the notes state a shortest warm-up in seconds).</summary>
+   public bool TimeBased => MinSeconds.HasValue;
+
+   /// <summary>
+   /// One line that states the method in the run's own numbers, with "missing" for a part the notes did
+   /// not state. It is the text consolidated.json carries for the summary page, and the text two runs must
+   /// share to be merged.
+   /// </summary>
+   public string Description
+   {
+      get
+      {
+         if( Legacy )
+         {
+            return $"a fixed count of {Count( MinSearches )} searches before each timed pass (older run: no warm-up time, settle trial or extension recorded)";
+         }
+
+         return $"warm-up at the pass's own concurrency for at least {Seconds( MinSeconds )} and at least {Count( MinSearches )} searches (at most {Seconds( CapSeconds )}); "
+            + $"then a {Seconds( TrialSeconds )} trial that must land within {Percent( TrialPercent )} of the settled figure; "
+            + $"one extension of {Seconds( ExtensionMinSeconds )} to {Seconds( ExtensionCapSeconds )} if it does not; "
+            + $"rehearsal of every pass type for {Seconds( RehearsalSeconds )} before the first timed pass";
+      }
+   }
+
+   /// <summary>
+   /// The method as (item, value) rows for consolidated.md, every number from the run's notes and
+   /// "missing" for a part the notes did not state.
+   /// </summary>
+   /// <returns>The rows.</returns>
+   public IReadOnlyList<(string Item, string Value)> Rows()
+   {
+      if( Legacy )
+      {
+         return new[] { ( "warm-up before each timed pass", Description ) };
+      }
+
+      string unsettled = FlagsUnsettled ? "; a pass whose trial still disagrees flags its target as unsettled" : string.Empty;
+      return new[]
+      {
+         ( "warm-up before each timed pass", $"time based: the pass's own search at the pass's own concurrency for at least {Seconds( MinSeconds )} and at least {Count( MinSearches )} searches (at most {Seconds( CapSeconds )}), read in windows of at least {Seconds( WindowSeconds )} and {Count( WindowSearches )} searches" ),
+         ( "settle check before each timed pass", $"a {Seconds( TrialSeconds )} trial of the same pass must land within {Percent( TrialPercent )} of the warm-up's settled figure (the median of its last {Count( SettleWindows )} windows, which must agree within {Percent( SettlePercent )}); "
+            + $"if not, the warm-up is extended once (at least {Seconds( ExtensionMinSeconds )}, at most {Seconds( ExtensionCapSeconds )}) and a second trial is taken{unsettled}" ),
+         ( "rehearsal before the first timed pass", $"every pass type at its own concurrency for {Seconds( RehearsalSeconds )} each, untimed" ),
+      };
+   }
+
+   /// <summary>
+   /// Reads the method from the run's notes.
+   /// </summary>
+   /// <param name="notes">The run's notes, or null.</param>
+   /// <returns>The method, or null when the notes say nothing about a warm-up.</returns>
+   public static WarmupMethod? From( IReadOnlyList<string>? notes )
+   {
+      IReadOnlyList<string> all = notes ?? Array.Empty<string>();
+      List<string> mine = all.Where( n => n.StartsWith( REHEARSAL_NOTE_START, StringComparison.Ordinal ) || n.StartsWith( WARMUP_NOTE_START, StringComparison.Ordinal ) ).ToList();
+      string text = string.Join( " ", mine );
+      if( mine.Count > 0 && WARMUP.IsMatch( text ) )
+      {
+         Match warm = WARMUP.Match( text );
+         Match window = WINDOW.Match( text );
+         Match settle = SETTLE.Match( text );
+         Match extension = EXTENSION.Match( text );
+         return new WarmupMethod
+         {
+            MinSeconds = Number( warm, "s" ),
+            MinSearches = Whole( warm, "n" ),
+            CapSeconds = Number( warm, "cap" ),
+            WindowSeconds = Number( window, "s" ),
+            WindowSearches = Whole( window, "n" ),
+            TrialSeconds = Number( TRIAL.Match( text ), "s" ),
+            TrialPercent = Number( TOLERANCE.Match( text ), "p" ),
+            SettleWindows = Whole( settle, "n" ),
+            SettlePercent = Number( settle, "p" ),
+            ExtensionMinSeconds = Number( extension, "min" ),
+            ExtensionCapSeconds = Number( extension, "cap" ),
+            RehearsalSeconds = Number( REHEARSAL.Match( text ), "s" ),
+            FlagsUnsettled = text.Contains( "flags its target as unsettled", StringComparison.Ordinal ),
+            Recorded = mine,
+         };
+      }
+
+      string? legacy = all.FirstOrDefault( n => LEGACY.IsMatch( n ) );
+      return legacy == null ? null : new WarmupMethod { Legacy = true, MinSearches = Whole( LEGACY.Match( legacy ), "n" ), Recorded = new List<string> { legacy } };
+   }
+
+   #endregion Public Methods
+
+   #region Private Methods
+
+   /// <summary>
+   /// A number captured by a group, or null when the pattern did not match.
+   /// </summary>
+   /// <param name="match">The match.</param>
+   /// <param name="group">Group name.</param>
+   /// <returns>The number, or null.</returns>
+   private static double? Number( Match match, string group )
+   {
+      return match.Success && double.TryParse( match.Groups[group].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double value ) ? value : null;
+   }
+
+   /// <summary>
+   /// A whole number captured by a group, or null when the pattern did not match.
+   /// </summary>
+   /// <param name="match">The match.</param>
+   /// <param name="group">Group name.</param>
+   /// <returns>The number, or null.</returns>
+   private static int? Whole( Match match, string group )
+   {
+      return match.Success && int.TryParse( match.Groups[group].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value ) ? value : null;
+   }
+
+   /// <summary>
+   /// Seconds as "15 s", or "missing".
+   /// </summary>
+   /// <param name="seconds">Seconds, or null.</param>
+   /// <returns>The text.</returns>
+   private static string Seconds( double? seconds )
+   {
+      return seconds.HasValue ? seconds.Value.ToString( "0.##", CultureInfo.InvariantCulture ) + " s" : MISSING;
+   }
+
+   /// <summary>
+   /// A percentage as "10%", or "missing".
+   /// </summary>
+   /// <param name="percent">Percent, or null.</param>
+   /// <returns>The text.</returns>
+   private static string Percent( double? percent )
+   {
+      return percent.HasValue ? percent.Value.ToString( "0.##", CultureInfo.InvariantCulture ) + "%" : MISSING;
+   }
+
+   /// <summary>
+   /// A count as text, or "missing".
+   /// </summary>
+   /// <param name="count">The count, or null.</param>
+   /// <returns>The text.</returns>
+   private static string Count( int? count )
+   {
+      return count.HasValue ? count.Value.ToString( CultureInfo.InvariantCulture ) : MISSING;
    }
 
    #endregion Private Methods

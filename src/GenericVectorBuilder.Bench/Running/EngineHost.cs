@@ -49,6 +49,36 @@ public interface IEngineHost
 /// </summary>
 public sealed class ComposeEngineHost : IEngineHost
 {
+   #region Data Members
+
+   /// <summary>The words the compose runner puts before the list of start attempts when a start needed more than one.</summary>
+   private const string START_ATTEMPTS_MARK = "start attempts:";
+
+   private readonly Func<string, string?, CancellationToken, Task<string>> _up;
+
+   #endregion Data Members
+
+   #region Constructor
+
+   /// <summary>
+   /// Creates the real host, which starts engines with docker compose.
+   /// </summary>
+   public ComposeEngineHost() : this( ComposeRunner.UpAsync )
+   {
+   }
+
+   /// <summary>
+   /// Creates a host that starts engines through the given function (the tests pass a fake, so the
+   /// rule about what the start returns is checked without Docker).
+   /// </summary>
+   /// <param name="up">Starts an engine from its compose file and an optional CPU set and returns the compose runner's line.</param>
+   public ComposeEngineHost( Func<string, string?, CancellationToken, Task<string>> up )
+   {
+      _up = up;
+   }
+
+   #endregion Constructor
+
    #region Public Methods
 
    /// <summary>
@@ -65,22 +95,22 @@ public sealed class ComposeEngineHost : IEngineHost
    /// <summary>
    /// Starts the engine with every container created on the CPU set (when given), waits until
    /// compose reports it healthy, and returns what Docker says each container got.
+   /// Why the start attempts are returned even with no CPU set: a container that exits while
+   /// starting is removed and started again (Milvus did, 14 starts in 14 in the review of
+   /// 2026-10-05), and the compose runner writes every attempt into the line it returns. The
+   /// no-CPU-set path used to call the overload that returns nothing, so an engine that needed a
+   /// second or third try left no trace in the run's notes.
    /// </summary>
    /// <param name="composePath">Compose file.</param>
    /// <param name="cpuset">CPU list, or null to start without one (the compose file decides).</param>
    /// <param name="ct">Cancellation.</param>
-   /// <returns>The compose runner's read-back line when a CPU set was given, else null.</returns>
+   /// <returns>The compose runner's read-back line when a CPU set was given; with none, the line only when the start needed more than one attempt (it then lists every attempt), else null.</returns>
    /// <exception cref="ArgumentException">The CPU set is not a CPU list.</exception>
    /// <exception cref="InvalidOperationException">Compose failed, the engine never became healthy, or a container came up on other CPUs.</exception>
    public async Task<string?> UpAsync( string composePath, string? cpuset, CancellationToken ct )
    {
-      if( cpuset == null )
-      {
-         await ComposeRunner.UpAsync( composePath, ct );
-         return null;
-      }
-
-      return await ComposeRunner.UpAsync( composePath, cpuset, ct );
+      string line = await _up( composePath, cpuset, ct );
+      return cpuset != null || line.Contains( START_ATTEMPTS_MARK, StringComparison.Ordinal ) ? line : null;
    }
 
    /// <summary>

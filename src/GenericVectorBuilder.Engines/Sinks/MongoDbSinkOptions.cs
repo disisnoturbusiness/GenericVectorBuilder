@@ -54,6 +54,17 @@ public sealed class MongoDbSinkOptions
    /// </summary>
    public int IndexWaitSeconds { get; set; } = 1800;
 
+   /// <summary>
+   /// How long, in seconds, <see cref="MongoDbSink.FinishLoadAsync"/> requires the segment layout
+   /// (the segment count and each segment's document count) to stay unchanged, with the index ready,
+   /// before it returns. Zero returns as soon as the index is ready on two readings. Why not zero:
+   /// a ready index can still be rearranging its segments, and a timed search should not start while
+   /// it may. Why 10: in the six loads watched on 2026-10-05 (524 random 1024-dimension vectors, 90 s
+   /// for three and 15 s for three) the layout did not change after its first ready reading, so ten
+   /// seconds (about ten readings) is a margin that costs one short wait.
+   /// </summary>
+   public int LayoutSteadySeconds { get; set; } = 10;
+
    /// <summary>How many documents go into one bulk write.</summary>
    public int UpsertBatch { get; set; } = 500;
 

@@ -38,7 +38,7 @@ namespace GenericVectorBuilder.Bench.Targets
    }
 }";
 
-   private const string CLIENT_CPU_LINE = "Client CPU per search is the CPU time the test's .NET client itself used for each search, measured in the same pass as the figure beside it. Where it is close to the latency, the client library is a large part of what is measured.";
+   private const string CLIENT_CPU_LINE = "Client CPU per search is the CPU time the test's .NET client itself used for each search, measured in the same pass as the figure beside it. Where it is close to the latency, the client library is a large part of what is measured. For an embedded engine (DuckDB, sqlite-vec) the engine runs inside the client process, so its figure is the engine's own CPU time, not client overhead.";
 
    private readonly string _root;
 

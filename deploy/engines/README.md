@@ -14,10 +14,13 @@ Stop it again (its data is kept):
 sudo docker compose -f deploy/engines/pgvector.compose.yaml down
 ```
 
+Stop it with `down` and without `-v`. Every data folder is a bind mount, which `-v` never touches, but `-v` also removes named and anonymous volumes, so the rule is: no `-v` when stopping an engine. The one place the benchmark itself uses `docker compose down -v` is the clean-up of a container that exited while it was starting (the start retry in `ComposeRunner`), and only for a compose file that declares no named volumes; it never uses it to stop a healthy engine.
+
 | Engine | Image | Host port(s) |
 |---|---|---|
 | pgvector | pgvector/pgvector:0.8.7-pg17-trixie | 5432 |
-| mariadb | mariadb:11.8.9 | 3306 |
+| mariadb | mariadb:11.8.9 (the daily `gvb-mariadb`, shared and long-running; the benchmark never touches it) | 3306 |
+| mariadb-bench | mariadb:11.8.9, same server settings as mariadb, for the benchmark only (`gvbbench-mariadb`, `mariadb-bench.compose.yaml`; run-all starts it on the engine CPUs and stops it) | 13306 (host side only; the benchmark connects to the container's own address on 3306) |
 | oracle | gvenzl/oracle-free:23-slim-faststart | 1521 |
 | milvus | milvusdb/milvus:v2.6.25 (standalone, embedded etcd, local storage) | 19530, 9091 |
 | weaviate | semitechnologies/weaviate:1.39.8 | 8085 (HTTP), 50051 (gRPC) |

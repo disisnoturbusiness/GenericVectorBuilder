@@ -15,12 +15,11 @@ namespace GenericVectorBuilder.Tests.Unit;
 /// whose min to max ranges overlap share a band) instead of strict ranks; the band cases here are
 /// the ones the Bench tool's ConsolidateTests expect, so the two copies of the rule agree.
 /// </summary>
-public class BenchResultsSummaryTests
+public partial class BenchResultsSummaryTests
 {
    #region Data Members
 
-   private const string PUBLISHED = "bench-results/published-2026-10-04/consolidated.json";
-   private const string RUN = "bench-results/20261004-132735-eshoponweb/results.json";
+   private const string OLD_PUBLISHED = "published-2026-10-04";
    private const int MAX_UP = 10;
    private const string PARTITION = "client 0,4; engines 1-3,5-7";
    private static readonly Regex ENGINE_ATTR = new( "<g class=\"bc-row\" data-engine=\"([^\"]*)\">", RegexOptions.Compiled );
@@ -149,13 +148,13 @@ public class BenchResultsSummaryTests
    }
 
    /// <summary>
-   /// Against the real published file: every engine's summary numbers equal its consolidated.json
+   /// Against the published-shape fixture (19 engines): every engine's summary numbers equal its consolidated.json
    /// medians, the rank order is fastest median first, and the table shows each median.
    /// </summary>
    [Fact]
    public void Summary_EqualsPublishedConsolidatedMedians()
    {
-      string json = File.ReadAllText( RepoFile( PUBLISHED ) );
+      string json = BenchResultsFixtures.OLD_PUBLISHED_JSON;
       BenchSummary summary = BenchSummaryReader.FromConsolidated( json );
       using JsonDocument doc = JsonDocument.Parse( json );
       var medians = doc.RootElement.EnumerateObject().ToDictionary( p => p.Name, p => p.Value );
@@ -185,12 +184,12 @@ public class BenchResultsSummaryTests
    }
 
    /// <summary>
-   /// Against a real run: one row per target, values from search.qps["8"].
+   /// Against a run fixture: one row per target, values from search.qps["8"].
    /// </summary>
    [Fact]
-   public void Summary_EqualsRealRunResults()
+   public void Summary_EqualsRunResults()
    {
-      string json = File.ReadAllText( RepoFile( RUN ) );
+      string json = BenchResultsFixtures.RUN_RESULTS_JSON;
       BenchSummary summary = BenchSummaryReader.FromRunResults( json );
       using JsonDocument doc = JsonDocument.Parse( json );
       var qps = doc.RootElement.GetProperty( "targets" ).EnumerateArray()
@@ -296,8 +295,12 @@ public class BenchResultsSummaryTests
    [Fact]
    public void ConditionsLine_StatesGovernorPartitionAndBuild()
    {
-      Assert.Equal( "<p class=\"bench-conditions muted\">Machine: CPU governor performance; CPU partition client 0,4; engines 1-3,5-7; Release build; 20 warm-up searches before each timed pass; exact mode up to 60 s.</p>",
+      Assert.Equal( "<p class=\"bench-conditions muted\">Machine: CPU governor performance; CPU partition client 0,4; engines 1-3,5-7; Release build; exact mode up to 60 s.</p>"
+         + "<p class=\"bench-warmup muted\">Before each timed pass: at least 20 warm-up searches (the rest of the warm-up method was not recorded in these results).</p>",
          BenchSummaryHtml.ConditionsLine( new BenchConditions( "performance", PARTITION, "Release", "20", "60" ) ) );
+      Assert.Equal( "<p class=\"bench-conditions muted\">Machine: CPU governor performance; CPU partition client 0,4; engines 1-3,5-7; Release build; exact mode up to 60 s.</p>"
+         + "<p class=\"bench-warmup muted\">Before each timed pass: warm-up for at least 15 s and 20 searches; then a 3 s trial.</p>",
+         BenchSummaryHtml.ConditionsLine( new BenchConditions( "performance", PARTITION, "Release", "20", "60", "warm-up for at least 15 s and 20 searches; then a 3 s trial" ) ) );
       Assert.Equal( "<p class=\"bench-conditions muted\">Machine: CPU governor <span class=\"bench-no\">schedutil</span>; CPU partition not recorded; <span class=\"bench-no\">Debug build</span>.</p>",
          BenchSummaryHtml.ConditionsLine( new BenchConditions( "schedutil", null, "Debug", null, null ) ) );
       Assert.Equal( "<p class=\"bench-conditions muted\">Machine: CPU governor performance; CPU partition not recorded; build not recorded.</p>",
@@ -313,7 +316,7 @@ public class BenchResultsSummaryTests
    [Fact]
    public void OldPublishedFile_StillRenders_AndSaysConditionsWereNotRecorded()
    {
-      BenchSummary summary = BenchSummaryReader.FromConsolidated( File.ReadAllText( RepoFile( PUBLISHED ) ) );
+      BenchSummary summary = BenchSummaryReader.FromConsolidated( BenchResultsFixtures.OLD_PUBLISHED_JSON );
 
       string html = BenchSummaryHtml.Block( summary, "note", null );
 
@@ -393,7 +396,7 @@ public class BenchResultsSummaryTests
       string root = Path.Combine( AppContext.BaseDirectory, "bench-summary-tests", Guid.NewGuid().ToString( "N" ) );
       try
       {
-         string folder = Path.Combine( root, BenchResultsEndpoints.PUBLISHED_FOLDER );
+         string folder = Path.Combine( root, OLD_PUBLISHED );
          Directory.CreateDirectory( folder );
          File.WriteAllText( Path.Combine( folder, "consolidated.json" ), ReportJson( 2, Settings( "schedutil", PARTITION, "Release" ),
             new[] { Summary( "qdrant", 3000, 2900, 3100, 1.5, 1.0 ) }, new[] { ( "qdrant", "governor-not-performance", "governor schedutil", 2 ) } ) );
@@ -498,7 +501,7 @@ public class BenchResultsSummaryTests
    [Fact]
    public void Bands_OfThePublishedFile_NeverOverlapAcrossBands()
    {
-      BenchSummary summary = BenchSummaryReader.FromConsolidated( File.ReadAllText( RepoFile( PUBLISHED ) ) );
+      BenchSummary summary = BenchSummaryReader.FromConsolidated( BenchResultsFixtures.OLD_PUBLISHED_JSON );
 
       List<int> bands = summary.Ranked.Select( r => r.Band!.Value ).ToList();
       Assert.Equal( 1, bands[0] );
@@ -588,7 +591,7 @@ public class BenchResultsSummaryTests
       string report = ReportJson( 2, Settings( "performance", PARTITION, "Release", 524 ), new[] { Summary( "qdrant", 3000, 2900, 3100, 1.5, 1.0 ) }, Array.Empty<( string, string, string, int )>() );
       string fromReport = BenchSummaryHtml.Block( BenchSummaryReader.FromConsolidated( report ), "note", null );
       string fromRun = BenchSummaryHtml.Block( BenchSummaryReader.FromRunResults( """{ "rows": 524, "targets": [ { "name": "sql", "search": { "qps": { "8": 50 } } } ] }""" ), "note", null );
-      string published = BenchSummaryHtml.Block( BenchSummaryReader.FromConsolidated( File.ReadAllText( RepoFile( PUBLISHED ) ) ), "note", BenchSummaryHtml.PUBLISHED_DATA );
+      string published = BenchSummaryHtml.Block( BenchSummaryReader.FromConsolidated( BenchResultsFixtures.OLD_PUBLISHED_JSON ), "note", BenchSummaryHtml.PUBLISHED_DATA );
 
       foreach( string html in new[] { fromReport, fromRun, published } )
       {
@@ -597,7 +600,7 @@ public class BenchResultsSummaryTests
       }
 
       Assert.Equal( 524, BenchSummaryReader.FromConsolidated( report ).Rows );
-      Assert.Null( BenchSummaryReader.FromConsolidated( File.ReadAllText( RepoFile( PUBLISHED ) ) ).Rows );
+      Assert.Null( BenchSummaryReader.FromConsolidated( BenchResultsFixtures.OLD_PUBLISHED_JSON ).Rows );
    }
 
    /// <summary>
@@ -666,7 +669,7 @@ public class BenchResultsSummaryTests
       Assert.Contains( "<td class=\"n\">6.80</td><td class=\"n\">-</td>", table );
       Assert.Contains( "<td colspan=\"4\" class=\"muted\">no result</td>", table );
       Assert.Equal( 0.4912, one.Ranked.Single( r => r.Key == "qdrant" ).ClientCpuMs );
-      Assert.Equal( "<p class=\"bench-client-cpu muted\">Client CPU per search is the CPU time the test&#39;s .NET client itself used for each search, measured in the same pass as the figure beside it. Where it is close to the latency, the client library is a large part of what is measured.</p>", BenchSummaryHtml.ClientCpuNote( one ) );
+      Assert.Equal( "<p class=\"bench-client-cpu muted\">Client CPU per search is the CPU time the test&#39;s .NET client itself used for each search, measured in the same pass as the figure beside it. Where it is close to the latency, the client library is a large part of what is measured. For an embedded engine (DuckDB, sqlite-vec) the engine runs inside the client process, so its figure is the engine&#39;s own CPU time, not client overhead.</p>", BenchSummaryHtml.ClientCpuNote( one ) );
       Assert.Contains( BenchSummaryHtml.ClientCpuNote( one ), BenchSummaryHtml.Block( one, "note", null ) );
 
       JsonObject target = Summary( "qdrant", 3000, 2900, 3100, 1.5, 1.0 );
@@ -682,7 +685,7 @@ public class BenchResultsSummaryTests
       Assert.Contains( "<td class=\"n\">6.8</td>", plain );
       Assert.Contains( "<td colspan=\"3\" class=\"muted\">no result</td>", plain );
       Assert.Equal( string.Empty, BenchSummaryHtml.ClientCpuNote( none ) );
-      Assert.DoesNotContain( "bench-client-cpu", BenchSummaryHtml.Block( BenchSummaryReader.FromConsolidated( File.ReadAllText( RepoFile( PUBLISHED ) ) ), "note", null ) );
+      Assert.DoesNotContain( "bench-client-cpu", BenchSummaryHtml.Block( BenchSummaryReader.FromConsolidated( BenchResultsFixtures.OLD_PUBLISHED_JSON ), "note", null ) );
    }
 
    /// <summary>
@@ -745,7 +748,7 @@ public class BenchResultsSummaryTests
       Assert.Contains( "<li><strong>SQL Server 2025</strong> Something new. <span class=\"muted\">(from the results)</span></li>", html );
       Assert.DoesNotContain( "Qdrant (exact)", html );
       Assert.Equal( string.Empty, BenchSummaryHtml.EngineNotes( BenchSummaryReader.FromConsolidated( SYNTHETIC ) ) );
-      Assert.DoesNotContain( "bench-engine-notes", BenchSummaryHtml.Block( BenchSummaryReader.FromConsolidated( File.ReadAllText( RepoFile( PUBLISHED ) ) ), "note", null ) );
+      Assert.DoesNotContain( "bench-engine-notes", BenchSummaryHtml.Block( BenchSummaryReader.FromConsolidated( BenchResultsFixtures.OLD_PUBLISHED_JSON ), "note", null ) );
    }
 
    /// <summary>
@@ -759,7 +762,7 @@ public class BenchResultsSummaryTests
       string root = Path.Combine( AppContext.BaseDirectory, "bench-summary-tests", Guid.NewGuid().ToString( "N" ) );
       try
       {
-         string folder = Path.Combine( root, BenchResultsEndpoints.PUBLISHED_FOLDER );
+         string folder = Path.Combine( root, OLD_PUBLISHED );
          Directory.CreateDirectory( folder );
          JsonObject qdrant = Summary( "qdrant", 3000, 2900, 3100, 1.5, 1.0 );
          qdrant["engineNotes"] = new JsonArray( new JsonObject { ["kind"] = "exact-by-design", ["source"] = "results", ["text"] = "Exact by design." } );
@@ -798,6 +801,70 @@ public class BenchResultsSummaryTests
    {
       Assert.ThrowsAny<JsonException>( () => BenchSummaryReader.FromConsolidated( json ) );
       Assert.ThrowsAny<JsonException>( () => BenchSummaryReader.FromRunResults( json ) );
+   }
+
+   /// <summary>
+   /// An engine the consolidated report names as left out is shown under the table, by its friendly
+   /// name, with the report's reason (escaped); a file with no such list shows nothing.
+   /// </summary>
+   [Fact]
+   public void Withheld_EnginesAreShownBelowTheTable_WithTheReasonTheReportGives()
+   {
+      JsonNode root = JsonNode.Parse( ReportJson( 2, Settings( "performance", PARTITION, "Release", 524 ), new[] { Summary( "qdrant", 3000, 2900, 3100, 1.5, 1.0 ) }, Array.Empty<( string, string, string, int )>() ) )!;
+      root["withheld"] = new JsonArray( new JsonObject { ["target"] = "mongodb", ["kind"] = "not-listed", ["runs"] = new JsonArray( "run1", "run2" ), ["reason"] = "it is in 2 of 2 runs but not in --targets <b>x</b>" } );
+
+      BenchSummary summary = BenchSummaryReader.FromConsolidated( root.ToJsonString() );
+      string html = BenchSummaryHtml.Block( summary, "note", null );
+
+      BenchWithheld engine = Assert.Single( summary.Withheld! );
+      Assert.Equal( "MongoDB Atlas Local", engine.Name );
+      Assert.Contains( "<p class=\"muted\">Measured, but not in the table above:</p><ul><li><strong>MongoDB Atlas Local</strong> it is in 2 of 2 runs but not in --targets &lt;b&gt;x&lt;/b&gt;</li></ul>", html );
+      Assert.True( html.IndexOf( "bench-table", StringComparison.Ordinal ) < html.IndexOf( "bench-withheld", StringComparison.Ordinal ) );
+
+      root["withheld"] = new JsonArray();
+      Assert.Null( BenchSummaryReader.FromConsolidated( root.ToJsonString() ).Withheld );
+      Assert.DoesNotContain( "bench-withheld", BenchSummaryHtml.Block( BenchSummaryReader.FromConsolidated( root.ToJsonString() ), "note", null ) );
+      Assert.Null( BenchSummaryReader.FromConsolidated( ReportJson( 2, Settings( "performance", PARTITION, "Release", 524 ), new[] { Summary( "qdrant", 3000, 2900, 3100, 1.5, 1.0 ) }, Array.Empty<( string, string, string, int )>() ) ).Withheld );
+   }
+
+   /// <summary>
+   /// A segment layout that differs between runs shows as its own marker with a plain meaning, next
+   /// to the engine that carries it.
+   /// </summary>
+   [Fact]
+   public void LayoutDifference_HasItsOwnMarkerAndMeaning()
+   {
+      string json = ReportJson( 3, Settings( "performance", PARTITION, "Release", 524 ), new[] { Summary( "mongodb", 2000, 1900, 2100, 3.6, 1.0 ) },
+         new[] { ( "mongodb", "segment-layout-differs-between-runs", "after the load: 4 segments (r1, r2); 2 segments (r3)", 3 ) } );
+
+      BenchSummary summary = BenchSummaryReader.FromConsolidated( json );
+      string html = BenchSummaryHtml.Block( summary, "note", null );
+
+      Assert.Equal( "Sl", BenchFlagInfo.Code( "segment-layout-differs-between-runs" ) );
+      Assert.Contains( ">Sl</abbr>", html );
+      Assert.Contains( "different segment layout in different runs", BenchFlagInfo.Meaning( "segment-layout-differs-between-runs" ) );
+      Assert.Contains( "after the load: 4 segments (r1, r2); 2 segments (r3) [3 of 3 runs]", html );
+   }
+
+   /// <summary>
+   /// The data line is built from the file's own settings, so a newer folder is never described in
+   /// another folder's words; the old published shape (no settings) keeps its fixed line.
+   /// </summary>
+   [Fact]
+   public void DataLine_IsBuiltFromTheSettings_AndTheOldShapeKeepsItsFixedLine()
+   {
+      var settings = (JsonObject)Settings( "performance", PARTITION, "Release", 524 );
+      settings["pipeline"] = "eshoponweb";
+      settings["dimension"] = 1024;
+      settings["queryKind"] = "golden";
+      settings["queryCount"] = 20;
+      settings["top"] = 10;
+      string json = ReportJson( 3, settings, new[] { Summary( "qdrant", 3000, 2900, 3100, 1.5, 1.0 ) }, Array.Empty<( string, string, string, int )>() );
+
+      Assert.Equal( "Data: eshoponweb pipeline, 524 vectors of 1024 dimensions, 20 labelled questions, top 10.", BenchSummaryReader.DataLine( json ) );
+      Assert.Equal( BenchSummaryHtml.PUBLISHED_DATA, BenchSummaryReader.DataLine( PublishedShape( new[] { ( "sql", 600.0, 590.0, 610.0 ) } ) ) );
+      Assert.Null( BenchSummaryReader.DataLine( """{ "targetSummaries": [] }""" ) );
+      Assert.Contains( "524 vectors", BenchSummaryReader.DataLine( json )! );
    }
 
    #endregion Public Methods

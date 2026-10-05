@@ -62,9 +62,12 @@ public sealed class MachineControlOptions
 /// Why it watches the progress lines: the timed passes run inside the search runner, which
 /// announces each pass's warm-up ("NAME: warm-up before PASS"), then the pass ("NAME: timing
 /// PASS"), and reports each result in a line. The warm-up line is where a pass is held for a
-/// quiet box (so the warm-up and the timed pass run back to back after the check, as the review
-/// asked), the timing line opens its clock window, without the runner knowing about machine
-/// control. If a searched target shows no pass, the results say so.
+/// quiet box, before the warm-up starts (a wait between the warm-up and the timed pass let the
+/// engine go cold, review finding 13), and the timing line opens its clock window, without the
+/// runner knowing about machine control. So the quiet check is as old as the warm-up when the
+/// clock opens, and on a target's first pass also as old as the settle check that runs between
+/// the warm-up and the timing; each pass records that lead (QuietCheckLeadSeconds). If a searched
+/// target shows no pass, the results say so.
 /// </summary>
 public sealed class MachineControl : IDisposable
 {

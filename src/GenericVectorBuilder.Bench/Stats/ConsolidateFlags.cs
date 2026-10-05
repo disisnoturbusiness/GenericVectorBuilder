@@ -66,6 +66,7 @@ public static class ConsolidateFlags
       AddFlag( flags, s.Name, "search-errors", runs.Where( r => r.Errors > 0 ).Select( r => ( r.Run, $"{r.Errors} search errors" ) ) );
       AddFlag( flags, s.Name, "segment-layout-changed", runs.Where( r => r.SegmentLayoutAfterLoad != null && r.SegmentLayoutAfterSearch != null && r.SegmentLayoutAfterLoad != r.SegmentLayoutAfterSearch )
          .Select( r => ( r.Run, $"{r.SegmentLayoutAfterLoad} after the load, {r.SegmentLayoutAfterSearch} after the searches" ) ) );
+      AddLayoutDifference( flags, s );
       AddFlag( flags, s.Name, "exact-recall-below-1", runs.Where( r => r.ExactRecall < 1.0 ).Select( r => ( r.Run, $"exactRecall {r.ExactRecall:0.000}" ) ) );
       AddFlag( flags, s.Name, "fields-missing", runs.Select( ( r, i ) => ( r.Run, string.Join( ", ", MissingFields( r, used[i] ) ) ) ).Where( x => x.Item2.Length > 0 ) );
       if( s.Engines.Count > 1 || s.Indexes.Count > 1 )
@@ -78,6 +79,33 @@ public static class ConsolidateFlags
       AddFlag( flags, s.Name, "unsettled-target", runs.Where( r => r.Settled == false ).Select( r => ( r.Run, r.SettleDetail == null ? "not settled" : "not settled: " + r.SettleDetail ) ) );
       AddConditionFlags( flags, s.Name, used );
       return flags;
+   }
+
+   /// <summary>
+   /// Flags a target whose engine reported a different segment layout in different runs, after the
+   /// load, after the searches, or both. The target stays in the report: the flag names each layout
+   /// and the runs that had it, so the numbers are read with the difference in view (see
+   /// <see cref="ConsolidateIdentity"/> for why this is a flag and not a refusal).
+   /// </summary>
+   /// <param name="flags">Receives the flag.</param>
+   /// <param name="s">The target's summary.</param>
+   private static void AddLayoutDifference( List<Flag> flags, TargetSummary s )
+   {
+      var parts = new List<string>();
+      if( ConsolidateIdentity.Difference( s.PerRun.Select( r => ( r.Run, r.SegmentLayoutAfterLoad ) ) ) is string afterLoad )
+      {
+         parts.Add( $"after the load: {afterLoad}" );
+      }
+
+      if( ConsolidateIdentity.Difference( s.PerRun.Select( r => ( r.Run, r.SegmentLayoutAfterSearch ) ) ) is string afterSearch )
+      {
+         parts.Add( $"after the searches: {afterSearch}" );
+      }
+
+      if( parts.Count > 0 )
+      {
+         flags.Add( new Flag { Target = s.Name, Kind = "segment-layout-differs-between-runs", Runs = s.PerRun.Select( r => r.Run ).ToList(), Detail = string.Join( "; ", parts ) + ". Searches ran over different layouts, so the medians mix them." } );
+      }
    }
 
    /// <summary>

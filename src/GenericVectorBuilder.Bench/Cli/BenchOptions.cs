@@ -23,7 +23,7 @@ public sealed class BenchOptions
    private static readonly HashSet<string> SWITCHES = new( StringComparer.Ordinal ) { "keep", "no-machine-control" };
    private static readonly HashSet<string> VALUED = new( StringComparer.Ordinal )
    {
-      "pipeline", "targets", "limit", "batch", "queries", "top", "concurrency", "seconds", "warmup", "hnsw-ef",
+      "pipeline", "targets", "limit", "batch", "queries", "top", "concurrency", "seconds", "warmup", "warmup-seconds", "hnsw-ef",
       "golden-file", "out", "repo", "exact-seconds", "search-timeout", "seed", "machine-state",
    };
 
@@ -59,12 +59,20 @@ public sealed class BenchOptions
    public int Seconds { get; private set; } = 20;
 
    /// <summary>
-   /// Warm-up searches run immediately before EVERY timed pass, with that pass's own search
-   /// mode and concurrency. Why every pass and not only the first: a pass that follows another
-   /// pass inherits a warm cache and warm connections, and one that comes first does not, so
-   /// order alone would change the numbers.
+   /// Fewest warm-up searches run immediately before EVERY timed pass, with that pass's own
+   /// search mode and concurrency (the warm-up also lasts at least <see cref="WarmupSeconds"/>).
+   /// Why every pass and not only the first: a pass that follows another pass inherits a warm
+   /// cache and warm connections, and one that comes first does not, so order alone would
+   /// change the numbers.
    /// </summary>
    public int Warmup { get; private set; } = 20;
+
+   /// <summary>
+   /// Shortest warm-up before every timed pass, at that pass's own concurrency. Why time and not
+   /// a count: 20 searches at 8 searchers last milliseconds, and the JVM engines were timed cold
+   /// when their 8-searcher pass ran first (Vespa 914 against 1550 QPS@8).
+   /// </summary>
+   public int WarmupSeconds { get; private set; } = (int)SearchRunner.WARMUP_TIME.TotalSeconds;
 
    /// <summary>
    /// Seed for the random target order and the random pass order inside each target, or null
@@ -161,7 +169,7 @@ public sealed class BenchOptions
   clean     --pipeline P --targets a,b
   restore-machine [--machine-state FILE]   put back what a run that did not finish changed
 
-Other options: --warmup 20, --seed N, --hnsw-ef N, --golden-file F, --exact-seconds 60, --search-timeout 120, --out DIR, --repo DIR,
+Other options: --warmup 20, --warmup-seconds 15, --seed N, --hnsw-ef N, --golden-file F, --exact-seconds 60, --search-timeout 120, --out DIR, --repo DIR,
 --no-machine-control, --machine-state FILE (default /home/dan/gvb-work/bench-machine-state.json).
 Every target is loaded under the collection 'gvbbench_' + P, never the live name.
 Targets run in a random order, and each target's timed passes (default search at each concurrency
@@ -224,6 +232,7 @@ nothing on the machine.";
          case "concurrency": Concurrency = value.Split( ',', StringSplitOptions.RemoveEmptyEntries ).Select( v => Positive( name, v ) ).ToArray(); break;
          case "seconds": Seconds = Positive( name, value ); break;
          case "warmup": Warmup = NonNegative( name, value ); break;
+         case "warmup-seconds": WarmupSeconds = NonNegative( name, value ); break;
          case "hnsw-ef": HnswEf = Positive( name, value ); break;
          case "golden-file": GoldenFile = value; break;
          case "out": OutFolder = value; break;

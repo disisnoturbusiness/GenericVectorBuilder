@@ -17,7 +17,7 @@ public sealed partial class ConsolidateTests
 {
    #region Data Members
 
-   private const string CLIENT_CPU_LINE = "Client CPU per search is the CPU time the test's .NET client itself used for each search, measured in the same pass as the figure beside it. Where it is close to the latency, the client library is a large part of what is measured.";
+   private const string CLIENT_CPU_LINE = "Client CPU per search is the CPU time the test's .NET client itself used for each search, measured in the same pass as the figure beside it. Where it is close to the latency, the client library is a large part of what is measured. For an embedded engine (DuckDB, sqlite-vec) the engine runs inside the client process, so its figure is the engine's own CPU time, not client overhead.";
 
    #endregion Data Members
 
@@ -70,9 +70,9 @@ public sealed partial class ConsolidateTests
       Assert.Contains( "## Per run: client CPU ms per search@8", md );
       Assert.Contains( "| band | target | median [min, max] | client CPU ms/search | runs | engine notes |", md );
       string ranking = md[md.IndexOf( "## Request speed", StringComparison.Ordinal )..md.IndexOf( "## Per-engine notes", StringComparison.Ordinal )];
-      Assert.Contains( "| fast | 1.00 [1.00, 1.00] | 0.50 [0.45, 0.55] | 3 | - |", ranking );
-      Assert.Contains( "| plain | 1.00 [1.00, 1.00] | - | 3 | - |", ranking );
-      Assert.Contains( "| fast | 900.0 [900.0, 900.0] | 0.35 [0.30, 0.40] | 3 | - |", ranking );
+      Assert.Contains( "| fast | 1.00 [1.00, 1.00] | 0.50 [0.45, 0.55] | 3 | flags: fields-missing", ranking );
+      Assert.Contains( "| plain | 1.00 [1.00, 1.00] | - | 3 | flags: fields-missing", ranking );
+      Assert.Contains( "| fast | 900.0 [900.0, 900.0] | 0.35 [0.30, 0.40] | 3 | flags: fields-missing", ranking );
       Assert.Equal( 1, ranking.Split( CLIENT_CPU_LINE ).Length - 1 );
    }
 

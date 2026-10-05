@@ -49,7 +49,9 @@ public sealed partial class ConsolidateTests
       Assert.Contains( "| build configuration | Release |", md );
       Assert.Contains( "| CPU governor | performance |", md );
       Assert.Contains( $"| CPU partition | {PARTITION_TEXT} |", md );
-      Assert.Contains( "| warm-up searches before each timed pass | 20 |", md );
+      Assert.Contains( "| fewest searches in a warm-up (the --warmup count) | 20 |", md );
+      Assert.Contains( "| warm-up before each timed pass | time based: the pass's own search at the pass's own concurrency for at least 15 s and at least 20 searches (at most 120 s), read in windows of at least 2 s and 100 searches |", md );
+      Assert.DoesNotContain( "warm-up searches before each timed pass", md );
       Assert.Contains( "| exact mode seconds | 60 |", md );
       Assert.Contains( "| sql | compose | sql 1.0 | test index | ef=100 |", md );
    }
@@ -107,7 +109,8 @@ public sealed partial class ConsolidateTests
 
       Assert.Equal( new[] { "r1", "r2" }, Names( json.GetProperty( "runs" ) ) );
       Assert.Equal( "settings differ from the runs used: buildConfiguration missing vs Release, governor missing vs performance, cpuPartition missing vs " + PARTITION_TEXT
-         + ", warmupSearches missing vs 20, exactSeconds missing vs 60, searchSettings[sql] missing vs ef=100", json.GetProperty( "dropped" )[0].GetProperty( "reason" ).GetString() );
+         + ", warmupSearches missing vs 20, warmupMethod missing vs warm-up at the pass's own concurrency for at least 15 s and at least 20 searches (at most 120 s); then a 3 s trial that must land within 10% of the settled figure; one extension of 30 s to 120 s if it does not; rehearsal of every pass type for 30 s before the first timed pass"
+         + ", exactSeconds missing vs 60, searchSettings[sql] missing vs ef=100", json.GetProperty( "dropped" )[0].GetProperty( "reason" ).GetString() );
    }
 
    /// <summary>
@@ -358,7 +361,8 @@ public sealed partial class ConsolidateTests
       Assert.Equal( "Debug build (from the path of the binary in the command line)", Flags( json, "a" )["not-release-build"] );
       string md = File.ReadAllText( Path.Combine( _root, "out", "consolidated.md" ) );
       Assert.Contains( "| build configuration | Debug (from the path of the binary in the command line) |", md );
-      Assert.Contains( "| warm-up searches before each timed pass | 25 (from the method note) |", md );
+      Assert.Contains( "| fewest searches in a warm-up (the --warmup count) | 25 (from the method note) |", md );
+      Assert.Contains( "| warm-up before each timed pass | a fixed count of 25 searches before each timed pass (older run: no warm-up time, settle trial or extension recorded) |", md );
    }
 
    /// <summary>
@@ -675,6 +679,7 @@ public sealed partial class ConsolidateTests
 
       WriteRun( name, started, run =>
       {
+         run["notes"] = new JsonArray( MethodNotes().Select( n => (JsonNode)JsonValue.Create( n )! ).ToArray() );
          run["runSeed"] = 1;
          run["targetOrder"] = new JsonArray( targets.Select( t => JsonValue.Create( t["name"]!.GetValue<string>() )! ).ToArray<JsonNode>() );
          change( run );

@@ -54,10 +54,26 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// Measured 2026-10-04 on this box: 3 inserts of 700 random 1024-dimension vectors gave 3 parts with
 /// 31 KB of compressed index each and USearchSearchCount (system.events) grew by 3 per search, one
 /// graph search per part; the same search with skip indexes off left the counter unchanged.
+/// Why the engine runs with the image's own system logging and a TTL (deploy/engines/clickhouse-config):
+/// the 26.3.39.7 image writes query_log, text_log, trace_log and processors_profile_log rows for every
+/// search, and a search carries its 1024-float vector inline in the SQL text, so that is about 30 KB of
+/// log per search. The v6 benchmark switched 21 of those tables off and the engine then ran 16 percent
+/// faster at 8 searchers (QPS@8 423 to 493, v5 against v6; the cause was inferred from the other
+/// engines not moving, not isolated). A benchmark must measure the default engine, so the logs stay on
+/// and <see cref="LOG_TTL_TEXT"/> bounds the disk over time; <see cref="Engine"/> says so.
 /// </summary>
 public sealed class ClickHouseSink : ISink, IExactSearchSink, IEngineDescription, IIndexFinisher, IDisposable
 {
    #region Data Members
+
+   /// <summary>
+   /// The TTL every system log table carries, in words, as printed in <see cref="Engine"/>. It must
+   /// equal the TTL in deploy/engines/clickhouse-config/gvb-system-logs.xml (a test compares them).
+   /// Why a constant here: the engine text is the one place every results file and report prints
+   /// the engine's non-default settings, and the log TTL is the only one this engine has. The text
+   /// is short on purpose: the web catalog shows it as the engine's label.
+   /// </summary>
+   public const string LOG_TTL_TEXT = "1 hour";
 
    private const int DELETE_BATCH = 1000;
    private const int MAX_ATTEMPTS = 3;
@@ -114,7 +130,7 @@ public sealed class ClickHouseSink : ISink, IExactSearchSink, IEngineDescription
    public string Name => "clickhouse";
 
    /// <inheritdoc />
-   public string Engine => "ClickHouse 26.3.39.7 (MergeTree + vector_similarity index)";
+   public string Engine => $"ClickHouse 26.3.39.7 (MergeTree + vector_similarity index; image-default system logging, each log table with a TTL of {LOG_TTL_TEXT})";
 
    /// <inheritdoc />
    public string IndexDescription =>

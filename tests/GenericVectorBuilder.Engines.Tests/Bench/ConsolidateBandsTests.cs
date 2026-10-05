@@ -194,8 +194,8 @@ public sealed partial class ConsolidateTests
       Assert.Contains( "### p50 latency, one search at a time (lower is faster)", md );
       Assert.Contains( "### QPS with 8 searchers at once (higher is faster)", md );
       Assert.Contains( "| band | target | median [min, max] | runs | engine notes |", md );
-      Assert.Contains( "| 1 | b | 1150.0 [1090.0, 1200.0] | 3 | - |", md );
-      Assert.Contains( "| 1 | a | 1.10 [1.00, 1.20] | 3 | - |", md );
+      Assert.Contains( "| 1 | b | 1150.0 [1090.0, 1200.0] | 3 | flags: fields-missing", md );
+      Assert.Contains( "| 1 | a | 1.10 [1.00, 1.20] | 3 | flags: fields-missing", md );
       Assert.DoesNotContain( "median rank", md );
       Assert.Contains( "| target | r1 | r2 | r3 | band |", md );
       Assert.Contains( "| e | 5 | 5 | 5 | 3 |", md );
@@ -278,28 +278,128 @@ public sealed partial class ConsolidateTests
    }
 
    /// <summary>
-   /// Runs whose engine reported different segment layouts after the load are refused (Qdrant ended
-   /// a replicate load with 3 or 4 segments and a run-all load with 2); the same layout written
-   /// two ways ("1 segment(s)" and "1 segments") is one layout; a run that reports none does not
-   /// merge with runs that do; a count of searches ("98,871 segment searches") is not a layout.
+   /// A target whose engine hosting differs between the runs is refused for that target alone: the
+   /// other listed targets are consolidated, and the report names the refused one under "Targets not
+   /// in this report" with the difference and what to do (the v6 rule: no refused target is dropped
+   /// without a line). A different command still stops everything, and when every listed target is
+   /// refused nothing is left to report and the command stops with the same message as before.
    /// </summary>
    [Fact]
-   public void Refuses_ToMergeDifferentSegmentLayouts()
+   public void HostingDifference_RefusesThatTargetAlone_AndTheReportNamesIt()
+   {
+      WriteRun( "r1", "2026-10-05T10:00:00Z", Hosted( "sql", "compose" ), Target( "qdrant", 2, 900, 100 ) );
+      WriteRun( "r2", "2026-10-05T11:00:00Z", Hosted( "sql", "always-on" ), Target( "qdrant", 2, 900, 100 ) );
+
+      JsonElement json = Consolidate( "--targets", "sql,qdrant", Path.Combine( _root, "r?" ) );
+
+      Assert.Equal( new[] { "qdrant" }, json.GetProperty( "targets" ).EnumerateArray().Select( t => t.GetString() ).ToArray() );
+      Assert.Equal( new[] { "qdrant" }, json.GetProperty( "targetSummaries" ).EnumerateArray().Select( t => t.GetProperty( "name" ).GetString() ).ToArray() );
+      JsonElement refused = Assert.Single( json.GetProperty( "withheld" ).EnumerateArray() );
+      Assert.Equal( "sql", refused.GetProperty( "target" ).GetString() );
+      Assert.Equal( "refused", refused.GetProperty( "kind" ).GetString() );
+      Assert.Equal( "refused: hosting of sql: container (r1) vs native (r2). A container and a native service are different experiments and are never merged; consolidate each kind on its own by passing only the runs of one kind (--runs).",
+         refused.GetProperty( "reason" ).GetString() );
+      Assert.Equal( new[] { "r1", "r2" }, refused.GetProperty( "runs" ).EnumerateArray().Select( r => r.GetString() ).ToArray() );
+      string md = File.ReadAllText( Path.Combine( _root, "out", "consolidated.md" ) );
+      Assert.Contains( "| sql | refused | r1, r2 | refused: hosting of sql: container (r1) vs native (r2).", md );
+
+      WriteRun( "x1", "2026-10-05T10:00:00Z", Hosted( "sql", "compose" ), Hosted( "qdrant", "compose" ) );
+      WriteRun( "x2", "2026-10-05T11:00:00Z", Hosted( "sql", "always-on" ), Hosted( "qdrant", "always-on" ) );
+      Assert.Equal( 1, Run( "--targets", "sql,qdrant", "--out", Path.Combine( _root, "out2" ), Path.Combine( _root, "x?" ) ) );
+      Assert.Contains( _log, l => l.Contains( "hosting of sql: container (x1) vs native (x2); hosting of qdrant: container (x1) vs native (x2)", StringComparison.Ordinal ) );
+      Assert.False( Directory.Exists( Path.Combine( _root, "out2" ) ) );
+   }
+
+   /// <summary>
+   /// Runs whose engine reported different segment layouts are not refused any more (Qdrant ended a
+   /// replicate load with 3 or 4 segments and a run-all load with 2; MongoDB ended two v5 runs with
+   /// 4 and one with 2, and the refusal dropped it from the published report): the target stays in
+   /// the report and carries a flag that names each layout and its runs. The same layout written two
+   /// ways ("1 segment(s)" and "1 segments") is one layout and no flag; a run that reports none
+   /// differs from runs that do; a count of searches ("98,871 segment searches") is not a layout.
+   /// </summary>
+   [Fact]
+   public void DifferentSegmentLayouts_AreFlagged_NotRefused()
    {
       WriteRun( "r1", "2026-10-05T10:00:00Z", Laid( "qdrant-hnsw", QDRANT_2 ) );
       WriteRun( "r2", "2026-10-05T11:00:00Z", Laid( "qdrant-hnsw", QDRANT_2.Replace( "2 segments", "4 segments" ) ) );
-      Assert.Equal( 1, Run( "--targets", "qdrant-hnsw", "--out", Path.Combine( _root, "out" ), Path.Combine( _root, "r?" ) ) );
-      Assert.Contains( _log, l => l.Contains( "segment layout of qdrant-hnsw after the load: 2 segments (r1) vs 4 segments (r2)", StringComparison.Ordinal ) );
+      WriteRun( "r3", "2026-10-05T12:00:00Z", Laid( "qdrant-hnsw", QDRANT_2.Replace( "2 segments", "4 segments" ) ) );
+      JsonElement json = Consolidate( "--targets", "qdrant-hnsw", Path.Combine( _root, "r?" ) );
+      Assert.Equal( new[] { "r1", "r2", "r3" }, Names( json.GetProperty( "runs" ) ) );
+      Assert.Equal( 0, json.GetProperty( "dropped" ).GetArrayLength() );
+      Assert.Equal( "qdrant-hnsw", json.GetProperty( "targetSummaries" )[0].GetProperty( "name" ).GetString() );
+      Assert.Equal( "after the load: 2 segments (r1); 4 segments (r2, r3); after the searches: 2 segments (r1); 4 segments (r2, r3). Searches ran over different layouts, so the medians mix them.",
+         Flags( json, "qdrant-hnsw" )["segment-layout-differs-between-runs"] );
+      string md = File.ReadAllText( Path.Combine( _root, "out", "consolidated.md" ) );
+      Assert.Contains( "| qdrant-hnsw | segment-layout-differs-between-runs | 3 of 3 |", md );
+      Assert.Contains( "| 1 | qdrant-hnsw |", md );
+      Assert.DoesNotContain( _log, l => l.Contains( "Refusing", StringComparison.Ordinal ) );
 
       WriteRun( "s1", "2026-10-05T10:00:00Z", Laid( "elasticsearch", "NO HNSW GRAPH: 1 segment(s), 524 vectors" ) );
       WriteRun( "s2", "2026-10-05T11:00:00Z", Laid( "elasticsearch", "NO HNSW GRAPH: 1 segments, 524 vectors" ) );
-      JsonElement merged = Consolidate( "--targets", "elasticsearch", Path.Combine( _root, "s?" ) );
+      JsonElement merged = Consolidate( "--targets", "elasticsearch", "--out", Path.Combine( _root, "out2" ), Path.Combine( _root, "s?" ) );
       Assert.Equal( "1 segment", merged.GetProperty( "targetSummaries" )[0].GetProperty( "perRun" )[0].GetProperty( "segmentLayoutAfterLoad" ).GetString() );
+      Assert.False( Flags( merged, "elasticsearch" ).ContainsKey( "segment-layout-differs-between-runs" ) );
 
       WriteRun( "t1", "2026-10-05T10:00:00Z", Laid( "qdrant", QDRANT_2 ) );
       WriteRun( "t2", "2026-10-05T11:00:00Z", Laid( "qdrant", "status Green, no segment count here" ) );
-      Assert.Equal( 1, Run( "--targets", "qdrant", "--out", Path.Combine( _root, "out4" ), Path.Combine( _root, "t?" ) ) );
-      Assert.Contains( _log, l => l.Contains( "segment layout of qdrant after the load: 2 segments (t1) vs not reported (t2)", StringComparison.Ordinal ) );
+      JsonElement partial = Consolidate( "--targets", "qdrant", "--out", Path.Combine( _root, "out3" ), Path.Combine( _root, "t?" ) );
+      Assert.StartsWith( "after the load: 2 segments (t1); not reported (t2); after the searches: 2 segments (t1); not reported (t2).", Flags( partial, "qdrant" )["segment-layout-differs-between-runs"] );
+   }
+
+   /// <summary>
+   /// A target the runs hold but --targets leaves out is named in the report with the reason, and
+   /// the reason is read from the runs: the v5 report left MongoDB out and said nothing. A report
+   /// that leaves nothing out says so with an empty list and "(none)".
+   /// </summary>
+   [Fact]
+   public void TargetsLeftOutOfTheTargetsList_AreNamedWithTheirReason()
+   {
+      WriteRun( "r1", "2026-10-05T10:00:00Z", Target( "sql", 2, 900, 100 ), Laid( "mongodb", "index READY; mongot holds 524 of 524 documents in 4 segment(s), 4 searched through the HNSW graph (Approximate)" ) );
+      WriteRun( "r2", "2026-10-05T11:00:00Z", Target( "sql", 2, 900, 100 ), Laid( "mongodb", "index READY; mongot holds 524 of 524 documents in 2 segment(s), 2 searched through the HNSW graph (Approximate)" ) );
+
+      JsonElement json = Consolidate( "--targets", "sql", Path.Combine( _root, "r?" ) );
+
+      JsonElement left = Assert.Single( json.GetProperty( "withheld" ).EnumerateArray() );
+      Assert.Equal( "mongodb", left.GetProperty( "target" ).GetString() );
+      Assert.Equal( "not-listed", left.GetProperty( "kind" ).GetString() );
+      Assert.Equal( new[] { "r1", "r2" }, left.GetProperty( "runs" ).EnumerateArray().Select( r => r.GetString() ).ToArray() );
+      string reason = left.GetProperty( "reason" ).GetString()!;
+      Assert.Contains( "it is in 2 of 2 run(s) used but is not in --targets, so it has no row in any table of this report", reason );
+      Assert.Contains( "its segment layout after the load differs between runs: 4 segments (r1); 2 segments (r2)", reason );
+      Assert.EndsWith( "list it in --targets to include it; a layout difference is then shown as a flag, not left out.", reason );
+      string md = File.ReadAllText( Path.Combine( _root, "out", "consolidated.md" ) );
+      Assert.Contains( "## Targets not in this report", md );
+      Assert.Contains( "| mongodb | not-listed | r1, r2 | it is in 2 of 2 run(s) used", md );
+      Assert.Contains( "(left out of --targets, or refused for a different hosting or engine setup) is named under \"Targets not in this report\" with its reason (1 in this report)", string.Join( "\n", json.GetProperty( "notes" ).EnumerateArray().Select( n => n.GetString() ) ) );
+
+      JsonElement all = Consolidate( "--targets", "sql,mongodb", "--out", Path.Combine( _root, "out2" ), Path.Combine( _root, "r?" ) );
+      Assert.Equal( 0, all.GetProperty( "withheld" ).GetArrayLength() );
+      Assert.Equal( new[] { "sql", "mongodb" }, all.GetProperty( "targetSummaries" ).EnumerateArray().Select( t => t.GetProperty( "name" ).GetString() ).ToArray() );
+      string allMd = File.ReadAllText( Path.Combine( _root, "out2", "consolidated.md" ) );
+      Assert.Contains( "## Targets not in this report\n\n(none)", allMd.Replace( "\r\n", "\n" ) );
+      Assert.Contains( "segment-layout-differs-between-runs", Flags( all, "mongodb" ).Keys );
+   }
+
+   /// <summary>
+   /// A target left out of --targets that failed in a run, or ran under another hosting in another
+   /// run, says so in its reason; the listed targets are not affected by it.
+   /// </summary>
+   [Fact]
+   public void TargetLeftOut_NamesItsFailureAndItsHostingDifference()
+   {
+      JsonObject failed = Target( "oracle", 2, 900, 100 );
+      failed["error"] = "container exited (134)";
+      WriteRun( "r1", "2026-10-05T10:00:00Z", Target( "sql", 2, 900, 100 ), failed );
+      WriteRun( "r2", "2026-10-05T11:00:00Z", Target( "sql", 2, 900, 100 ), Hosted( "oracle", "compose" ) );
+      WriteRun( "r3", "2026-10-05T12:00:00Z", Target( "sql", 2, 900, 100 ), Hosted( "oracle", "always-on" ) );
+
+      JsonElement json = Consolidate( "--targets", "sql", Path.Combine( _root, "r?" ) );
+
+      string reason = Assert.Single( json.GetProperty( "withheld" ).EnumerateArray() ).GetProperty( "reason" ).GetString()!;
+      Assert.Contains( "it failed in r1 (container exited (134))", reason );
+      Assert.Contains( "its hosting differs between runs: container (r1, r2); native (r3)", reason );
+      Assert.Equal( new[] { "r1", "r2", "r3" }, Names( json.GetProperty( "runs" ) ) );
    }
 
    /// <summary>
@@ -403,9 +503,9 @@ public sealed partial class ConsolidateTests
       Assert.Contains( "| oracle | cpu-cap | Oracle Free caps itself at 2 CPUs", md );
       Assert.Contains( "| known |", md );
       Assert.Contains( "| elasticsearch | flags | index-not-ready-after-load, index-not-ready-after-search", md );
-      Assert.Contains( "| 4 | sql | 4.00 | 1 | exact-by-design |", md );
-      Assert.Contains( "| 3 | elasticsearch | 1.30 | 1 | scans-all-vectors |", md );
-      Assert.Contains( "| 1 | oracle | 0.90 | 1 | cpu-cap |", md );
+      Assert.Contains( "| 4 | sql | 4.00 | 1 | exact-by-design; flags: ", md );
+      Assert.Contains( "| 3 | elasticsearch | 1.30 | 1 | scans-all-vectors; flags: index-not-ready-after-load, index-not-ready-after-search", md );
+      Assert.Contains( "| 1 | oracle | 0.90 | 1 | cpu-cap; flags: ", md );
       Assert.DoesNotContain( "\u2014", md );
    }
 

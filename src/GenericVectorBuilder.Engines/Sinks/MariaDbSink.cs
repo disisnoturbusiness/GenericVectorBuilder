@@ -187,10 +187,11 @@ public sealed class MariaDbSink : ISink, IExactSearchSink, IEngineDescription, I
 
    /// <inheritdoc />
    public string Durability =>
-      "innodb_flush_log_at_trx_commit=2 (mariadb.compose.yaml): the InnoDB redo log is written to the operating system at every commit but fsynced about once a second, "
+      "innodb_flush_log_at_trx_commit=2 (set in mariadb-bench.compose.yaml for the benchmark's own container gvbbench-mariadb, and in mariadb.compose.yaml for the daily gvb-mariadb, "
+      + "which has the same server settings): the InnoDB redo log is written to the operating system at every commit but fsynced about once a second, "
       + "so a crash of the mariadbd process loses nothing, while an operating-system crash or power cut can lose the last second of commits; innodb_doublewrite is on (default), "
       + "the binary log is off, and the vector graph is an InnoDB table under the same log (settings read from the running server with SHOW VARIABLES; the crash behaviour is "
-      + "InnoDB's documented behaviour for this setting and was not tested, because gvb-mariadb is shared and stays up)";
+      + "InnoDB's documented behaviour for this setting and was not tested on either container)";
 
    /// <inheritdoc />
    public async Task<string> FinishLoadAsync( string collection, CancellationToken ct )

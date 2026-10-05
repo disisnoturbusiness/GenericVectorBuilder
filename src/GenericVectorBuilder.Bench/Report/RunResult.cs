@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using GenericVectorBuilder.Bench.Stats;
 
 namespace GenericVectorBuilder.Bench.Report;
@@ -164,6 +165,11 @@ public sealed class TargetResult
    private static readonly string[] SETTLED_NAMES = { "settled", "isSettled", "indexSettled" };
    private static readonly string[] CPU_CAP_NAMES = { "cpuCap", "cpuLimit", "engineCpuCap" };
    private static readonly string[] CLIENT_CPU_NAMES = { "clientCpuMsPerSearch", "clientCpuPerSearchMs" };
+   private static readonly string[] ENGINE_SETTINGS_NAMES = { "engineSettings", "serverSettings", "nonDefaultSettings", "engineConfig" };
+   private static readonly string[] ENGINE_FILES_NAMES = { "engineFiles", "configFiles" };
+
+   /// <summary>The engine-files note EngineLifecycle writes into a target's notes; <see cref="EngineFiles"/> is read from it.</summary>
+   private static readonly Regex ENGINE_FILES_IN_NOTE = new( @"^Engine files \(SHA-256, first \d+ hex digits\): \[(?<list>[^\]]*)\]", RegexOptions.Compiled );
 
    #endregion Data Members
 
@@ -180,6 +186,21 @@ public sealed class TargetResult
 
    /// <summary>compose, always-on or embedded.</summary>
    public string? Hosting { get; init; }
+
+   /// <summary>
+   /// The engine's settings that differ from its defaults, as sorted "key=value" text, when the run recorded them as a structured field
+   /// ("engineSettings", "serverSettings", "nonDefaultSettings" or "engineConfig"); null when not recorded. Why carried and compared: two runs of
+   /// an engine under different settings are different experiments, and a setting changed in a config file (ClickHouse's system log tables, 5 Oct 2026)
+   /// moved QPS@8 by 16% with nothing in the results saying so.
+   /// </summary>
+   public string? EngineSettings { get; init; }
+
+   /// <summary>
+   /// The files the engine's container was configured from (its compose file and every read-only config file or folder it mounts) with a short
+   /// SHA-256 of each, as the run recorded them (a structured "engineFiles" field, or the engine-files note of the target); null when not recorded.
+   /// Why: the text of a changed config file is not in any other field, so only its hash shows that two runs used different files.
+   /// </summary>
+   public string? EngineFiles { get; init; }
 
    /// <summary>Why the target failed, if it did.</summary>
    public string? Error { get; init; }
@@ -303,6 +324,8 @@ public sealed class TargetResult
          AfterLoad = state is JsonElement a ? IndexStateValue.Parse( ResultJson.Child( a, "afterLoad" ) ) : null,
          AfterSearch = state is JsonElement b ? IndexStateValue.Parse( ResultJson.Child( b, "afterSearch" ) ) : null,
          Durability = ResultJson.Text( t, "durability" ),
+         EngineSettings = NamedText( t, ENGINE_SETTINGS_NAMES ),
+         EngineFiles = NamedText( t, ENGINE_FILES_NAMES ) ?? FilesFromNotes( t ),
          SearchSettings = SettingsText( t, search ),
          Settled = ReadSettled( t, search ) ?? notedSettled,
          SettleDetail = ReadSettleDetail( t, search ) ?? notedDetail,
@@ -316,6 +339,36 @@ public sealed class TargetResult
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// The first of the accepted names that the target object carries, as short comparable text.
+   /// </summary>
+   /// <param name="target">The target object.</param>
+   /// <param name="names">Accepted spellings, preferred first.</param>
+   /// <returns>The text, or null when none is recorded.</returns>
+   private static string? NamedText( JsonElement target, string[] names )
+   {
+      return names.Select( name => ResultJson.Child( target, name ) is JsonElement found ? RunConditions.AsText( found ) : null ).FirstOrDefault( text => text != null );
+   }
+
+   /// <summary>
+   /// The list of files out of the target's engine-files note ("Engine files (SHA-256, first 12 hex digits): [a 1f2e3d4c5b6a; b 9a8b7c6d5e4f]. ..."):
+   /// only the bracketed list, so the sentence after it (which says whether the engine was started by this run) never makes two runs differ.
+   /// </summary>
+   /// <param name="target">The target object.</param>
+   /// <returns>The list as written, or null when the target has no such note.</returns>
+   private static string? FilesFromNotes( JsonElement target )
+   {
+      foreach( string note in ResultJson.Texts( target, "notes" ) ?? Array.Empty<string>() )
+      {
+         if( ENGINE_FILES_IN_NOTE.Match( note ) is { Success: true } m )
+         {
+            return m.Groups["list"].Value.Trim();
+         }
+      }
+
+      return null;
+   }
 
    /// <summary>
    /// The client's CPU time per search by concurrency level, from the search section or the target

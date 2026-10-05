@@ -190,6 +190,11 @@ public sealed class BenchSession : IDisposable
          await machine.LeaveTargetAsync( target.Name );
       }
 
+      if( result.Search != null )
+      {
+         result.SearchSettings = TargetSearchSettings.From( target.Index );
+      }
+
       TargetConnection connection = connections.Describe( target );
       machine.RecordConnection( connection );
       result.Notes.Add( ConnectionRecorder.Note( connection ) );
@@ -330,7 +335,7 @@ public sealed class BenchSession : IDisposable
       _log( $"Queries: {queries.Description}" );
       TruthSet truth = BruteForce.Compute( data, queries, _options.Top );
       _log( $"Exact answer of {queries.Count} queries by brute force in {truth.Seconds:0.0} s" );
-      var runner = new SearchRunner( data, queries, truth, _options, seed );
+      var runner = new SearchRunner( data, queries, truth, _options, seed ) { WarmupTime = TimeSpan.FromSeconds( _options.WarmupSeconds ) };
       report.Queries = queries.Description;
       report.QueryCount = queries.Count;
       report.TruthSeconds = truth.Seconds;
@@ -382,11 +387,14 @@ public sealed class BenchSession : IDisposable
    {
       yield return $"Order: targets ran one at a time in a random order from seed {seed} (runSeed; --seed {seed} repeats it, targetOrder lists it). Inside each target the timed passes also ran in a random order from the same seed and the target's name (passOrder): "
          + $"default@1 is one searcher for {_options.Seconds} s (every search's latency gives p50/p95/p99, the completed searches give QPS@1, its first answer to each query gives recall and nDCG), default@N is N searchers for {_options.Seconds} s (QPS@N), exact is the engine's exact mode, one searcher for {_options.ExactSeconds} s cycling the queries.";
-      yield return $"Preparation, untimed, before any timed pass: a rehearsal of every pass type for {SearchRunner.REHEARSAL_TIME.TotalSeconds:0} s each through the same code the passes use, then a settle (default searches one at a time until the p50s of {SearchRunner.SETTLE_WINDOWS} windows of {SearchRunner.SETTLE_WINDOW} agree within {SearchRunner.SETTLE_TOLERANCE:0%}, at most {SearchRunner.SETTLE_CAP.TotalSeconds:0} s). "
-         + $"Right before the first timed pass a {SearchRunner.TRIAL_TIME.TotalSeconds:0} s trial of default searches must agree with the settled p50 within {SearchRunner.TRIAL_TOLERANCE:0%}; if it does not, or the settle did not settle, the settle is extended once (at least {SearchRunner.EXTENSION_MINIMUM.TotalSeconds:0} s, at most {SearchRunner.EXTENSION_CAP.TotalSeconds:0} s more) and a second trial taken. Each target's notes give the result; a target still disagreeing is marked NOT settled.";
-      yield return $"Warm-up: every timed pass started with its own untimed warm-up of {_options.Warmup} searches in the same search mode and with the same number of searchers, stopped early after 60 s; with machine control on, the check for a quiet box comes right before the warm-up, so warm-up and timed pass run back to back. Failed untimed searches are counted per target (warmupErrors) and are not in the timed error counts.";
+      foreach( string note in SearchRunner.DescribeMethod( _options.Warmup, TimeSpan.FromSeconds( _options.WarmupSeconds ) ) )
+      {
+         yield return note;
+      }
+
       yield return $"Load rows/s counts only time inside each target's upsert calls: one writer, batches of {_options.Batch}, rows already in memory, the collection dropped and created fresh first. Engines that build or finish their index after the writes do it in a separate timed index step (the load's index seconds), and the run waits for it before searching.";
       yield return "Index proof: each engine's own report of its index (indexState) is read after the load and again after the last pass. A target whose index was not ready after the load was still measured and carries a WARNING; an engine that reports nothing counts as not ready.";
+      yield return "Search settings: each searched target records the settings its own index description states (searchSettings: the build parameters and the effort per query, such as m, ef_construction and ef_search), read after the load; consolidating never averages runs whose settings differ.";
       yield return "Durability: each target's crash-safety setting as configured here (durability). Engines that do not force writes to disk on every commit load faster for that reason.";
       yield return $"Latency is client-side wall time around each search (network and driver included), every search of the default@1 window, one searcher, the queries cycled; a window with fewer than {SearchRunner.MIN_LATENCY_SAMPLES} searches, a p50 above {SearchRunner.SKEW_LIMIT} x its mean, or a mean above its p99 is flagged.";
       yield return $"QPS: N searchers back to back for {_options.Seconds} s per level; completed searches divided by the window's elapsed time.";

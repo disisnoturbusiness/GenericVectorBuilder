@@ -12,12 +12,15 @@ namespace GenericVectorBuilder.Engines.Tests.Bench;
 /// The benchmark's measurement rules, checked against the real runner code with a fake sink
 /// whose latency follows a script: p50/p95/p99 and QPS@1 come from one window that holds every
 /// timed default@1 search, the exact mode is a time window that cycles the queries, every pass
-/// type is rehearsed for at least 5 s before any timed pass, the settle waits until latency stops
-/// falling (and says so when it does not), each pass is recorded with its window, its searches
+/// type is rehearsed at its own concurrency before any timed pass, every timed pass follows a
+/// time-based warm-up at its own concurrency and (after a preparation) a settle check that
+/// compares a trial of that same pass with the warm-up's settled figure and extends the warm-up
+/// once when they differ by more than 10%, each pass is recorded with its window, its searches
 /// and the pass before it, and lopsided or thin windows are flagged.
-/// Why these rules get tests: each one closes a hole the adversarial review found (a p50 from a
-/// separate burst, an exact p50 from 20 searches, a client compiled during the first timed
-/// pass, JVM engines timed seconds after start), and each is easy to undo by accident.
+/// Why these rules get tests: each one closes a hole a review found (a p50 from a separate
+/// burst, an exact p50 from 20 searches, a client compiled during the first timed pass, JVM
+/// engines timed cold when their 8-searcher pass ran first, a settle at one searcher that said
+/// nothing about eight), and each is easy to undo by accident.
 /// Why the sources are compiled here with Roslyn: the benchmark is a console project this test
 /// project does not reference. Compiling the repository's Bench sources together with
 /// MeasurementScenarios.cs (fakes, built only in this compilation) tests the code the benchmark runs.
@@ -29,7 +32,8 @@ public class MeasurementTests
    private const string SCENARIOS_TYPE = "GenericVectorBuilder.Bench.MeasurementUnderTest.MeasurementScenarios";
    private const string IMPLICIT_USINGS = "global using System; global using System.Collections.Generic; global using System.IO; global using System.Linq; "
       + "global using System.Net.Http; global using System.Threading; global using System.Threading.Tasks;";
-   private static readonly Regex WARMUP_START = new( @"warm-up before (\S+), \d+ searches$", RegexOptions.Compiled );
+   private static readonly Regex WARMUP_START = new( @"warm-up before (\S+), \d+ searches", RegexOptions.Compiled );
+   private static readonly Regex MACHINE_CONTROL_WARMUP = new( @"^\s*(?<target>[^\s:]+): warm-up before (?<pass>[^\s,]+), \d+ searches", RegexOptions.Compiled );
    private static readonly Regex REHEARSED = new( @"(\S+) [\d,]+ searches in ([\d.]+) s", RegexOptions.Compiled );
    private static readonly Lazy<Assembly> COMPILED = new( Compile );
 
@@ -38,19 +42,20 @@ public class MeasurementTests
    #region Public Methods
 
    /// <summary>
-   /// The benchmark's own rehearsal length is 5 s per pass type and its settle cap is 120 s; the
-   /// settle check takes a 2 s trial, allows 15%, and extends once for 30 s to 120 s.
+   /// The benchmark's own lengths: a 30 s rehearsal per pass type, a 15 s warm-up before every
+   /// pass read in windows of 2 s, a warm-up cap of 120 s, a 3 s trial within 10%, and one
+   /// extension of 30 s to 120 s; a runner built with no settings carries exactly these.
    /// </summary>
    [Fact]
-   public void Defaults_FiveSecondRehearsalAndTwoMinuteSettleCap()
+   public void Defaults_ThirtySecondRehearsal_FifteenSecondWarmup_TenPercentTrial()
    {
       double[] defaults = (double[])Invoke( "Defaults" );
-      Assert.Equal( new[] { 5.0, 120.0, 2.0, 0.15, 30.0, 120.0 }, defaults );
+      Assert.Equal( new[] { 30.0, 15, 2, 120, 3, 0.10, 30, 120, 30, 15, 2, 120, 3, 30, 120 }, defaults );
    }
 
    /// <summary>
-   /// The settled p50 is the median of the last three window p50s (of fewer when fewer ran, none
-   /// when none), and a trial agrees when the settled p50 is within 15% of the trial's p50.
+   /// The settled figure is the median of the last three window figures (of fewer when fewer ran,
+   /// none when none), and a trial agrees when the settled figure is within 10% of the trial's.
    /// </summary>
    [Fact]
    public void SettleCheck_Rules()
@@ -59,117 +64,208 @@ public class MeasurementTests
       Assert.Equal( 4.0, Rules( new[] { 4.0 }, 0, 0 )[0] );
       Assert.Equal( 1.5, Rules( new[] { 1.0, 2 }, 0, 0 )[0] );
       Assert.True( double.IsNaN( Rules( Array.Empty<double>(), 0, 0 )[0] ) );
-      Assert.Equal( 1.0, Rules( Array.Empty<double>(), 1.149, 1.0 )[1] );
-      Assert.Equal( 1.0, Rules( Array.Empty<double>(), 0.851, 1.0 )[1] );
-      Assert.Equal( 0.0, Rules( Array.Empty<double>(), 1.151, 1.0 )[1] );
-      Assert.Equal( 0.0, Rules( Array.Empty<double>(), 0.849, 1.0 )[1] );
-      Assert.Equal( 0.0, Rules( Array.Empty<double>(), 2.9, 1.35 )[1] );
+      Assert.Equal( 1.0, Rules( Array.Empty<double>(), 1.099, 1.0 )[1] );
+      Assert.Equal( 1.0, Rules( Array.Empty<double>(), 0.901, 1.0 )[1] );
+      Assert.Equal( 0.0, Rules( Array.Empty<double>(), 1.101, 1.0 )[1] );
+      Assert.Equal( 0.0, Rules( Array.Empty<double>(), 0.899, 1.0 )[1] );
+      Assert.Equal( 0.0, Rules( Array.Empty<double>(), 1550, 914 )[1] );
       Assert.Equal( 0.0, Rules( Array.Empty<double>(), 1.0, 0 )[1] );
    }
 
    /// <summary>
-   /// A steady engine: the trial right before the first timed pass agrees with the settled p50,
-   /// nothing is extended, the check sits between the first warm-up and the first timing, and the
-   /// note says the settle was confirmed (the consolidation reads it as settled).
+   /// Every timed pass follows a warm-up that lasts at least its set time (here 0.6 s), sends
+   /// far more than the --warmup count, uses only the pass's own search, and keeps exactly the
+   /// pass's number of searchers busy (4 for default@4, 1 for default@1 and exact); its progress
+   /// line still matches the line machine control holds a pass at.
    /// </summary>
    [Fact]
-   public async Task SettleCheck_AgreeingTrialNeedsNoExtension()
+   public async Task Warmup_IsTimeBasedAtThePassConcurrency()
    {
-      dynamic r = await ScenarioAsync( "SettleCheckAsync", "fixed:1", 0.3, 0.5, 3.0, 5.0 );
-      Assert.True( (bool)r.TrialAgreed, (string)r.Note );
-      Assert.False( (bool)r.Extended );
-      Assert.True( (bool)r.Confirmed );
-      Assert.StartsWith( "Settle: settled after", (string)r.Note );
-      Assert.Contains( "confirmed by a trial right before the first timed pass", (string)r.Note );
-      Assert.True( (bool?)r.ReadSettled );
-      string[] log = r.Log;
-      int warmup = Array.FindIndex( log, l => l.Contains( ": warm-up before ", StringComparison.Ordinal ) );
-      int check = Array.FindIndex( log, l => l.Contains( ": settle check: trial", StringComparison.Ordinal ) );
-      int timing = Array.FindIndex( log, l => l.Contains( ": timing ", StringComparison.Ordinal ) );
-      Assert.True( warmup < check && check < timing, string.Join( "\n", log ) );
-      Assert.DoesNotContain( log, l => l.Contains( "(again, after the settle extension)", StringComparison.Ordinal ) );
-      Assert.True( (int)r.CheckSearches > 0 && (int)r.PreparationSearches > (int)r.CheckSearches );
+      dynamic r = await ScenarioAsync( "PassesAsync", Args( "--seconds", "1", "--concurrency", "1,4", "--queries", "random:5", "--exact-seconds", "1" ), "fixed:2", "fixed:2", false, 0.6 );
+      string[] events = r.Events;
+      long[] ticks = r.Ticks;
+      int[] inFlight = r.InFlight;
+      double frequency = (long)r.Frequency;
+      foreach( string pass in (string[])r.PassOrder )
+      {
+         int line = Array.FindIndex( events, e => e.Contains( $": warm-up before {pass}, ", StringComparison.Ordinal ) );
+         int timing = Array.FindIndex( events, line + 1, e => e.EndsWith( $"timing {pass}", StringComparison.Ordinal ) );
+         Assert.True( line >= 0 && timing > line, string.Join( "\n", events.Where( e => e.StartsWith( "LOG ", StringComparison.Ordinal ) ) ) );
+         Assert.Matches( MACHINE_CONTROL_WARMUP, events[line]["LOG ".Length..] );
+         int[] searches = Enumerable.Range( line + 1, timing - line - 1 ).Where( i => !events[i].StartsWith( "LOG ", StringComparison.Ordinal ) ).ToArray();
+         Assert.All( searches, i => Assert.Equal( pass == "exact" ? "X" : "S", events[i] ) );
+         Assert.True( searches.Length > 3 * 10, $"{pass}: warm-up sent only {searches.Length} searches" );
+         double seconds = ( ticks[searches[^1]] - ticks[line] ) / frequency;
+         Assert.True( seconds >= 0.55, $"{pass}: warm-up lasted {seconds:0.000} s, less than its 0.6 s" );
+         Assert.Equal( pass == "default@4" ? 4 : 1, searches.Max( i => inFlight[i] ) );
+      }
    }
 
    /// <summary>
-   /// The Elasticsearch case: 6 ms until the settle has settled, 2 ms from then on (2 ms, not
-   /// 1, so the scheduler's wake-up jitter on a busy test box stays well inside the 5% the
-   /// windows must agree within). The trial
-   /// disagrees, the settle is extended once (for at least its minimum), the second trial agrees,
-   /// the first pass's warm-up is announced and run again after the extension (so the quiet-box
-   /// check and the warm-up still come right before the timed pass), and the note says it settled
-   /// after the extension.
+   /// Before every timed pass (not just the first) a settle check runs at that pass's own
+   /// concurrency: its trial uses the pass's searchers (4 in flight for default@4), the warm-up it
+   /// reads ran at the same concurrency, it sits between the pass's warm-up and its timing, and
+   /// the one settle note names every pass and reads as settled exactly when every check was
+   /// confirmed. Why the verdict itself is not asserted: on a loaded test box a steady 5 ms fake
+   /// can fairly wander past 5% between windows; the verdicts have tests with latencies far apart.
+   /// </summary>
+   [Fact]
+   public async Task SettleCheck_BeforeEveryPassAtItsOwnConcurrency()
+   {
+      dynamic r = await ScenarioAsync( "CheckAsync", "fixed:5", 8, 0.5, 3.0 );
+      string[] order = r.PassOrder;
+      string[][] checks = ( (string[])r.Checks ).Select( c => c.Split( '|' ) ).ToArray();
+      Assert.Equal( order, checks.Select( c => c[0] ) );
+      string[] events = r.Events;
+      int[] inFlight = r.InFlight;
+      foreach( string[] check in checks )
+      {
+         int searchers = check[0] == "default@4" ? 4 : 1;
+         Assert.Equal( searchers.ToString( CultureInfo.InvariantCulture ), check[1] );
+         Assert.Equal( searchers.ToString( CultureInfo.InvariantCulture ), check[11] );
+         Assert.Contains( $"{check[0]}: warm-up ", (string)r.Note );
+         int warmup = Array.FindIndex( events, e => e.Contains( $": warm-up before {check[0]}, ", StringComparison.Ordinal ) );
+         int trial = Array.FindIndex( events, e => e.Contains( $": settle check before {check[0]}: trial, ", StringComparison.Ordinal ) );
+         int timing = Array.FindIndex( events, e => e.EndsWith( $"timing {check[0]}", StringComparison.Ordinal ) );
+         Assert.True( warmup < trial && trial < timing, string.Join( "\n", events.Where( e => e.StartsWith( "LOG ", StringComparison.Ordinal ) ) ) );
+         int end = Array.FindIndex( events, trial + 1, e => e.StartsWith( "LOG ", StringComparison.Ordinal ) );
+         Assert.Equal( searchers, Enumerable.Range( trial + 1, end - trial - 1 ).Max( i => inFlight[i] ) );
+      }
+
+      Assert.Equal( "default@4", order[0] );
+      Assert.Equal( checks.All( c => c[10] == "True" ), (bool?)r.ReadSettled );
+   }
+
+   /// <summary>
+   /// The v5 Vespa case at 4 searchers: 12 ms per search through the warm-up, 4 ms from the trial
+   /// on. The warm-up's settled QPS is well below the trial's, so the check extends the warm-up
+   /// once (for at least its minimum, at the pass's concurrency), the second trial agrees, the
+   /// warm-up is announced and run again before the timing (so the quiet-box check and the
+   /// warm-up still come right before the timed pass), and the note says settled, with the
+   /// extension named. The next pass, already fast, is not extended.
    /// </summary>
    [Fact]
    public async Task SettleCheck_LateSpeedUpExtendsOnce()
    {
-      dynamic r = await ScenarioAsync( "SettleCheckAsync", "drop:6:2", 0.3, 0.5, 3.0, 5.0 );
-      Assert.True( (bool)r.FirstSettled );
-      Assert.True( (double)r.SettledP50 > 5.0, $"settled p50 {r.SettledP50}" );
-      Assert.True( (double)r.TrialP50 < 0.7 * (double)r.SettledP50, $"trial p50 {r.TrialP50}" );
-      Assert.False( (bool)r.TrialAgreed );
-      Assert.True( (bool)r.Extended );
-      Assert.InRange( (double)r.ExtensionSeconds, 0.5, 3.5 );
-      Assert.True( (bool)r.RetrialAgreed, (string)r.Note );
-      Assert.True( (bool)r.Confirmed );
-      Assert.StartsWith( "Settle: settled after the one extension", (string)r.Note );
-      Assert.DoesNotContain( "NOT settled", (string)r.Note );
+      dynamic r = await ScenarioAsync( "CheckAsync", "drop:12:4", 8, 0.5, 3.0 );
+      string[] order = r.PassOrder;
+      Assert.Equal( "default@4", order[0] );
+      string[][] checks = ( (string[])r.Checks ).Select( c => c.Split( '|' ) ).ToArray();
+      string[] first = checks[0];
+      double settled = double.Parse( first[3], CultureInfo.InvariantCulture );
+      double trial = double.Parse( first[4], CultureInfo.InvariantCulture );
+      Assert.True( settled < 0.7 * trial, $"settled {settled} QPS, trial {trial} QPS" );
+      Assert.Equal( "False", first[5] );
+      Assert.Equal( "True", first[6] );
+      Assert.InRange( double.Parse( first[7], CultureInfo.InvariantCulture ), 0.5, 3.5 );
+      Assert.Equal( "True", first[9] );
+      Assert.Equal( "True", first[10] );
+      Assert.Equal( "False", checks[1][6] );
+      string note = r.Note;
+      Assert.StartsWith( "Settle: settled before every timed pass", note );
+      Assert.Contains( "EXTENDED once", note );
+      Assert.DoesNotContain( "NOT settled", note );
       Assert.True( (bool?)r.ReadSettled );
-      string[] log = r.Log;
-      int extending = Array.FindIndex( log, l => l.Contains( "extending the settle once", StringComparison.Ordinal ) );
-      int again = Array.FindIndex( log, l => l.Contains( "(again, after the settle extension)", StringComparison.Ordinal ) );
-      int timing = Array.FindIndex( log, l => l.Contains( ": timing ", StringComparison.Ordinal ) );
+      string[] log = ( (string[])r.Events ).Where( e => e.StartsWith( "LOG ", StringComparison.Ordinal ) ).ToArray();
+      int extending = Array.FindIndex( log, l => l.Contains( "before default@4: extending the warm-up once", StringComparison.Ordinal ) );
+      int again = Array.FindIndex( log, l => l.Contains( "warm-up before default@4, 3 searches and 1.5 s at least, 4 searchers (again, after the settle extension)", StringComparison.Ordinal ) );
+      int timing = Array.FindIndex( log, l => l.EndsWith( "timing default@4", StringComparison.Ordinal ) );
       Assert.True( extending > 0 && extending < again && again < timing, string.Join( "\n", log ) );
-      Assert.Equal( 2, log.Take( timing ).Count( l => l.Contains( ": warm-up before ", StringComparison.Ordinal ) ) );
+      Assert.Equal( 2, log.Take( timing ).Count( l => l.Contains( ": warm-up before default@4, ", StringComparison.Ordinal ) ) );
    }
 
    /// <summary>
-   /// An engine whose latency keeps climbing: the settle hits its cap, the one extension does not
-   /// settle either, and the note is the WARNING the consolidation reads as not settled.
+   /// An engine whose latency keeps climbing: the warm-up's windows never agree, the one
+   /// extension hits its cap, and the note is the WARNING the consolidation reads as not settled,
+   /// naming the pass; the passes are still timed.
    /// </summary>
    [Fact]
    public async Task SettleCheck_NeverAgreeingIsFlagged()
    {
-      dynamic r = await ScenarioAsync( "SettleCheckAsync", "climb", 0.3, 0.3, 0.8, 0.8 );
-      Assert.False( (bool)r.FirstSettled );
-      Assert.True( (bool)r.Extended );
-      Assert.False( (bool)r.Confirmed );
-      Assert.StartsWith( "WARNING: latency had NOT settled when timing began, even after the one extension", (string)r.Note );
+      dynamic r = await ScenarioAsync( "CheckAsync", "climb", 8, 0.3, 0.8 );
+      string[][] checks = ( (string[])r.Checks ).Select( c => c.Split( '|' ) ).ToArray();
+      Assert.Equal( "True", checks[0][6] );
+      Assert.Equal( "False", checks[0][10] );
+      Assert.StartsWith( "WARNING: latency had NOT settled when timing began for default@4", (string)r.Note );
       Assert.False( (bool?)r.ReadSettled );
-      Assert.Single( (string[])r.PassOrder );
+      Assert.Equal( 2, ( (string[])r.PassOrder ).Length );
    }
 
    /// <summary>
-   /// Every settle note reads right in the consolidation: settled when the check confirmed it
-   /// (with or without the extension) or when no check ran on a settled settle; not settled when
-   /// the extension did not help or the searches kept failing (then nothing is extended).
+   /// An engine that warms up only under concurrent load (9 ms per search until it has served
+   /// 300 searches with others in flight, 3 ms after), the way the JVM engines did: whether
+   /// default@4 runs first (seed 8) or last (seed 1), the engine has already served more than
+   /// those 300 concurrent searches when default@4's timing begins, so the pass is timed warm,
+   /// and QPS@4 is well above the cold ceiling of 4 / 9 ms = 444. Why the served count and not
+   /// the two QPS against each other: on a loaded test box a 3 ms timer wait wanders by tens of
+   /// percent between runs, while the count says exactly whether the warm-up did its job.
+   /// </summary>
+   [Fact]
+   public async Task JvmLikeEngine_TimedWarmWhetherFirstOrLast()
+   {
+      dynamic first = await ScenarioAsync( "OrderAsync", 8, "jit:9:3:300" );
+      dynamic last = await ScenarioAsync( "OrderAsync", 1, "jit:9:3:300" );
+      Assert.Equal( "default@4", ( (string[])first.PassOrder )[0] );
+      Assert.Equal( "default@4", ( (string[])last.PassOrder )[^1] );
+      Assert.True( (int)first.ServedAtTiming > 300, $"default@4 first: {first.ServedAtTiming} concurrent searches served when its timing began" );
+      Assert.True( (int)last.ServedAtTiming > 300, $"default@4 last: {last.ServedAtTiming} concurrent searches served when its timing began" );
+      double a = ( (Dictionary<int, double>)first.Qps )[4];
+      double b = ( (Dictionary<int, double>)last.Qps )[4];
+      Assert.True( a > 1.5 * 444 && b > 1.5 * 444, $"QPS@4 {a:0} first, {b:0} last; cold is about 444" );
+   }
+
+   /// <summary>
+   /// Every settle note reads right in the consolidation: settled when every check confirmed its
+   /// warm-up (with or without the extension); not settled when the extension did not help, when
+   /// the searches kept failing (then nothing is extended), or when no check ran.
    /// </summary>
    [Fact]
    public void SettleNote_ReadByConsolidation()
    {
-      foreach( (string mode, bool settled, string start) in new[] { ( "agreed", true, "Settle: settled after" ), ( "extended-ok", true, "Settle: settled after the one extension" ),
-         ( "extended-bad", false, "WARNING: latency had NOT settled" ), ( "gave-up", false, "WARNING: latency had NOT settled" ), ( "unchecked", true, "Settle: settled after" ) } )
+      foreach( (string mode, bool settled, string start) in new[] { ( "agreed", true, "Settle: settled before every timed pass" ), ( "extended-ok", true, "Settle: settled before every timed pass" ),
+         ( "extended-bad", false, "WARNING: latency had NOT settled when timing began for default@8" ), ( "gave-up", false, "WARNING: latency had NOT settled when timing began for default@8" ),
+         ( "none", false, "WARNING: no settle ran" ) } )
       {
          dynamic n = Invoke( "SettleNote", mode );
          Assert.StartsWith( start, (string)n.Note );
          Assert.Equal( settled, (bool?)n.ReadSettled );
-         Assert.True( settled != ( (string)n.Note ).Contains( "NOT settled", StringComparison.Ordinal ), $"{mode}: {n.Note}" );
+         Assert.DoesNotContain( "\u2014", (string)n.Note );
       }
 
+      string ok = ( (dynamic)Invoke( "SettleNote", "extended-ok" ) ).Note;
+      Assert.Contains( "trial of 8,700 searches in 3.0 s at 8 searchers: 2,900 QPS against the settled 1,524 QPS, 47% apart (limit 10%)", ok );
+      Assert.Contains( "EXTENDED once", ok );
+      Assert.Contains( "p50 1.871 ms against the settled p50 1.870 ms", ok );
       Assert.Contains( "not extended, because the searches kept failing", (string)( (dynamic)Invoke( "SettleNote", "gave-up" ) ).Note );
-      Assert.Contains( "117% apart (limit 15%)", (string)( (dynamic)Invoke( "SettleNote", "extended-ok" ) ).Note );
+   }
+
+   /// <summary>
+   /// The run's method notes quote the runner's own lengths and limits, and none of the words
+   /// the consolidation reads as a target flag.
+   /// </summary>
+   [Fact]
+   public void MethodNotes_QuoteTheRunnerLengths()
+   {
+      string[] notes = (string[])Invoke( "MethodNotes", 20 );
+      string all = string.Join( " ", notes );
+      Assert.Contains( "for 30 s each", all );
+      Assert.Contains( "for at least 15 s and at least 20 searches", all );
+      Assert.Contains( "within 10%", all );
+      Assert.Contains( "at least 30 s, until its windows agree, at most 120 s", all );
+      Assert.DoesNotContain( "NOT settled", all );
+      Assert.DoesNotContain( "\u2014", all );
    }
 
    /// <summary>
    /// Every timed default@1 search is a latency sample: the searches sent between "timing
    /// default@1" and the next warm-up equal the samples, QPS@1 is those samples over the same
    /// window's seconds, and no search is sent outside a warm-up or a timed window (no separate
-   /// latency burst).
+   /// latency burst). With no warm-up time the warm-up is exactly the --warmup count.
    /// </summary>
    [Fact]
    public async Task LatencyAndQps1_ComeFromOneWindow()
    {
-      dynamic r = await ScenarioAsync( "PassesAsync", Args( "--seconds", "2", "--concurrency", "1,4", "--queries", "random:5", "--exact-seconds", "0" ), "fixed:1", null, false );
+      dynamic r = await ScenarioAsync( "PassesAsync", Args( "--seconds", "2", "--concurrency", "1,4", "--queries", "random:5", "--exact-seconds", "0" ), "fixed:1", null, false, 0.0 );
       string[] events = r.Events;
       string[] one = Record( r, "default@1" );
       string[] four = Record( r, "default@4" );
@@ -194,7 +290,7 @@ public class MeasurementTests
    [Fact]
    public async Task Qps1_OnlyWhenOneIsALevel()
    {
-      dynamic r = await ScenarioAsync( "PassesAsync", Args( "--seconds", "1", "--concurrency", "4", "--queries", "random:5", "--exact-seconds", "0" ), "fixed:1", null, false );
+      dynamic r = await ScenarioAsync( "PassesAsync", Args( "--seconds", "1", "--concurrency", "4", "--queries", "random:5", "--exact-seconds", "0" ), "fixed:1", null, false, 0.0 );
       Dictionary<int, double> qps = r.Qps;
       Assert.False( qps.ContainsKey( 1 ) );
       Assert.True( qps.ContainsKey( 4 ) );
@@ -209,7 +305,7 @@ public class MeasurementTests
    [Fact]
    public async Task Exact_IsATimeWindowCyclingTheQueries()
    {
-      dynamic r = await ScenarioAsync( "PassesAsync", Args( "--seconds", "1", "--concurrency", "1", "--queries", "random:5", "--exact-seconds", "2" ), "fixed:1", "fixed:1", false );
+      dynamic r = await ScenarioAsync( "PassesAsync", Args( "--seconds", "1", "--concurrency", "1", "--queries", "random:5", "--exact-seconds", "2" ), "fixed:1", "fixed:1", false, 0.0 );
       string[] exact = Record( r, "exact" );
       int samples = r.ExactQueries;
       Assert.True( samples >= 200, $"exact timed {samples} searches in 2 s of 1 ms searches" );
@@ -226,7 +322,7 @@ public class MeasurementTests
    [Fact]
    public async Task Exact_ThinWindowFlagged()
    {
-      dynamic r = await ScenarioAsync( "PassesAsync", Args( "--seconds", "1", "--concurrency", "1", "--queries", "random:20", "--exact-seconds", "1" ), "fixed:1", "fixed:150", false );
+      dynamic r = await ScenarioAsync( "PassesAsync", Args( "--seconds", "1", "--concurrency", "1", "--queries", "random:20", "--exact-seconds", "1" ), "fixed:1", "fixed:150", false, 0.0 );
       string[] flags = r.Flags;
       Assert.Contains( flags, f => f.StartsWith( "WARNING: exact timed only", StringComparison.Ordinal ) );
       Assert.Contains( flags, f => f.StartsWith( "WARNING: exact answered", StringComparison.Ordinal ) && f.Contains( "of 20 queries", StringComparison.Ordinal ) );
@@ -240,7 +336,7 @@ public class MeasurementTests
    [Fact]
    public async Task TwoSpeedWindow_Flagged()
    {
-      dynamic r = await ScenarioAsync( "PassesAsync", Args( "--seconds", "2", "--concurrency", "1", "--queries", "random:5", "--exact-seconds", "0" ), "bimodal:20", null, false );
+      dynamic r = await ScenarioAsync( "PassesAsync", Args( "--seconds", "2", "--concurrency", "1", "--queries", "random:5", "--exact-seconds", "0" ), "bimodal:20", null, false, 0.0 );
       Assert.Contains( (string[])r.Flags, f => f.StartsWith( "WARNING: default@1 p50", StringComparison.Ordinal ) && f.Contains( "x its mean", StringComparison.Ordinal ) );
    }
 
@@ -264,8 +360,8 @@ public class MeasurementTests
    }
 
    /// <summary>
-   /// Settled means the p50s of the last three windows lie within 5% of the lowest; two windows
-   /// are not enough, and a steady 4% drift per window is not settled.
+   /// Settled means the figures of the last three windows lie within 5% of the lowest; two
+   /// windows are not enough, and a steady 4% drift per window is not settled.
    /// </summary>
    [Fact]
    public void IsSettled_Rules()
@@ -280,87 +376,63 @@ public class MeasurementTests
    }
 
    /// <summary>
-   /// A latency that falls 6, 5, 4, 3 ms and then holds at 2 ms settles only once three windows of
-   /// 100 searches sit at the floor: not before 900 searches, and with the last windows at the
-   /// floor. Why the floor is checked against the first window and not as 2 ms: on a busy box a
-   /// 2 ms timer wait takes nearer 3 ms, and that must not fail the test.
+   /// The rehearsal covers every pass type in the target's order, each for at least its length and
+   /// at its own concurrency (4 searchers in flight for default@4); a target whose default search
+   /// fails every time is not timed at all.
    /// </summary>
    [Fact]
-   public async Task Settle_WaitsUntilLatencyStopsFalling()
+   public async Task Rehearsal_EveryPassTypeAtItsConcurrencyAndFailsLoud()
    {
-      dynamic r = await ScenarioAsync( "PrepareAsync", Args( "--concurrency", "1", "--queries", "random:5", "--exact-seconds", "1" ), "decay", 0.3, 60.0 );
-      Assert.Null( (string?)r.Error );
-      Assert.True( (bool)r.Settled, (string)r.SettleNote );
-      Assert.True( (int)r.SettleSearches >= 900, $"settled after {r.SettleSearches} searches, before the latency stopped falling" );
-      double[] p50s = r.WindowP50s;
-      Assert.True( p50s[0] > 5.0, $"first window p50 {p50s[0]}" );
-      Assert.All( p50s.TakeLast( 3 ), p => Assert.True( p >= 1.9 && p <= 0.6 * p50s[0], $"last windows {string.Join( ", ", p50s.TakeLast( 3 ) )} ms are not at the 2 ms floor (first window {p50s[0]} ms)" ) );
-      Assert.StartsWith( "Settle: settled after", (string)r.SettleNote );
-   }
-
-   /// <summary>
-   /// A latency that never holds still stops at the cap, is reported as not settled, and its note
-   /// is a WARNING.
-   /// </summary>
-   [Fact]
-   public async Task Settle_StopsAtTheCapAndWarns()
-   {
-      dynamic r = await ScenarioAsync( "PrepareAsync", Args( "--concurrency", "1", "--queries", "random:5", "--exact-seconds", "1" ), "alternate", 0.3, 2.0 );
-      Assert.False( (bool)r.Settled );
-      Assert.Contains( "cap", (string)r.StoppedBecause );
-      Assert.InRange( (double)r.SettleSeconds, 2.0, 3.0 );
-      Assert.StartsWith( "WARNING: latency had NOT settled", (string)r.SettleNote );
-   }
-
-   /// <summary>
-   /// The rehearsal covers every pass type in the target's order, each for at least its length,
-   /// all before the settle; a target whose default search fails every time is not timed at all.
-   /// </summary>
-   [Fact]
-   public async Task Rehearsal_EveryPassTypeAndFailsLoud()
-   {
-      dynamic ok = await ScenarioAsync( "PrepareAsync", Args( "--concurrency", "1,4", "--queries", "random:5", "--exact-seconds", "1" ), "fixed:1", 0.4, 10.0 );
+      dynamic ok = await ScenarioAsync( "PrepareAsync", Args( "--concurrency", "1,4", "--queries", "random:5", "--exact-seconds", "1" ), "fixed:1", 0.4 );
       string[] rehearsals = ok.Rehearsals;
       Assert.Equal( new[] { "default@1", "default@4", "exact" }, rehearsals.Select( x => x.Split( '|' )[0] ).OrderBy( p => p ) );
       Assert.All( rehearsals, x => Assert.True( double.Parse( x.Split( '|' )[1], CultureInfo.InvariantCulture ) >= 0.4 && int.Parse( x.Split( '|' )[2], CultureInfo.InvariantCulture ) > 0, x ) );
       string[] events = ok.Events;
-      Assert.True( Array.FindLastIndex( events, e => e.Contains( ": rehearsal of ", StringComparison.Ordinal ) ) < Array.FindIndex( events, e => e.Contains( ": settling,", StringComparison.Ordinal ) ) );
-      dynamic failed = await ScenarioAsync( "PrepareAsync", Args( "--concurrency", "1,4", "--queries", "random:5", "--exact-seconds", "1" ), "fail", 0.4, 10.0 );
+      int[] inFlight = ok.InFlight;
+      foreach( string pass in new[] { "default@1", "default@4", "exact" } )
+      {
+         int line = Array.FindIndex( events, e => e.Contains( $": rehearsal of {pass}, ", StringComparison.Ordinal ) );
+         int end = Array.FindIndex( events, line + 1, e => e.StartsWith( "LOG ", StringComparison.Ordinal ) );
+         end = end < 0 ? events.Length : end;
+         Assert.Equal( pass == "default@4" ? 4 : 1, Enumerable.Range( line + 1, end - line - 1 ).Max( i => inFlight[i] ) );
+      }
+
+      dynamic failed = await ScenarioAsync( "PrepareAsync", Args( "--concurrency", "1,4", "--queries", "random:5", "--exact-seconds", "1" ), "fail", 0.4 );
       Assert.Contains( "every rehearsal search failed", (string)failed.Error );
-      Assert.DoesNotContain( (string[])failed.Events, e => e.Contains( ": settling,", StringComparison.Ordinal ) );
    }
 
    /// <summary>
-   /// Pass records chain: the first timed pass ran after the settle, every later one after the
+   /// Pass records chain: the first timed pass ran after the rehearsal, every later one after the
    /// pass before it in the run order, and each window starts after the previous one ended.
    /// </summary>
    [Fact]
    public async Task PassRecords_ChainInRunOrder()
    {
-      dynamic r = await ScenarioAsync( "PassesAsync", Args( "--seconds", "1", "--concurrency", "1,2", "--queries", "random:5", "--exact-seconds", "1" ), "fixed:1", "fixed:1", true );
+      dynamic r = await ScenarioAsync( "PassesAsync", Args( "--seconds", "1", "--concurrency", "1,2", "--queries", "random:5", "--exact-seconds", "1" ), "fixed:1", "fixed:1", true, 0.3 );
       string[] order = r.PassOrder;
       string[][] records = ( (string[])r.Passes ).Select( p => p.Split( '|' ) ).ToArray();
       Assert.Equal( order, records.Select( p => p[0] ) );
-      Assert.Equal( new[] { "settle" }.Concat( order.Take( order.Length - 1 ) ), records.Select( p => p[1] ) );
+      Assert.Equal( new[] { "rehearsal" }.Concat( order.Take( order.Length - 1 ) ), records.Select( p => p[1] ) );
       for( int i = 0; i < records.Length; i++ )
       {
          long start = long.Parse( records[i][2], CultureInfo.InvariantCulture );
          long end = long.Parse( records[i][3], CultureInfo.InvariantCulture );
          Assert.True( end > start, $"{records[i][0]} ended before it started" );
-         string before = i == 0 ? "settle" : records[i - 1][0];
+         string before = i == 0 ? "rehearsal" : records[i - 1][0];
          Assert.True( i == 0 || start >= long.Parse( records[i - 1][3], CultureInfo.InvariantCulture ), $"{records[i][0]} started before {before} ended" );
          Assert.True( int.Parse( records[i][5], CultureInfo.InvariantCulture ) > 0, $"{records[i][0]} timed no searches" );
       }
    }
 
    /// <summary>
-   /// The whole flow through TargetRunner with the benchmark's own 5 s rehearsal: every pass type
-   /// is rehearsed for at least 5 s and the latency settles before the first timed pass, every
-   /// timed pass still follows its own warm-up, and results.json carries the rehearsal, settle and
-   /// per-pass notes.
+   /// The whole flow through TargetRunner: every pass type is rehearsed for at least its length,
+   /// every timed pass follows its own warm-up and its own settle check, and results.json carries
+   /// the rehearsal, one settle note naming every pass, and the per-pass notes. Why the verdict
+   /// is not asserted here: 1 ms fake searches on a loaded test box can fairly fail the check;
+   /// the verdicts have their own tests with latencies far apart.
    /// </summary>
    [Fact]
-   public async Task Target_RehearsesSettlesThenTimes()
+   public async Task Target_RehearsesThenWarmsAndChecksEveryPass()
    {
       string folder = Path.Combine( AppContext.BaseDirectory, "measurement-tests", Guid.NewGuid().ToString( "N" ) );
       try
@@ -371,16 +443,20 @@ public class MeasurementTests
          string[] order = r.PassOrder;
          int firstTiming = Array.FindIndex( events, e => e.Contains( ": timing ", StringComparison.Ordinal ) );
          Assert.True( Array.FindLastIndex( events, e => e.Contains( ": rehearsal of ", StringComparison.Ordinal ) ) < firstTiming );
-         Assert.True( Array.FindIndex( events, e => e.Contains( ": settled after", StringComparison.Ordinal ) ) < firstTiming );
-         Assert.Equal( order.Length, events.Count( e => WARMUP_START.IsMatch( e ) ) );
+         Assert.Equal( order.Length, events.Count( e => WARMUP_START.IsMatch( e ) && !e.Contains( "(again", StringComparison.Ordinal ) ) );
+         Assert.All( order, pass => Assert.True(
+            Array.FindIndex( events, e => e.Contains( $": settle check before {pass}: trial, ", StringComparison.Ordinal ) ) < Array.FindIndex( events, e => e.EndsWith( $"timing {pass}", StringComparison.Ordinal ) ), pass ) );
          string[] notes = r.Notes;
          string rehearsal = Assert.Single( notes, n => n.StartsWith( "Rehearsal before any timed pass", StringComparison.Ordinal ) );
          Dictionary<string, double> rehearsed = REHEARSED.Matches( rehearsal ).ToDictionary( m => m.Groups[1].Value, m => double.Parse( m.Groups[2].Value, CultureInfo.InvariantCulture ) );
          Assert.Equal( order.OrderBy( p => p ), rehearsed.Keys.OrderBy( p => p ) );
-         Assert.All( rehearsed, p => Assert.True( p.Value >= 5.0, $"{p.Key} rehearsed {p.Value} s" ) );
-         Assert.Single( notes, n => n.StartsWith( "Settle: settled after", StringComparison.Ordinal ) );
+         Assert.All( rehearsed, p => Assert.True( p.Value >= 0.4, $"{p.Key} rehearsed {p.Value} s" ) );
+         string settle = Assert.Single( notes, n => n.StartsWith( "Settle: ", StringComparison.Ordinal ) || n.Contains( "NOT settled", StringComparison.Ordinal ) );
+         Assert.True( settle.StartsWith( "Settle: settled before every timed pass", StringComparison.Ordinal )
+            || settle.StartsWith( "WARNING: latency had NOT settled when timing began for ", StringComparison.Ordinal ), settle );
+         Assert.All( order, pass => Assert.Contains( $"{pass}: warm-up ", settle ) );
          Assert.Equal( order, notes.Where( n => n.StartsWith( "Pass ", StringComparison.Ordinal ) ).Select( n => n.Split( ' ' )[1] ) );
-         Assert.StartsWith( $"Pass {order[0]} after settle:", notes.First( n => n.StartsWith( "Pass ", StringComparison.Ordinal ) ) );
+         Assert.StartsWith( $"Pass {order[0]} after rehearsal:", notes.First( n => n.StartsWith( "Pass ", StringComparison.Ordinal ) ) );
          Assert.Equal( 0, (int?)r.WarmupErrors );
          using JsonDocument json = JsonDocument.Parse( (string)r.Json );
          string[] written = json.RootElement.GetProperty( "targets" )[0].GetProperty( "notes" ).EnumerateArray().Select( n => n.GetString()! ).ToArray();
@@ -445,21 +521,21 @@ public class MeasurementTests
    }
 
    /// <summary>MeasurementScenarios.TrialRules.</summary>
-   /// <param name="p50s">Window p50s.</param>
-   /// <param name="settled">Settled p50.</param>
-   /// <param name="trial">Trial p50.</param>
-   /// <returns>Settled p50 and 1 when they agree.</returns>
-   private static double[] Rules( double[] p50s, double settled, double trial )
+   /// <param name="figures">Window figures.</param>
+   /// <param name="settled">Settled figure.</param>
+   /// <param name="trial">Trial figure.</param>
+   /// <returns>Settled figure and 1 when they agree.</returns>
+   private static double[] Rules( double[] figures, double settled, double trial )
    {
-      return (double[])Invoke( "TrialRules", p50s, settled, trial );
+      return (double[])Invoke( "TrialRules", figures, settled, trial );
    }
 
    /// <summary>MeasurementScenarios.IsSettled.</summary>
-   /// <param name="p50s">Window p50s.</param>
+   /// <param name="figures">Window figures.</param>
    /// <returns>True when settled.</returns>
-   private static bool IsSettled( params double[] p50s )
+   private static bool IsSettled( params double[] figures )
    {
-      return (bool)Invoke( "IsSettled", (object)p50s );
+      return (bool)Invoke( "IsSettled", (object)figures );
    }
 
    /// <summary>

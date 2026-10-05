@@ -26,7 +26,7 @@ public sealed partial class ConsolidateTests : IDisposable
    {
       "Report/RunResult.cs", "Report/RunConditions.cs", "Report/ResultJson.cs", "Report/ConsolidatedMarkdown.cs", "Report/ConsolidateCommand.cs",
       "Stats/ConsolidateMath.cs", "Stats/ConsolidatedReport.cs", "Stats/Consolidator.cs", "Stats/ConsolidateFlags.cs", "Stats/CpuSet.cs", "Stats/BenchMath.cs",
-      "Stats/ConsolidateBands.cs", "Stats/ConsolidateFraming.cs", "Stats/ConsolidateIdentity.cs", "Stats/ConsolidateEngineNotes.cs", "Stats/SegmentLayout.cs",
+      "Stats/ConsolidateBands.cs", "Stats/ConsolidateFraming.cs", "Stats/ConsolidateIdentity.cs", "Stats/ConsolidateEngineNotes.cs", "Stats/SegmentLayout.cs", "Stats/ConsolidateWithheld.cs",
    };
 
    private readonly string _root;

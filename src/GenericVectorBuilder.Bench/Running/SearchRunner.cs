@@ -12,27 +12,33 @@ namespace GenericVectorBuilder.Bench.Running;
 
 /// <summary>
 /// Searches one loaded target with the shared queries and measures it in timed windows.
-/// Preparation (<see cref="PrepareAsync"/>), untimed: a rehearsal of every pass type for at least
-/// <see cref="REHEARSAL_TIME"/> each, then a settle that repeats default searches until their
-/// latency stops moving. Timed passes (<see cref="RunAsync"/>), in a seeded random order
-/// (<see cref="RunOrder"/>), each after its own warm-up: "default@1" (one searcher for the set
-/// seconds; every search's latency gives p50/p95/p99 and the completed count gives QPS@1, its
-/// first round gives recall and nDCG), "default@N" (N searchers for the set seconds) and "exact"
-/// (the engine's exact mode, one searcher for the exact seconds, cycling the queries).
-/// Why one window for latency and QPS@1: when p50 came from a separate 200-search burst, the
-/// burst and the throughput window ran at different moments (and clock speeds), so p50 and
-/// 1000/QPS@1 described different seconds and the pass order moved them.
-/// Why the rehearsal: a per-pass warm-up of 20 searches does not get the client's own code for
-/// that pass compiled or its connections pooled, so whichever pass ran first paid for it.
-/// Why the settle: engines that compile at run time (the JVM ones) keep getting faster for a while
-/// after they start; timing them seconds after start measured the warm-up, not the engine.
-/// Why the settle check: windows of 100 searches last a fraction of a second on a fast engine, so
-/// three of them can agree while the engine is still on its way down (the review saw Elasticsearch
-/// "settle" at 2.9 ms and then time 1.35 ms). Right before the first timed pass a short trial of
-/// default searches must agree with the settled p50 within <see cref="TRIAL_TOLERANCE"/>; if it
-/// does not (or the settle never settled), the settle is extended once, for at least
-/// <see cref="EXTENSION_MINIMUM"/> and at most <see cref="EXTENSION_CAP"/>, a second trial is
-/// taken, and both are recorded; a target that still disagrees is flagged as not settled.
+/// Preparation (<see cref="PrepareAsync"/>), untimed: a rehearsal of every pass type, each at its
+/// own concurrency, for at least <see cref="REHEARSAL_TIME"/>. Timed passes (<see cref="RunAsync"/>),
+/// in a seeded random order (<see cref="RunOrder"/>): "default@1" (one searcher for the set seconds;
+/// every search's latency gives p50/p95/p99 and the completed count gives QPS@1, its first round
+/// gives recall and nDCG), "default@N" (N searchers for the set seconds) and "exact" (the engine's
+/// exact mode, one searcher for the exact seconds, cycling the queries).
+/// Right before every timed pass, untimed: its warm-up, which is also its settle: the pass's own
+/// search at the pass's own concurrency for at least <see cref="WarmupTime"/> (and at least
+/// --warmup searches), its completions cut into windows of at least <see cref="WindowTime"/> and
+/// <see cref="SETTLE_WINDOW"/> searches. After a preparation the settle check follows: a short
+/// trial of that same pass (<see cref="TrialTime"/>, same search, same searchers). Its figure (p50
+/// with one searcher, QPS with several, the number the pass reports) must lie within
+/// <see cref="TRIAL_TOLERANCE"/> of the warm-up's settled figure (the median of its last
+/// <see cref="SETTLE_WINDOWS"/> windows, which must agree within <see cref="SETTLE_TOLERANCE"/>).
+/// When it does not, the warm-up is extended once (at least <see cref="ExtensionMinimum"/>, until
+/// its windows agree, at most <see cref="ExtensionCap"/>), a second trial is taken, both are
+/// recorded, the warm-up is announced and run again, and a pass that still disagrees flags its
+/// target as not settled.
+/// Why time-based and at the pass's own concurrency: the v5 runs timed Vespa at 914 and 977 QPS@8
+/// when default@8 ran first and at 1550 after a 60 s exact pass (engine CPU per search 4.3 against
+/// 2.5 ms). Its 20 warm-up searches at 8 searchers lasted milliseconds, and its settle ran one
+/// searcher at a time, so nothing before a first default@8 pass had loaded the engine the way the
+/// pass does. The settle also declared Vespa, Elasticsearch and OpenSearch settled at a p50 13 to
+/// 51% above the timed one: windows of 100 searches last a fraction of a second on a fast engine.
+/// Why the rehearsal: a per-pass warm-up alone does not get the client's own code for every pass
+/// compiled or its connections pooled before the first timed pass, so whichever pass ran first
+/// paid for it.
 /// Latency is wall-clock time around the sink's SearchAsync, measured by the client: it includes
 /// the network hop and the driver, which is what an application sees.
 /// </summary>
@@ -43,47 +49,62 @@ public sealed class SearchRunner
    /// <summary>Fewest timed searches a latency window should give; fewer is flagged, because a p99 of 20 samples is just the slowest one.</summary>
    public const int MIN_LATENCY_SAMPLES = 200;
 
-   /// <summary>Searches in one settle window (the p50 is taken over each window).</summary>
+   /// <summary>Fewest searches a settle window holds; a window shorter in searches is merged with the next.</summary>
    public const int SETTLE_WINDOW = 100;
 
-   /// <summary>Consecutive settle windows whose p50s must agree.</summary>
+   /// <summary>Consecutive settle windows whose figures must agree.</summary>
    public const int SETTLE_WINDOWS = 3;
 
-   /// <summary>Most the p50s of those windows may differ, as a share of the lowest.</summary>
+   /// <summary>Most the figures of those windows may differ, as a share of the lowest.</summary>
    public const double SETTLE_TOLERANCE = 0.05;
 
    /// <summary>A p50 above this many times the mean of the same window is flagged.</summary>
    public const double SKEW_LIMIT = 1.25;
 
-   /// <summary>Name of the settle step, recorded as what ran before the first timed pass.</summary>
-   public const string SETTLE_STEP = "settle";
-
-   /// <summary>Default rehearsal length per pass type.</summary>
-   public static readonly TimeSpan REHEARSAL_TIME = TimeSpan.FromSeconds( 5 );
-
-   /// <summary>Default longest the settle may run.</summary>
-   public static readonly TimeSpan SETTLE_CAP = TimeSpan.FromSeconds( 120 );
-
-   /// <summary>Most the settled p50 may differ from the trial's p50, as a share of the trial's.</summary>
-   public const double TRIAL_TOLERANCE = 0.15;
+   /// <summary>Name of the step before the first timed pass, recorded as what ran before it.</summary>
+   public const string REHEARSAL_STEP = "rehearsal";
 
    /// <summary>Name of the settle check, in the log and the notes.</summary>
    public const string CHECK_STEP = "settle check";
 
-   /// <summary>Default length of the trial right before the first timed pass.</summary>
-   public static readonly TimeSpan TRIAL_TIME = TimeSpan.FromSeconds( 2 );
+   /// <summary>
+   /// Most the warm-up's settled figure may differ from the trial's figure, as a share of the
+   /// trial's. Why 10%: the v5 settle passed figures 13% to 51% off the timed ones at 15%.
+   /// </summary>
+   public const double TRIAL_TOLERANCE = 0.10;
 
-   /// <summary>Default longest the one extension of the settle may run.</summary>
+   /// <summary>Default rehearsal length per pass type.</summary>
+   public static readonly TimeSpan REHEARSAL_TIME = TimeSpan.FromSeconds( 30 );
+
+   /// <summary>Default shortest warm-up before every timed pass.</summary>
+   public static readonly TimeSpan WARMUP_TIME = TimeSpan.FromSeconds( 15 );
+
+   /// <summary>
+   /// Default shortest settle window. Why 2 s: a QPS read over one second at 8 searchers moves a
+   /// few percent with a single garbage collection, which is noise, not warm-up.
+   /// </summary>
+   public static readonly TimeSpan WINDOW_TIME = TimeSpan.FromSeconds( 2 );
+
+   /// <summary>
+   /// Default longest one warm-up may run: it ends at its time once it has also sent the --warmup
+   /// minimum of searches, or here when an engine is too slow to send them.
+   /// </summary>
+   public static readonly TimeSpan SETTLE_CAP = TimeSpan.FromSeconds( 120 );
+
+   /// <summary>Default length of the trial right before a timed pass.</summary>
+   public static readonly TimeSpan TRIAL_TIME = TimeSpan.FromSeconds( 3 );
+
+   /// <summary>Default longest the one extension of a warm-up may run.</summary>
    public static readonly TimeSpan EXTENSION_CAP = TimeSpan.FromSeconds( 120 );
 
    /// <summary>
-   /// Default shortest the extension runs. Why: the windows can agree within a second on a fast
+   /// Default shortest the extension runs. Why: the windows can agree within seconds on a fast
    /// engine, and an extension that stops as soon as they do gives a JVM engine no more time.
    /// </summary>
    public static readonly TimeSpan EXTENSION_MINIMUM = TimeSpan.FromSeconds( 30 );
 
    private const int GIVE_UP_FAILURES = 20;
-   private static readonly TimeSpan WARMUP_BUDGET = TimeSpan.FromSeconds( 60 );
+   private static readonly TimeSpan SETTLE_POLL = TimeSpan.FromMilliseconds( 100 );
 
    private readonly PipelineData _data;
    private readonly QuerySet _queries;
@@ -101,7 +122,7 @@ public sealed class SearchRunner
    /// <param name="data">Loaded rows (for exact similarities and file paths).</param>
    /// <param name="queries">Queries.</param>
    /// <param name="truth">Exact answers.</param>
-   /// <param name="options">Options (top, concurrency, seconds, exact seconds, warm-up, timeouts).</param>
+   /// <param name="options">Options (top, concurrency, seconds, exact seconds, warm-up searches, timeouts).</param>
    /// <param name="runSeed">The run's seed; with the target's name it fixes the pass order.</param>
    public SearchRunner( PipelineData data, QuerySet queries, TruthSet truth, BenchOptions options, int runSeed )
    {
@@ -125,35 +146,41 @@ public sealed class SearchRunner
    /// <returns>Hits, best first.</returns>
    public delegate Task<IReadOnlyList<SearchHit>> SearchCall( float[] vector, int top, CancellationToken ct );
 
-   /// <summary>
-   /// Rehearsal length per pass type. Why settable: tests shorten it; the benchmark never does.
-   /// </summary>
+   /// <summary>Rehearsal length per pass type. Why settable: tests shorten it; the benchmark uses the default.</summary>
    public TimeSpan RehearsalTime { get; init; } = REHEARSAL_TIME;
 
    /// <summary>
-   /// Longest the settle may run. Why settable: tests shorten it; the benchmark never does.
+   /// Shortest warm-up before every timed pass. Why settable: the benchmark can be told another
+   /// length, and tests shorten it; zero leaves only the --warmup count of searches (no windows,
+   /// so a settle check after it extends).
    /// </summary>
+   public TimeSpan WarmupTime { get; init; } = WARMUP_TIME;
+
+   /// <summary>Shortest settle window. Why settable: tests shorten it; the benchmark uses the default.</summary>
+   public TimeSpan WindowTime { get; init; } = WINDOW_TIME;
+
+   /// <summary>Longest one warm-up may run. Why settable: tests shorten it; the benchmark uses the default.</summary>
    public TimeSpan SettleCap { get; init; } = SETTLE_CAP;
 
-   /// <summary>Trial length. Why settable: tests shorten it; the benchmark never does.</summary>
+   /// <summary>Trial length. Why settable: tests shorten it; the benchmark uses the default.</summary>
    public TimeSpan TrialTime { get; init; } = TRIAL_TIME;
 
-   /// <summary>Longest the extension may run. Why settable: tests shorten it; the benchmark never does.</summary>
+   /// <summary>Longest the extension may run. Why settable: tests shorten it; the benchmark uses the default.</summary>
    public TimeSpan ExtensionCap { get; init; } = EXTENSION_CAP;
 
-   /// <summary>Shortest the extension runs. Why settable: tests shorten it; the benchmark never does.</summary>
+   /// <summary>Shortest the extension runs. Why settable: tests shorten it; the benchmark uses the default.</summary>
    public TimeSpan ExtensionMinimum { get; init; } = EXTENSION_MINIMUM;
 
    /// <summary>
    /// The untimed preparation of a target whose index is ready: a rehearsal of every pass type
-   /// (default at each concurrency, and exact) for <see cref="RehearsalTime"/> each, through the
-   /// same window code the timed passes use, then the settle.
+   /// (default at each concurrency, and exact), each at its own concurrency for
+   /// <see cref="RehearsalTime"/>, through the same window code the timed passes use.
    /// </summary>
    /// <param name="target">The target.</param>
    /// <param name="collection">Benchmark collection name.</param>
    /// <param name="log">Progress output.</param>
    /// <param name="ct">Cancellation.</param>
-   /// <returns>What the rehearsal and the settle did.</returns>
+   /// <returns>What the rehearsal did; the settle checks are added to it as the passes run.</returns>
    /// <exception cref="InvalidOperationException">Every default-search rehearsal search failed; the target cannot be timed.</exception>
    public async Task<Preparation> PrepareAsync( BenchTarget target, string collection, Action<string> log, CancellationToken ct )
    {
@@ -161,8 +188,9 @@ public sealed class SearchRunner
       var preparation = new Preparation();
       foreach( string pass in PassesFor( target.Name, exact != null ) )
       {
-         log( $"  {target.Name}: rehearsal of {pass}, {RehearsalTime.TotalSeconds:0.#} s untimed" );
-         SearchWindow window = await WindowAsync( pass == RunOrder.EXACT_PASS ? exact! : search, ConcurrencyOf( pass ), RehearsalTime, false, ct );
+         int concurrency = ConcurrencyOf( pass );
+         log( $"  {target.Name}: rehearsal of {pass}, {RehearsalTime.TotalSeconds:0.#} s untimed at {Searchers( concurrency )}" );
+         SearchWindow window = await WindowAsync( pass == RunOrder.EXACT_PASS ? exact! : search, concurrency, RehearsalTime, false, ct );
          preparation.AddRehearsal( new RehearsalRecord( pass, window.Seconds, window.Searches, window.Errors ), window.FirstError );
       }
 
@@ -171,45 +199,31 @@ public sealed class SearchRunner
          throw new InvalidOperationException( $"every rehearsal search failed (first: {preparation.FirstError ?? "none sent"}), so the target was not timed" );
       }
 
-      log( $"  {target.Name}: settling, one search at a time until the p50s of {SETTLE_WINDOWS} windows of {SETTLE_WINDOW} searches agree within {SETTLE_TOLERANCE:0%}, at most {SettleCap.TotalSeconds:0} s" );
-      preparation.Settle = await SettleAsync( search, SettleCap, TimeSpan.Zero, ct );
-      log( $"  {target.Name}: {( preparation.Settle.Settled ? "settled" : "NOT settled" )} after {preparation.Settle.Seconds:0.0} s and {preparation.Settle.Searches:N0} searches" );
       return preparation;
    }
 
    /// <summary>
-   /// Measures a target: every timed pass, in this target's seeded order, each after its own
-   /// warm-up. When a settle ran, the settle check (trial, and the one extension if needed) runs
-   /// after the first pass's warm-up, right before its timing; after an extension that warm-up is
-   /// announced and run again, so the quiet-box check and the warm-up still come right before
-   /// the timed pass.
+   /// Measures a target: every timed pass, in this target's seeded order, each right after its own
+   /// warm-up and, when a preparation ran, its own settle check (see the class summary). Without
+   /// a preparation each pass gets only its warm-up.
    /// </summary>
    /// <param name="target">The target.</param>
    /// <param name="collection">Benchmark collection name.</param>
    /// <param name="log">Progress output.</param>
    /// <param name="ct">Cancellation.</param>
-   /// <param name="preparation">The preparation that ran just before, or null when none did.</param>
+   /// <param name="preparation">The preparation that ran just before (the checks are added to it), or null when none did.</param>
    /// <returns>What was measured, the pass order and pass records, the warm-up tally and the flags.</returns>
    public async Task<SearchOutcome> RunAsync( BenchTarget target, string collection, Action<string> log, CancellationToken ct, Preparation? preparation = null )
    {
       ISink sink = target.Sink;
       var outcome = new SearchOutcome( new SearchReport { CountInTarget = await CountAsync( sink, collection, ct ) }, preparation );
       ( SearchCall search, SearchCall? exact ) = Calls( sink, collection );
-      string? previous = preparation == null ? null : SETTLE_STEP;
-      bool checkSettle = preparation?.Settle != null;
+      string? previous = preparation == null ? null : REHEARSAL_STEP;
       foreach( string pass in PassesFor( target.Name, exact != null ) )
       {
          SearchCall call = pass == RunOrder.EXACT_PASS ? exact! : search;
          int concurrency = ConcurrencyOf( pass );
-         log( $"  {target.Name}: warm-up before {pass}, {_options.Warmup} searches" );
-         outcome.Add( pass, await WarmUpAsync( call, concurrency, ct ), log, target.Name );
-         if( checkSettle && ( await CheckSettleAsync( search, preparation!, log, target.Name, ct ) ).Extension != null )
-         {
-            log( $"  {target.Name}: warm-up before {pass}, {_options.Warmup} searches (again, after the settle extension)" );
-            outcome.Add( pass, await WarmUpAsync( call, concurrency, ct ), log, target.Name );
-         }
-
-         checkSettle = false;
+         await ReadyAsync( pass, call, concurrency, outcome, log, target.Name, ct );
          log( $"  {target.Name}: timing {pass}" );
          outcome.PassOrder.Add( pass );
          await RunPassAsync( pass, call, concurrency, outcome, previous, log, target.Name, ct );
@@ -268,53 +282,100 @@ public sealed class SearchRunner
    }
 
    /// <summary>
-   /// True when the p50s of the last <see cref="SETTLE_WINDOWS"/> settle windows lie within
+   /// True when the figures of the last <see cref="SETTLE_WINDOWS"/> settle windows lie within
    /// <see cref="SETTLE_TOLERANCE"/> of each other (highest minus lowest, over the lowest).
    /// Why the spread of all three and not each step: three steps of 4% in one direction are a
    /// 12% drift, which is still warming up.
    /// </summary>
-   /// <param name="windowP50s">p50 of each settle window so far, oldest first.</param>
+   /// <param name="windowFigures">Figure (p50 or QPS) of each settle window so far, oldest first.</param>
    /// <returns>True when settled.</returns>
-   public static bool IsSettled( IReadOnlyList<double> windowP50s )
+   public static bool IsSettled( IReadOnlyList<double> windowFigures )
    {
-      if( windowP50s.Count < SETTLE_WINDOWS )
+      if( windowFigures.Count < SETTLE_WINDOWS )
       {
          return false;
       }
 
-      double[] last = windowP50s.Skip( windowP50s.Count - SETTLE_WINDOWS ).ToArray();
+      double[] last = windowFigures.Skip( windowFigures.Count - SETTLE_WINDOWS ).ToArray();
       double low = last.Min();
       return low > 0 && ( last.Max() - low ) / low < SETTLE_TOLERANCE;
    }
 
    /// <summary>
-   /// The settled p50: the median of the p50s of the last <see cref="SETTLE_WINDOWS"/> windows
-   /// (of fewer when fewer ran).
+   /// The settled figure: the median of the figures of the last <see cref="SETTLE_WINDOWS"/>
+   /// windows (of fewer when fewer ran).
    /// </summary>
-   /// <param name="windowP50s">p50 of each settle window, oldest first.</param>
-   /// <returns>The p50, ms, or null when no window completed.</returns>
-   public static double? SettledP50( IReadOnlyList<double> windowP50s )
+   /// <param name="windowFigures">Figure of each settle window, oldest first.</param>
+   /// <returns>The figure, or null when no window completed.</returns>
+   public static double? SettledFigure( IReadOnlyList<double> windowFigures )
    {
-      if( windowP50s.Count == 0 )
+      if( windowFigures.Count == 0 )
       {
          return null;
       }
 
-      List<double> last = windowP50s.Skip( Math.Max( 0, windowP50s.Count - SETTLE_WINDOWS ) ).OrderBy( p => p ).ToList();
+      List<double> last = windowFigures.Skip( Math.Max( 0, windowFigures.Count - SETTLE_WINDOWS ) ).OrderBy( p => p ).ToList();
       int middle = last.Count / 2;
       return last.Count % 2 == 1 ? last[middle] : ( last[middle - 1] + last[middle] ) / 2;
    }
 
    /// <summary>
-   /// True when the settled p50 lies within <see cref="TRIAL_TOLERANCE"/> of the trial's p50
-   /// (the difference over the trial's p50). False when either is missing.
+   /// True when the settled figure lies within <see cref="TRIAL_TOLERANCE"/> of the trial's
+   /// figure (the difference over the trial's figure). False when either is missing.
    /// </summary>
-   /// <param name="settledP50">Settled p50, ms.</param>
-   /// <param name="trialP50">Trial p50, ms.</param>
+   /// <param name="settled">Settled figure.</param>
+   /// <param name="trial">Trial figure.</param>
    /// <returns>True when they agree.</returns>
-   public static bool TrialAgrees( double? settledP50, double? trialP50 )
+   public static bool TrialAgrees( double? settled, double? trial )
    {
-      return TrialRecord.ApartOf( settledP50, trialP50 ) is double apart && apart <= TRIAL_TOLERANCE;
+      return TrialRecord.ApartOf( settled, trial ) is double apart && apart <= TRIAL_TOLERANCE;
+   }
+
+   /// <summary>
+   /// The figure a pass at this concurrency reports, as text: "p50 1.871 ms" for one searcher,
+   /// "1,524 QPS" for several.
+   /// </summary>
+   /// <param name="value">The figure.</param>
+   /// <param name="concurrency">Searchers.</param>
+   /// <returns>The text.</returns>
+   public static string FigureText( double value, int concurrency )
+   {
+      return concurrency == 1 ? $"p50 {value:0.000} ms" : $"{value:N0} QPS";
+   }
+
+   /// <summary>
+   /// "1 searcher" or "8 searchers".
+   /// </summary>
+   /// <param name="concurrency">Searchers.</param>
+   /// <returns>The text.</returns>
+   public static string Searchers( int concurrency )
+   {
+      return concurrency == 1 ? "1 searcher" : $"{concurrency} searchers";
+   }
+
+   /// <summary>
+   /// The method notes for the run's results: the rehearsal, and the warm-up and settle check
+   /// before every timed pass, with the lengths and limits the runner uses.
+   /// Why here: the review of 2026-10-04 found the run's method notes describing an older
+   /// method; kept next to the constants they quote, they change with the code.
+   /// </summary>
+   /// <param name="warmupSearches">The --warmup minimum of searches.</param>
+   /// <param name="warmupTime">Shortest warm-up, or null for <see cref="WARMUP_TIME"/>.</param>
+   /// <returns>The notes.</returns>
+   public static IReadOnlyList<string> DescribeMethod( int warmupSearches, TimeSpan? warmupTime = null )
+   {
+      double warm = ( warmupTime ?? WARMUP_TIME ).TotalSeconds;
+      return new[]
+      {
+         $"Preparation, untimed, before any timed pass: a rehearsal of every pass type at its own concurrency for {REHEARSAL_TIME.TotalSeconds:0} s each, through the same code the passes use.",
+         $"Warm-up and settle check, untimed, right before every timed pass: the pass's own search at the pass's own number of searchers for at least {warm:0.#} s and at least {warmupSearches} searches (at most {SETTLE_CAP.TotalSeconds:0} s), "
+            + $"read in windows of at least {WINDOW_TIME.TotalSeconds:0} s and {SETTLE_WINDOW} searches; then a {TRIAL_TIME.TotalSeconds:0} s trial of the same pass. The trial's figure (p50 with one searcher, QPS with several) must lie within {TRIAL_TOLERANCE:0%} "
+            + $"of the warm-up's settled figure (the median of its last {SETTLE_WINDOWS} windows, which must agree within {SETTLE_TOLERANCE:0%}); if not, the warm-up is extended once (at least {EXTENSION_MINIMUM.TotalSeconds:0} s, until its windows agree, at most {EXTENSION_CAP.TotalSeconds:0} s), "
+            + "a second trial is taken and the warm-up runs again before the pass. Each target's notes give every check, and a pass that still disagrees flags its target as unsettled. "
+            + "With machine control on, the check for a quiet box is made when the warm-up is announced, before it starts (a wait between the warm-up and the timed pass let the engine go cold), "
+            + $"so by the time the clock opens that check is as old as the warm-up and the trial (about {warm + TRIAL_TIME.TotalSeconds:0} s, more after an extension); each pass's conditions record that lead (quietCheckLeadSeconds). "
+            + "Failed untimed searches are counted per target (warmupErrors) and are not in the timed error counts.",
+      };
    }
 
    /// <summary>
@@ -410,6 +471,148 @@ public sealed class SearchRunner
    private static int ConcurrencyOf( string pass )
    {
       return pass != RunOrder.EXACT_PASS && RunOrder.TryParseDefault( pass, out int level ) ? level : 1;
+   }
+
+   /// <summary>
+   /// Brings the engine to a timed pass: the pass's warm-up and, after a preparation, its settle
+   /// check. After an extension the warm-up is announced and run again, so the quiet-box check
+   /// (made at the warm-up line) and the warm-up still come right before the timed pass.
+   /// </summary>
+   /// <param name="pass">Pass name.</param>
+   /// <param name="call">The search the pass times.</param>
+   /// <param name="concurrency">Searchers the pass uses.</param>
+   /// <param name="outcome">Outcome (warm-up tally; the check goes into its preparation).</param>
+   /// <param name="log">Progress output.</param>
+   /// <param name="name">Target name, for the log.</param>
+   /// <param name="ct">Cancellation.</param>
+   private async Task ReadyAsync( string pass, SearchCall call, int concurrency, SearchOutcome outcome, Action<string> log, string name, CancellationToken ct )
+   {
+      SettleResult warm = await WarmUpAsync( pass, call, concurrency, outcome, log, name, false, ct );
+      if( outcome.Preparation == null )
+      {
+         return;
+      }
+
+      SettleCheck check = await CheckAsync( pass, call, concurrency, warm, log, name, ct );
+      outcome.Preparation.Checks.Add( check );
+      if( check.Extension != null )
+      {
+         await WarmUpAsync( pass, call, concurrency, outcome, log, name, true, ct );
+      }
+   }
+
+   /// <summary>
+   /// One warm-up: announced (machine control holds the run at this line until the box is
+   /// quiet), then the pass's own search at the pass's own concurrency for at least
+   /// <see cref="WarmupTime"/> and at least --warmup searches, stopped by <see cref="SettleCap"/>
+   /// or when the searches keep failing.
+   /// </summary>
+   /// <param name="pass">Pass name.</param>
+   /// <param name="call">The search the pass times.</param>
+   /// <param name="concurrency">Searchers the pass uses.</param>
+   /// <param name="outcome">Outcome (warm-up tally).</param>
+   /// <param name="log">Progress output.</param>
+   /// <param name="name">Target name, for the log.</param>
+   /// <param name="again">True for the warm-up run again after a settle extension.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The warm-up read as a settle (its windows and figures).</returns>
+   private async Task<SettleResult> WarmUpAsync( string pass, SearchCall call, int concurrency, SearchOutcome outcome, Action<string> log, string name, bool again, CancellationToken ct )
+   {
+      string time = WarmupTime > TimeSpan.Zero ? $" and {WarmupTime.TotalSeconds:0.#} s at least, {Searchers( concurrency )}" : string.Empty;
+      log( $"  {name}: warm-up before {pass}, {_options.Warmup} searches{time}{( again ? " (again, after the settle extension)" : string.Empty )}" );
+      var plan = new SustainPlan( _options.Warmup, WarmupTime, SettleCap, false );
+      SettleSampler run = await SustainAsync( call, concurrency, plan, ct );
+      outcome.Add( pass, new WarmupResult( run.Sent, run.Errors, run.FirstError, run.Capped && run.Sent < _options.Warmup ), log, name );
+      return run.Result( plan );
+   }
+
+   /// <summary>
+   /// The settle check before one timed pass: a trial of that pass against the warm-up's settled
+   /// figure; when they disagree (or the warm-up's windows did not agree), the one extension of
+   /// the warm-up and a second trial. A warm-up that stopped because the searches kept failing is
+   /// not extended: more time does not fix a failing engine.
+   /// </summary>
+   /// <param name="pass">Pass name.</param>
+   /// <param name="call">The search the pass times.</param>
+   /// <param name="concurrency">Searchers the pass uses.</param>
+   /// <param name="settle">The warm-up, read as a settle.</param>
+   /// <param name="log">Progress output.</param>
+   /// <param name="name">Target name, for the log.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The check.</returns>
+   private async Task<SettleCheck> CheckAsync( string pass, SearchCall call, int concurrency, SettleResult settle, Action<string> log, string name, CancellationToken ct )
+   {
+      double? settled = SettledFigure( settle.WindowFigures );
+      log( $"  {name}: {CHECK_STEP} before {pass}: trial, {TrialTime.TotalSeconds:0.#} s at {Searchers( concurrency )}, against the warm-up's settled {( settled is double s ? FigureText( s, concurrency ) : "none (no full window)" )}" );
+      TrialRecord trial = await TrialAsync( call, concurrency, settled, ct );
+      log( $"  {name}: {CHECK_STEP} before {pass}: warm-up {( settle.Settled ? "windows agreed" : $"windows did not settle ({settle.StoppedBecause})" )}; {trial.Describe( "trial" )}" );
+      if( ( settle.Settled && trial.Agrees ) || settle.GaveUp )
+      {
+         return new SettleCheck( pass, settle, trial, null, null, settle.Settled && trial.Agrees );
+      }
+
+      log( $"  {name}: {CHECK_STEP} before {pass}: extending the warm-up once, at least {ExtensionMinimum.TotalSeconds:0.#} s and at most {ExtensionCap.TotalSeconds:0.#} s, until its windows agree" );
+      var plan = new SustainPlan( 0, ExtensionMinimum, ExtensionCap, true );
+      SettleResult extension = ( await SustainAsync( call, concurrency, plan, ct ) ).Result( plan );
+      TrialRecord retrial = await TrialAsync( call, concurrency, SettledFigure( extension.WindowFigures ), ct );
+      var check = new SettleCheck( pass, settle, trial, extension, retrial, extension.Settled && retrial.Agrees );
+      log( $"  {name}: {CHECK_STEP} before {pass}: extension ran {extension.Seconds:0.0} s and {extension.Searches:N0} searches; {retrial.Describe( "second trial" )}; {( check.Confirmed ? "confirmed" : "STILL NOT CONFIRMED" )}" );
+      return check;
+   }
+
+   /// <summary>
+   /// The trial: the pass's own search at the pass's own concurrency for <see cref="TrialTime"/>,
+   /// untimed for the results, through the same window code the timed passes use, read as the
+   /// pass reads it (p50 with one searcher, completed searches per second with several).
+   /// </summary>
+   /// <param name="call">The search the pass times.</param>
+   /// <param name="concurrency">Searchers the pass uses.</param>
+   /// <param name="settled">The settled figure it is compared with, or null.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The trial.</returns>
+   private async Task<TrialRecord> TrialAsync( SearchCall call, int concurrency, double? settled, CancellationToken ct )
+   {
+      SearchWindow window = await WindowAsync( call, concurrency, TrialTime, false, ct );
+      List<double> latencies = window.Latencies();
+      double? figure = latencies.Count == 0 || window.Seconds <= 0 ? null
+         : concurrency == 1 ? BenchMath.Percentile( latencies, 50 ) : latencies.Count / window.Seconds;
+      return new TrialRecord( concurrency, settled, figure, latencies.Count, window.Errors, window.Seconds );
+   }
+
+   /// <summary>
+   /// Keeps <paramref name="concurrency"/> searchers busy with one search until the plan says
+   /// stop: at least its minimum of searches and its minimum time, and, for an extension, until
+   /// the windows agree; never past its cap, and not once <see cref="GIVE_UP_FAILURES"/> searches
+   /// in a row failed. An extension looks at its windows every <see cref="SETTLE_POLL"/>.
+   /// Why searchers claim a search number before sending it: with no minimum time the run sends
+   /// exactly the minimum of searches, so a count-only warm-up stays a count.
+   /// </summary>
+   /// <param name="call">The search.</param>
+   /// <param name="concurrency">Searchers.</param>
+   /// <param name="plan">When to stop.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The searches, read into windows.</returns>
+   private async Task<SettleSampler> SustainAsync( SearchCall call, int concurrency, SustainPlan plan, CancellationToken ct )
+   {
+      var sampler = new SettleSampler( concurrency, WindowTime, GIVE_UP_FAILURES );
+      long claims = -1;
+      Task all = Task.WhenAll( Enumerable.Range( 0, concurrency ).Select( worker => Task.Run( async () =>
+      {
+         for( long i = Interlocked.Increment( ref claims ); sampler.Continues( i, plan ); i = Interlocked.Increment( ref claims ) )
+         {
+            ( _, double ms, string? error ) = await TimedAsync( call, (int)( i % _queries.Count ), ct );
+            sampler.Record( worker, ms, error );
+         }
+      }, ct ) ) );
+      while( plan.UntilSettled && !all.IsCompleted )
+      {
+         await Task.WhenAny( all, Task.Delay( SETTLE_POLL, ct ) );
+         sampler.Evaluate( false );
+      }
+
+      await all;
+      sampler.Evaluate( true );
+      return sampler;
    }
 
    /// <summary>
@@ -526,131 +729,10 @@ public sealed class SearchRunner
    }
 
    /// <summary>
-   /// The settle check right before the first timed pass: a trial of default searches against the
-   /// settled p50; when they disagree (or the settle had not settled), the one extension of the
-   /// settle and a second trial. Recorded in the preparation. A settle that stopped because the
-   /// searches kept failing is not extended: more time does not fix a failing engine.
-   /// </summary>
-   /// <param name="search">The default search.</param>
-   /// <param name="preparation">The preparation (its settle is checked; the check is stored in it).</param>
-   /// <param name="log">Progress output.</param>
-   /// <param name="name">Target name, for the log.</param>
-   /// <param name="ct">Cancellation.</param>
-   /// <returns>The check.</returns>
-   private async Task<SettleCheck> CheckSettleAsync( SearchCall search, Preparation preparation, Action<string> log, string name, CancellationToken ct )
-   {
-      SettleResult settle = preparation.Settle!;
-      TrialRecord trial = await TrialAsync( search, SettledP50( settle.WindowP50s ), ct );
-      log( $"  {name}: {CHECK_STEP}: {trial.Describe( "trial" )}" );
-      if( ( settle.Settled && trial.Agrees ) || settle.GaveUp )
-      {
-         return preparation.Check = new SettleCheck( trial, null, null, settle.Settled && trial.Agrees );
-      }
-
-      log( $"  {name}: {CHECK_STEP}: extending the settle once, at least {ExtensionMinimum.TotalSeconds:0} s and at most {ExtensionCap.TotalSeconds:0} s" );
-      SettleResult extension = await SettleAsync( search, ExtensionCap, ExtensionMinimum, ct );
-      TrialRecord retrial = await TrialAsync( search, SettledP50( extension.WindowP50s ), ct );
-      var check = new SettleCheck( trial, extension, retrial, extension.Settled && retrial.Agrees );
-      log( $"  {name}: {CHECK_STEP}: extension ran {extension.Seconds:0.0} s and {extension.Searches:N0} searches; {retrial.Describe( "second trial" )}; {( check.Confirmed ? "confirmed" : "STILL NOT CONFIRMED" )}" );
-      return preparation.Check = check;
-   }
-
-   /// <summary>
-   /// The trial: default searches one at a time for <see cref="TrialTime"/>, untimed for the
-   /// results, through the same window code the timed passes use.
-   /// </summary>
-   /// <param name="search">The default search.</param>
-   /// <param name="settledP50">The settled p50 it is compared with, or null.</param>
-   /// <param name="ct">Cancellation.</param>
-   /// <returns>The trial.</returns>
-   private async Task<TrialRecord> TrialAsync( SearchCall search, double? settledP50, CancellationToken ct )
-   {
-      SearchWindow window = await WindowAsync( search, 1, TrialTime, false, ct );
-      List<double> latencies = window.Latencies();
-      return new TrialRecord( settledP50, latencies.Count == 0 ? null : BenchMath.Percentile( latencies, 50 ), latencies.Count, window.Errors, window.Seconds );
-   }
-
-   /// <summary>
-   /// Repeats default searches one at a time, in windows of <see cref="SETTLE_WINDOW"/>, until
-   /// <see cref="IsSettled"/> (and at least <paramref name="minimum"/> has passed), the cap runs
-   /// out, or <see cref="GIVE_UP_FAILURES"/> searches in a row fail.
-   /// </summary>
-   /// <param name="search">The default search.</param>
-   /// <param name="cap">Longest it may run.</param>
-   /// <param name="minimum">Shortest it runs (zero for the first settle).</param>
-   /// <param name="ct">Cancellation.</param>
-   /// <returns>Whether it settled, how long it took, and the window p50s.</returns>
-   private async Task<SettleResult> SettleAsync( SearchCall search, TimeSpan cap, TimeSpan minimum, CancellationToken ct )
-   {
-      var p50s = new List<double>();
-      var block = new List<double>( SETTLE_WINDOW );
-      int searches = 0;
-      int errors = 0;
-      int failedInRow = 0;
-      string? first = null;
-      long start = Stopwatch.GetTimestamp();
-      while( ( !IsSettled( p50s ) || Stopwatch.GetElapsedTime( start ) < minimum ) && Stopwatch.GetElapsedTime( start ) < cap && failedInRow < GIVE_UP_FAILURES )
-      {
-         ( _, double ms, string? error ) = await TimedAsync( search, searches++ % _queries.Count, ct );
-         failedInRow = error == null ? 0 : failedInRow + 1;
-         if( error != null )
-         {
-            errors++;
-            first ??= error;
-            continue;
-         }
-
-         block.Add( ms );
-         if( block.Count == SETTLE_WINDOW )
-         {
-            p50s.Add( BenchMath.Percentile( block, 50 ) );
-            block.Clear();
-         }
-      }
-
-      bool gaveUp = failedInRow >= GIVE_UP_FAILURES;
-      string? stopped = IsSettled( p50s ) && !gaveUp ? null : gaveUp ? $"{GIVE_UP_FAILURES} searches in a row failed" : $"the {cap.TotalSeconds:0} s cap ran out";
-      return new SettleResult( stopped == null, Stopwatch.GetElapsedTime( start ).TotalSeconds, searches, errors, first, p50s, stopped, gaveUp );
-   }
-
-   /// <summary>
-   /// Untimed searches right before a timed pass, sent by as many searchers as the pass uses
-   /// (so a pass with 8 searchers starts with 8 warm connections), with the pass's own search.
-   /// Stops early after <see cref="WARMUP_BUDGET"/> so a slow engine cannot stall the run here.
-   /// </summary>
-   /// <param name="search">The search the pass will time.</param>
-   /// <param name="concurrency">Searchers the pass uses.</param>
-   /// <param name="ct">Cancellation.</param>
-   /// <returns>Searches sent, how many failed, the first failure, and whether time ran out.</returns>
-   private async Task<WarmupResult> WarmUpAsync( SearchCall search, int concurrency, CancellationToken ct )
-   {
-      int total = _options.Warmup;
-      int next = -1;
-      int sent = 0;
-      int errors = 0;
-      string? first = null;
-      long start = Stopwatch.GetTimestamp();
-      Task[] workers = Enumerable.Range( 0, Math.Min( concurrency, total ) ).Select( worker => Task.Run( async () =>
-      {
-         for( int i = Interlocked.Increment( ref next ); i < total && Stopwatch.GetElapsedTime( start ) < WARMUP_BUDGET; i = Interlocked.Increment( ref next ) )
-         {
-            ( _, _, string? error ) = await TimedAsync( search, i % _queries.Count, ct );
-            Interlocked.Increment( ref sent );
-            if( error != null )
-            {
-               Interlocked.Increment( ref errors );
-               Interlocked.CompareExchange( ref first, error, null );
-            }
-         }
-      }, ct ) ).ToArray();
-      await Task.WhenAll( workers );
-      return new WarmupResult( sent, errors, first, sent < total );
-   }
-
-   /// <summary>
    /// Runs <paramref name="concurrency"/> searchers back to back for <paramref name="duration"/>,
-   /// cycling the queries, and keeps every search's latency. Every timed pass and every
-   /// rehearsal goes through here, so the rehearsal compiles exactly the code that is timed.
+   /// cycling the queries, and keeps every search's latency. Every timed pass, every rehearsal
+   /// and every trial goes through here, so the rehearsal compiles exactly the code that is timed
+   /// and the trial reads a pass the way the pass is read.
    /// A scored window also keeps the first answer to each query and, if the duration ends before
    /// every query was sent once, runs on until it was, but never past twice the duration.
    /// A searcher that has not completed one search stops once <see cref="GIVE_UP_FAILURES"/>
@@ -765,6 +847,198 @@ public sealed class SearchRunner
 }
 
 /// <summary>
+/// When a sustained run of searches (a warm-up or an extension) stops.
+/// </summary>
+/// <param name="MinimumSearches">Searches it sends at least (unless the cap or the failures stop it).</param>
+/// <param name="MinimumTime">Time it runs at least.</param>
+/// <param name="Cap">Time it never runs past.</param>
+/// <param name="UntilSettled">True to keep going after both minimums until the last windows agree.</param>
+public sealed record SustainPlan( int MinimumSearches, TimeSpan MinimumTime, TimeSpan Cap, bool UntilSettled );
+
+/// <summary>
+/// The searches of one warm-up or extension, sorted by completion time into buckets of the
+/// window length per searcher, so the window figures can be read while the searchers run.
+/// Why buckets by time and not windows of a fixed count: on a fast engine 100 searches last a
+/// fraction of a second, and three such windows agreed while the engine was still speeding up.
+/// Why a window's figure is the pass's own number: a settle at 8 searchers is judged by the
+/// QPS@8 it would report, a settle at one searcher by its p50.
+/// </summary>
+public sealed class SettleSampler
+{
+   #region Data Members
+
+   private readonly int _concurrency;
+   private readonly TimeSpan _windowTime;
+   private readonly int _giveUp;
+   private readonly long _start;
+   private readonly List<List<double>>[] _buckets;
+   private readonly List<double> _figures = new();
+   private readonly List<double> _pending = new();
+   private int _pendingBuckets;
+   private int _merged;
+   private int _sent;
+   private int _errors;
+   private int _failedInRow;
+   private string? _firstError;
+   private long _stopTicks;
+   private int _capped;
+   private volatile bool _settled;
+
+   #endregion Data Members
+
+   #region Constructor
+
+   /// <summary>
+   /// Starts the clock of a run.
+   /// </summary>
+   /// <param name="concurrency">Searchers.</param>
+   /// <param name="windowTime">Shortest window (the bucket length).</param>
+   /// <param name="giveUp">Failures in a row after which the run stops.</param>
+   public SettleSampler( int concurrency, TimeSpan windowTime, int giveUp )
+   {
+      _concurrency = concurrency;
+      _windowTime = windowTime > TimeSpan.Zero ? windowTime : TimeSpan.FromMilliseconds( 1 );
+      _giveUp = giveUp;
+      _buckets = Enumerable.Range( 0, concurrency ).Select( _ => new List<List<double>>() ).ToArray();
+      _start = Stopwatch.GetTimestamp();
+   }
+
+   #endregion Constructor
+
+   #region Public Methods
+
+   /// <summary>Searches sent (completed and failed).</summary>
+   public int Sent => Volatile.Read( ref _sent );
+
+   /// <summary>Searches that failed.</summary>
+   public int Errors => Volatile.Read( ref _errors );
+
+   /// <summary>The first failure, or null.</summary>
+   public string? FirstError => Volatile.Read( ref _firstError );
+
+   /// <summary>True when the run stopped because the searches kept failing.</summary>
+   public bool GaveUp => Volatile.Read( ref _failedInRow ) >= _giveUp;
+
+   /// <summary>True when the cap stopped the run.</summary>
+   public bool Capped => Volatile.Read( ref _capped ) == 1;
+
+   /// <summary>Figure of each full window so far, oldest first.</summary>
+   public IReadOnlyList<double> Figures => _figures;
+
+   /// <summary>
+   /// Whether a searcher sends the search it claimed. The first "no" fixes the moment the run
+   /// stopped; only windows before it count, so the searchers trailing off do not lower a QPS.
+   /// </summary>
+   /// <param name="claim">The search number claimed, from 0.</param>
+   /// <param name="plan">When to stop.</param>
+   /// <returns>True to send it.</returns>
+   public bool Continues( long claim, SustainPlan plan )
+   {
+      TimeSpan elapsed = Stopwatch.GetElapsedTime( _start );
+      bool capped = elapsed >= plan.Cap;
+      bool more = !capped && !GaveUp && ( claim < plan.MinimumSearches || elapsed < plan.MinimumTime || ( plan.UntilSettled && !_settled ) );
+      if( !more && Interlocked.CompareExchange( ref _stopTicks, Math.Max( 1, elapsed.Ticks ), 0 ) == 0 && capped )
+      {
+         Volatile.Write( ref _capped, 1 );
+      }
+
+      return more;
+   }
+
+   /// <summary>
+   /// Records one search: a failure counts toward giving up, a success goes into the bucket of
+   /// its completion time.
+   /// </summary>
+   /// <param name="worker">The searcher.</param>
+   /// <param name="ms">Its latency.</param>
+   /// <param name="error">Its failure, or null.</param>
+   public void Record( int worker, double ms, string? error )
+   {
+      Interlocked.Increment( ref _sent );
+      if( error != null )
+      {
+         Interlocked.Increment( ref _errors );
+         Interlocked.Increment( ref _failedInRow );
+         Interlocked.CompareExchange( ref _firstError, error, null );
+         return;
+      }
+
+      Volatile.Write( ref _failedInRow, 0 );
+      int bucket = (int)( Stopwatch.GetElapsedTime( _start ).Ticks / _windowTime.Ticks );
+      List<List<double>> mine = _buckets[worker];
+      lock( mine )
+      {
+         while( mine.Count <= bucket )
+         {
+            mine.Add( new List<double>() );
+         }
+
+         mine[bucket].Add( ms );
+      }
+   }
+
+   /// <summary>
+   /// Turns the buckets that are complete into windows of at least <see cref="SearchRunner.SETTLE_WINDOW"/>
+   /// searches and refreshes whether the last windows agree. While searchers run, a bucket is
+   /// read one bucket after it ended (a search that completed at its end may still be on its
+   /// way into the list); at the end every bucket before the stop is read. Never called twice at once.
+   /// </summary>
+   /// <param name="final">True once every searcher has finished.</param>
+   public void Evaluate( bool final )
+   {
+      long stop = Volatile.Read( ref _stopTicks );
+      long now = Stopwatch.GetElapsedTime( _start ).Ticks;
+      int limit = stop > 0 ? (int)( stop / _windowTime.Ticks ) : (int)( now / _windowTime.Ticks ) - 1;
+      if( !final && stop > 0 )
+      {
+         limit = Math.Min( limit, (int)( now / _windowTime.Ticks ) - 1 );
+      }
+
+      for( int bucket = _merged; bucket < limit; bucket++ )
+      {
+         foreach( List<List<double>> worker in _buckets )
+         {
+            lock( worker )
+            {
+               _pending.AddRange( worker.Count > bucket ? worker[bucket] : Enumerable.Empty<double>() );
+            }
+         }
+
+         _pendingBuckets++;
+         if( _pending.Count >= SearchRunner.SETTLE_WINDOW )
+         {
+            _figures.Add( _concurrency == 1 ? BenchMath.Percentile( _pending, 50 ) : _pending.Count / ( _pendingBuckets * _windowTime.TotalSeconds ) );
+            _pending.Clear();
+            _pendingBuckets = 0;
+         }
+      }
+
+      _merged = Math.Max( _merged, limit );
+      _settled = SearchRunner.IsSettled( _figures );
+   }
+
+   /// <summary>
+   /// The run read as a settle: whether its last windows agreed, how long it ran, its searches,
+   /// its window figures, and why it did not settle.
+   /// </summary>
+   /// <param name="plan">The plan it ran under.</param>
+   /// <returns>The settle.</returns>
+   public SettleResult Result( SustainPlan plan )
+   {
+      bool settled = SearchRunner.IsSettled( _figures ) && !GaveUp;
+      string? why = settled ? null
+         : GaveUp ? $"{_giveUp} searches in a row failed"
+         : _figures.Count < SearchRunner.SETTLE_WINDOWS ? $"only {_figures.Count} full window{( _figures.Count == 1 ? string.Empty : "s" )}, fewer than {SearchRunner.SETTLE_WINDOWS}"
+         : plan.UntilSettled && Capped ? $"the {plan.Cap.TotalSeconds:0} s cap ran out"
+         : $"its last {SearchRunner.SETTLE_WINDOWS} windows differed by more than {SearchRunner.SETTLE_TOLERANCE:0%}";
+      double seconds = Stopwatch.GetElapsedTime( _start ).TotalSeconds;
+      return new SettleResult( settled, seconds, Sent, Errors, FirstError, _figures.ToArray(), why, GaveUp, _concurrency, _windowTime.TotalSeconds );
+   }
+
+   #endregion Public Methods
+}
+
+/// <summary>
 /// One window of searches: every searcher's latencies, the errors, the first answer to each
 /// query, and when it ran.
 /// Why per-searcher lists: the searchers add a sample after every search, and a shared list
@@ -848,7 +1122,7 @@ public sealed class SearchWindow
 /// says when it was taken, from how many searches, and what ran just before it.
 /// </summary>
 /// <param name="Name">Pass name, e.g. "default@1".</param>
-/// <param name="Previous">The timed pass that ran just before ("settle" for the first after a settle), or null.</param>
+/// <param name="Previous">The timed pass that ran just before ("rehearsal" for the first after a preparation), or null.</param>
 /// <param name="StartUtc">When its window started.</param>
 /// <param name="EndUtc">When its window ended.</param>
 /// <param name="Seconds">Window length in seconds.</param>
@@ -871,42 +1145,46 @@ public sealed record PassRecord( string Name, string? Previous, DateTime StartUt
 public sealed record RehearsalRecord( string Pass, double Seconds, int Searches, int Errors );
 
 /// <summary>
-/// How the settle went.
+/// A warm-up or an extension read as a settle.
 /// </summary>
-/// <param name="Settled">True when the window p50s agreed before the cap.</param>
+/// <param name="Settled">True when the figures of its last windows agreed.</param>
 /// <param name="Seconds">How long it ran.</param>
 /// <param name="Searches">Searches sent.</param>
 /// <param name="Errors">Searches that failed.</param>
 /// <param name="FirstError">The first failure, or null.</param>
-/// <param name="WindowP50s">p50 of each full window, ms, oldest first.</param>
-/// <param name="StoppedBecause">Why it stopped without settling, or null.</param>
+/// <param name="WindowFigures">Figure of each full window (p50 ms with one searcher, QPS with several), oldest first.</param>
+/// <param name="StoppedBecause">Why it did not settle, or null.</param>
 /// <param name="GaveUp">True when it stopped because the searches kept failing.</param>
-public sealed record SettleResult( bool Settled, double Seconds, int Searches, int Errors, string? FirstError, IReadOnlyList<double> WindowP50s, string? StoppedBecause, bool GaveUp = false );
+/// <param name="Concurrency">Searchers it ran with (says which figure the windows hold).</param>
+/// <param name="WindowSeconds">Shortest window, seconds.</param>
+public sealed record SettleResult( bool Settled, double Seconds, int Searches, int Errors, string? FirstError, IReadOnlyList<double> WindowFigures, string? StoppedBecause,
+   bool GaveUp, int Concurrency, double WindowSeconds );
 
 /// <summary>
-/// One trial of the settle check: default searches one at a time right before the first timed
-/// pass, compared with the settled p50.
+/// One trial of a settle check: the pass's own search at the pass's own concurrency right
+/// before the pass, read as the pass reads it, compared with the warm-up's settled figure.
 /// </summary>
-/// <param name="SettledP50">The settled p50 it was compared with, ms, or null when no settle window completed.</param>
-/// <param name="P50">The trial's p50, ms, or null when no search completed.</param>
+/// <param name="Concurrency">Searchers (one: the figure is a p50 in ms; several: QPS).</param>
+/// <param name="Settled">The settled figure it was compared with, or null when no window completed.</param>
+/// <param name="Figure">The trial's figure, or null when no search completed.</param>
 /// <param name="Searches">Completed searches.</param>
 /// <param name="Errors">Failed searches.</param>
 /// <param name="Seconds">How long it ran.</param>
-public sealed record TrialRecord( double? SettledP50, double? P50, int Searches, int Errors, double Seconds )
+public sealed record TrialRecord( int Concurrency, double? Settled, double? Figure, int Searches, int Errors, double Seconds )
 {
    #region Public Methods
 
-   /// <summary>How far apart the two p50s are, as a share of the trial's; null when either is missing.</summary>
-   public double? Apart => ApartOf( SettledP50, P50 );
+   /// <summary>How far apart the two figures are, as a share of the trial's; null when either is missing.</summary>
+   public double? Apart => ApartOf( Settled, Figure );
 
    /// <summary>True when they are within <see cref="SearchRunner.TRIAL_TOLERANCE"/>.</summary>
    public bool Agrees => Apart is double apart && apart <= SearchRunner.TRIAL_TOLERANCE;
 
    /// <summary>
-   /// The difference of a settled p50 and a trial p50 over the trial p50.
+   /// The difference of a settled figure and a trial figure over the trial figure.
    /// </summary>
-   /// <param name="settled">Settled p50.</param>
-   /// <param name="trial">Trial p50.</param>
+   /// <param name="settled">Settled figure.</param>
+   /// <param name="trial">Trial figure.</param>
    /// <returns>The share, or null when either is missing or the trial is not positive.</returns>
    public static double? ApartOf( double? settled, double? trial )
    {
@@ -914,34 +1192,36 @@ public sealed record TrialRecord( double? SettledP50, double? P50, int Searches,
    }
 
    /// <summary>
-   /// One line: "trial of 1,480 searches in 2.0 s: p50 1.341 ms against the settled p50 2.880 ms, 115% apart (limit 15%)".
+   /// One line: "trial of 4,560 searches in 3.0 s at 8 searchers: 1,520 QPS against the settled 1,524 QPS, 0% apart (limit 10%)".
    /// </summary>
    /// <param name="what">"trial" or "second trial".</param>
    /// <returns>The text.</returns>
    public string Describe( string what )
    {
-      string trial = P50 is double p ? $"{p:0.000} ms" : "none (no search completed)";
-      string settled = SettledP50 is double sp ? $"{sp:0.000} ms" : "none (no settle window completed)";
+      string trial = Figure is double f ? SearchRunner.FigureText( f, Concurrency ) : "none (no search completed)";
+      string settled = Settled is double s ? SearchRunner.FigureText( s, Concurrency ) : "none (no full window)";
       string apart = Apart is double a ? $"{a:0%} apart" : "not comparable";
-      return $"{what} of {Searches:N0} searches in {Seconds:0.0} s{( Errors > 0 ? $" ({Errors} failed)" : string.Empty )}: p50 {trial} against the settled p50 {settled}, {apart} (limit {SearchRunner.TRIAL_TOLERANCE:0%})";
+      return $"{what} of {Searches:N0} searches in {Seconds:0.0} s at {SearchRunner.Searchers( Concurrency )}{( Errors > 0 ? $" ({Errors} failed)" : string.Empty )}: {trial} against the settled {settled}, {apart} (limit {SearchRunner.TRIAL_TOLERANCE:0%})";
    }
 
    #endregion Public Methods
 }
 
 /// <summary>
-/// The settle check of one target: the trial, and when it was needed the one extension and the
-/// second trial.
+/// The settle check before one timed pass: the warm-up read as a settle, the trial, and when it
+/// was needed the one extension and the second trial.
 /// </summary>
+/// <param name="Pass">The timed pass it preceded.</param>
+/// <param name="Settle">The pass's warm-up, read as a settle.</param>
 /// <param name="Trial">The first trial.</param>
 /// <param name="Extension">The extension, or null when none ran.</param>
 /// <param name="Retrial">The trial after the extension, or null.</param>
 /// <param name="Confirmed">True when the last settle settled and its trial agreed.</param>
-public sealed record SettleCheck( TrialRecord Trial, SettleResult? Extension, TrialRecord? Retrial, bool Confirmed )
+public sealed record SettleCheck( string Pass, SettleResult Settle, TrialRecord Trial, SettleResult? Extension, TrialRecord? Retrial, bool Confirmed )
 {
    #region Public Methods
 
-   /// <summary>Searches the check sent (trials and extension, completed and failed).</summary>
+   /// <summary>Searches the check sent (trials and extension, completed and failed); the warm-up is counted with the warm-ups.</summary>
    public int Searches => Trial.Searches + Trial.Errors + ( Extension?.Searches ?? 0 ) + ( Retrial is TrialRecord r ? r.Searches + r.Errors : 0 );
 
    /// <summary>Searches of the check that failed.</summary>
@@ -956,11 +1236,12 @@ public sealed record SettleCheck( TrialRecord Trial, SettleResult? Extension, Tr
 /// <param name="Searches">Warm-up searches sent.</param>
 /// <param name="Errors">How many of them failed or timed out.</param>
 /// <param name="FirstError">The first failure message, or null.</param>
-/// <param name="CutShort">True when the warm-up time budget ran out before every search was sent.</param>
+/// <param name="CutShort">True when the warm-up cap ran out before the --warmup minimum of searches was sent.</param>
 public sealed record WarmupResult( int Searches, int Errors, string? FirstError, bool CutShort );
 
 /// <summary>
-/// The untimed preparation of one target: its rehearsals and its settle.
+/// The untimed preparation of one target: its rehearsals, and the settle check made before each
+/// timed pass.
 /// </summary>
 public sealed class Preparation
 {
@@ -969,20 +1250,17 @@ public sealed class Preparation
    /// <summary>Each pass type's rehearsal, in the order run.</summary>
    public List<RehearsalRecord> Rehearsals { get; } = new();
 
-   /// <summary>The settle, or null when it did not run.</summary>
-   public SettleResult? Settle { get; set; }
-
-   /// <summary>The settle check made right before the first timed pass, or null when none ran.</summary>
-   public SettleCheck? Check { get; set; }
+   /// <summary>The settle check made before each timed pass, in the order run.</summary>
+   public List<SettleCheck> Checks { get; } = new();
 
    /// <summary>The first rehearsal failure, with its pass, or null.</summary>
    public string? FirstError { get; private set; }
 
-   /// <summary>Searches sent by the rehearsals, the settle and the settle check (completed and failed).</summary>
-   public int Searches => Rehearsals.Sum( r => r.Searches + r.Errors ) + ( Settle?.Searches ?? 0 ) + ( Check?.Searches ?? 0 );
+   /// <summary>Searches sent by the rehearsals and the settle checks (completed and failed).</summary>
+   public int Searches => Rehearsals.Sum( r => r.Searches + r.Errors ) + Checks.Sum( c => c.Searches );
 
-   /// <summary>Searches of the rehearsals, the settle and the settle check that failed.</summary>
-   public int Errors => Rehearsals.Sum( r => r.Errors ) + ( Settle?.Errors ?? 0 ) + ( Check?.Errors ?? 0 );
+   /// <summary>Searches of the rehearsals and the settle checks that failed.</summary>
+   public int Errors => Rehearsals.Sum( r => r.Errors ) + Checks.Sum( c => c.Errors );
 
    /// <summary>
    /// Adds one pass type's rehearsal.
@@ -1026,7 +1304,7 @@ public sealed class SearchOutcome
    /// <summary>The search measurements.</summary>
    public SearchReport Report { get; }
 
-   /// <summary>The rehearsal and settle that ran before the passes, or null.</summary>
+   /// <summary>The rehearsal that ran before the passes and the settle checks made before each, or null.</summary>
    public Preparation? Preparation { get; }
 
    /// <summary>Timed passes in the order they ran.</summary>
@@ -1044,16 +1322,16 @@ public sealed class SearchOutcome
    /// <summary>Warm-up searches that failed, over every per-pass warm-up.</summary>
    public int WarmupErrors { get; private set; }
 
-   /// <summary>Every untimed search sent: per-pass warm-ups, rehearsals and settle.</summary>
+   /// <summary>Every untimed search sent: per-pass warm-ups, rehearsals and settle checks.</summary>
    public int UntimedSearches => WarmupSearches + ( Preparation?.Searches ?? 0 );
 
-   /// <summary>Every untimed search that failed: per-pass warm-ups, rehearsals and settle.</summary>
+   /// <summary>Every untimed search that failed: per-pass warm-ups, rehearsals and settle checks.</summary>
    public int UntimedErrors => WarmupErrors + ( Preparation?.Errors ?? 0 );
 
    /// <summary>The first warm-up failure, with the pass it preceded.</summary>
    public string? FirstWarmupError { get; private set; }
 
-   /// <summary>Passes whose warm-up ran out of time before sending every search.</summary>
+   /// <summary>Passes whose warm-up ran out of time before sending the --warmup minimum of searches.</summary>
    public List<string> WarmupsCutShort { get; } = new();
 
    /// <summary>
@@ -1076,7 +1354,7 @@ public sealed class SearchOutcome
       if( warmup.CutShort )
       {
          WarmupsCutShort.Add( pass );
-         log( $"  {name}: warm-up before {pass} stopped after {warmup.Searches} searches (time budget)" );
+         log( $"  {name}: warm-up before {pass} stopped after {warmup.Searches} searches (time cap)" );
       }
    }
 

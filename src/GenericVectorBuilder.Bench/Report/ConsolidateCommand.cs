@@ -12,10 +12,13 @@ namespace GenericVectorBuilder.Bench.Report;
 /// Why a command in the benchmark instead of a script beside it: the published numbers must
 /// come from tested code with fixed rules (paired comparisons per run, dropped runs logged),
 /// not from a one-off script that each writeup rewrites.
-/// It refuses to merge runs that are not the same kind of experiment (different command, engine
-/// hosting or segment layout) and prints the speed ranking as tie bands under a title that says
-/// what it ranks (see <see cref="ConsolidateIdentity"/> and <see cref="ConsolidateBands"/>); bands
-/// join targets with overlapping ranges and neighbours whose medians are less than 3% apart.
+/// It refuses to merge runs that are not the same kind of experiment (a different command stops the
+/// command; a different engine hosting or engine setup refuses that target alone) and prints the speed ranking as tie
+/// bands under a title that says what it ranks (see <see cref="ConsolidateIdentity"/> and
+/// <see cref="ConsolidateBands"/>); bands join targets with overlapping ranges and neighbours whose
+/// medians are less than 3% apart. A segment layout that differs between runs is a flag on the target,
+/// not a refusal, and every target the runs hold that has no row (left out of --targets, or refused) is
+/// listed with its reason (see <see cref="ConsolidateWithheld"/>).
 /// It touches no engine and makes no network call; it only reads files and writes two.
 /// </summary>
 public static class ConsolidateCommand
@@ -91,10 +94,17 @@ public static class ConsolidateCommand
       return @"consolidate --targets a,b,c [--runs FOLDER|GLOB[,...]] [FOLDER|GLOB ...] [--out DIR] [--pairs a:b,c:d]
 
   Uses only runs in which every listed target has a result; every other run is logged with its reason.
-  Runs measured under different build configuration, CPU governor, CPU partition, warm-up count, exact-mode seconds,
-  seconds per level or search settings of a listed target are never mixed: the largest consistent group is used.
-  Runs of different commands (run-all against bench), a different engine hosting (container against native) or a different segment
-  layout reported by an engine are refused, not merged: the command stops (exit 1) and names the runs on each side.
+  Runs measured under different build configuration, CPU governor, CPU partition, warm-up method (time, count, settle trial,
+  extension and rehearsal, as the runs recorded them), exact-mode seconds, seconds per level or index description and search
+  settings of a listed target are never mixed: the largest consistent group is used.
+  Runs of different commands (run-all against bench) are refused, not merged: the command stops (exit 1) and names the runs on
+  each side. A target whose engine hosting differs between the runs (container against native) is refused for that target alone:
+  it has no row, and the report names it with the reason; when every listed target is refused the command stops (exit 1).
+  The same refusal applies to a target whose engine setup differs between the runs: its engine description, its recorded engine
+  settings (engineSettings), the SHA-256 of the files it was configured from (engineFiles) or its durability statement.
+  A segment layout that differs between runs (MongoDB, Qdrant, Milvus) is not a refusal: the target stays in every table with the
+  segment-layout-differs-between-runs flag, which names each layout and its runs.
+  Every target the runs hold that has no row (left out of --targets, or refused) is listed under the heading Targets not in this report, with its reason.
   Targets whose min-max ranges overlap on a speed metric share a tie band (band 1 is the fastest), and so do neighbours whose
   medians are less than 3% apart (above the roughly 2% an engine varies from run to run); no strict rank is printed.
   Where the results carry the client's CPU per search (search.clientCpuMsPerSearch by concurrency level) it is shown beside the latency and the QPS.

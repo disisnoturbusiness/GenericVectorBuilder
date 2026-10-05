@@ -46,6 +46,16 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// $vectorSearch (metadata.lucene.totalDocs, which must equal the collection's count), and the
 /// per-segment execution type in the same explain (luceneVectorSegmentStats: every segment must say
 /// "Approximate", which is the HNSW graph, not "Exact"). The state must hold on two reads.
+/// Why the segment layout is watched as well: measured 2026-10-05, a set of three loads of 524
+/// vectors through this sink ended with 4, 2 and 3 segments (the v5 runs: 4, 4 and 2), a later set of
+/// three with 2, 2 and 2, and each layout stood unchanged for as long as it was watched (90 s, 15 s).
+/// A READY index that holds every document can still be moving its segments, so
+/// <see cref="FinishLoadAsync"/> also waits until the layout (the segment count and each segment's
+/// document count, from the same explain) has been the same, with the index ready, for
+/// <see cref="MongoDbSinkOptions.LayoutSteadySeconds"/> seconds (<see cref="MongoDbLayoutWatch"/>), and
+/// its note and the index state say the layout and how long it stood. The wait cannot make two loads
+/// end alike: when the layouts of two runs differ the consolidated report flags the engine and shows
+/// it anyway.
 /// </summary>
 public sealed class MongoDbSink : ISink, IExactSearchSink, IEngineDescription, IIndexFinisher
 {
@@ -201,8 +211,11 @@ public sealed class MongoDbSink : ISink, IExactSearchSink, IEngineDescription, I
    /// <summary>
    /// Waits until mongot reports its index READY and queryable, holding a document count equal to
    /// the collection's, searched through the HNSW graph on every segment (see the class remarks
-   /// for the three readings). Throws a plain message when that does not happen within
-   /// <see cref="MongoDbSinkOptions.IndexWaitSeconds"/>, or when the readings keep failing.
+   /// for the three readings), and then until its segment layout (the segment count and each
+   /// segment's document count) has stayed the same for
+   /// <see cref="MongoDbSinkOptions.LayoutSteadySeconds"/> seconds and two readings. Throws a plain
+   /// message when that does not happen within <see cref="MongoDbSinkOptions.IndexWaitSeconds"/>,
+   /// or when the readings keep failing.
    /// </summary>
    /// <param name="collection">Collection name as passed to the sink.</param>
    /// <param name="ct">Cancellation.</param>
@@ -211,10 +224,10 @@ public sealed class MongoDbSink : ISink, IExactSearchSink, IEngineDescription, I
    {
       string name = CollectionName( collection );
       var clock = Stopwatch.StartNew();
-      IndexState last = await WaitUntilReadyAsync( name, TimeSpan.FromSeconds( _options.IndexWaitSeconds ), ct );
-      return last.Ready
-         ? $"{last.Detail}; wait took {clock.Elapsed.TotalSeconds:F1} s"
-         : throw new InvalidOperationException( $"MongoDB did not finish indexing {name} within {_options.IndexWaitSeconds} seconds. Last reading: {last.Detail}" );
+      Waited waited = await WaitUntilReadyAsync( name, TimeSpan.FromSeconds( _options.IndexWaitSeconds ), ct );
+      return waited.State.Ready
+         ? $"{waited.State.Detail}; {waited.LayoutNote}; wait took {clock.Elapsed.TotalSeconds:F1} s"
+         : throw new InvalidOperationException( $"MongoDB did not finish indexing {name} within {_options.IndexWaitSeconds} seconds. Last reading: {waited.State.Detail}" );
    }
 
    /// <summary>
@@ -247,24 +260,37 @@ public sealed class MongoDbSink : ISink, IExactSearchSink, IEngineDescription, I
    /// </summary>
    /// <param name="State">The engine's account of its index.</param>
    /// <param name="Failed">True when a command failed, so the reading says nothing about the index.</param>
-   private sealed record Readout( IndexState State, bool Failed );
+   /// <param name="Layout">The segment layout as one comparable text (empty when the reading did not get as far as the segments).</param>
+   private sealed record Readout( IndexState State, bool Failed, string Layout = "" );
 
    /// <summary>
-   /// Polls the state until it is ready on <see cref="STEADY_READS"/> reads in a row or the
-   /// deadline passes. Gives up early, with the last message, after <see cref="MAX_FAILED_READS"/>
-   /// failed reads in a row, because a command that keeps failing will not start working by
-   /// waiting. The deadline also ends a read that hangs, so the wait can never outlive it.
+   /// How a wait for the index ended.
+   /// </summary>
+   /// <param name="State">The last state read; its Ready flag says whether the wait succeeded.</param>
+   /// <param name="LayoutNote">One sentence on how steady the segment layout was.</param>
+   private sealed record Waited( IndexState State, string LayoutNote );
+
+   /// <summary>
+   /// Polls the state until it is ready and the segment layout has been steady (see
+   /// <see cref="MongoDbLayoutWatch"/>: <see cref="STEADY_READS"/> ready reads in a row with the same
+   /// layout, over <see cref="MongoDbSinkOptions.LayoutSteadySeconds"/> seconds) or the deadline
+   /// passes. Gives up early, with the last message, after <see cref="MAX_FAILED_READS"/> failed reads
+   /// in a row, because a command that keeps failing will not start working by waiting. The deadline
+   /// also ends a read that hangs, so the wait can never outlive it.
+   /// Why the layout is watched and not only the index status: a READY index that holds every document
+   /// can still be rearranging its segments, and the v5 runs ended MongoDB with 4 segments in two runs
+   /// and 2 in the third; a timed search should not start while the layout may still move.
    /// </summary>
    /// <param name="name">Collection name.</param>
    /// <param name="timeout">Longest wait.</param>
    /// <param name="ct">Cancellation.</param>
-   /// <returns>The last state read; the caller checks its Ready flag.</returns>
-   private async Task<IndexState> WaitUntilReadyAsync( string name, TimeSpan timeout, CancellationToken ct )
+   /// <returns>The last state read (the caller checks its Ready flag) and a sentence on the layout.</returns>
+   private async Task<Waited> WaitUntilReadyAsync( string name, TimeSpan timeout, CancellationToken ct )
    {
       using var limit = CancellationTokenSource.CreateLinkedTokenSource( ct );
       limit.CancelAfter( timeout );
+      var watch = new MongoDbLayoutWatch( TimeSpan.FromSeconds( _options.LayoutSteadySeconds ), STEADY_READS );
       IndexState last = new( false, null, null, "no reading taken yet" );
-      int steady = 0;
       int failed = 0;
       var clock = Stopwatch.StartNew();
       DateTime nextProgress = DateTime.UtcNow + PROGRESS_INTERVAL;
@@ -274,16 +300,16 @@ public sealed class MongoDbSink : ISink, IExactSearchSink, IEngineDescription, I
          {
             Readout readout = await ReadStateAsync( name, limit.Token );
             last = readout.State;
-            steady = last.Ready ? steady + 1 : 0;
+            bool steady = watch.Observe( last.Ready, readout.Layout );
             failed = readout.Failed ? failed + 1 : 0;
-            if( steady >= STEADY_READS || failed >= MAX_FAILED_READS )
+            if( steady || failed >= MAX_FAILED_READS )
             {
-               return last;
+               return new Waited( last, watch.Describe() );
             }
 
             if( DateTime.UtcNow >= nextProgress )
             {
-               Progress?.Invoke( $"MongoDB {name}: waiting for mongot, {clock.Elapsed.TotalSeconds:F0} s so far. {last.Detail}" );
+               Progress?.Invoke( $"MongoDB {name}: waiting for mongot, {clock.Elapsed.TotalSeconds:F0} s so far. {last.Detail}{( last.Ready ? $"; {watch.Describe()}" : string.Empty )}" );
                nextProgress = DateTime.UtcNow + PROGRESS_INTERVAL;
             }
 
@@ -292,7 +318,8 @@ public sealed class MongoDbSink : ISink, IExactSearchSink, IEngineDescription, I
       }
       catch( OperationCanceledException ) when( !ct.IsCancellationRequested )
       {
-         return last with { Ready = false };
+         string layout = last.Ready ? $"{last.Detail}; the segment layout did not stay unchanged for {_options.LayoutSteadySeconds} s within the wait ({watch.Describe()})" : last.Detail;
+         return new Waited( last with { Ready = false, Detail = layout }, watch.Describe() );
       }
    }
 
@@ -347,9 +374,33 @@ public sealed class MongoDbSink : ISink, IExactSearchSink, IEngineDescription, I
       long indexed = search["metadata"]["lucene"]["totalDocs"].ToInt64();
       BsonArray segments = search.GetValue( "luceneVectorSegmentStats", new BsonArray() ).AsBsonArray;
       int approximate = segments.Count( s => s["executionType"].AsString == "Approximate" );
-      string detail = $"index status {status}, queryable {queryable}; mongot holds {indexed} of {stored} documents in {segments.Count} segment(s), {approximate} searched through the HNSW graph (Approximate)";
+      long[] documents = DocumentCounts( segments );
+      string held = documents.Length == 0 ? string.Empty : $" ({string.Join( " + ", documents )} documents)";
+      string detail = $"index status {status}, queryable {queryable}; mongot holds {indexed} of {stored} documents in {segments.Count} segment(s){held}, {approximate} searched through the HNSW graph (Approximate)";
       bool ready = status == "READY" && queryable && indexed == stored && approximate == segments.Count && ( stored == 0 || segments.Count > 0 );
-      return new Readout( new IndexState( ready, indexed, stored, detail ), Failed: false );
+      return new Readout( new IndexState( ready, indexed, stored, detail ), Failed: false, MongoDbLayoutWatch.Signature( segments.Count, documents ) );
+   }
+
+   /// <summary>
+   /// The document count of each segment the explain lists, largest first. Empty when any segment
+   /// does not state one (the layout is then the segment count alone).
+   /// </summary>
+   /// <param name="segments">The luceneVectorSegmentStats array.</param>
+   /// <returns>The counts, or none.</returns>
+   private static long[] DocumentCounts( BsonArray segments )
+   {
+      var counts = new List<long>();
+      foreach( BsonValue segment in segments )
+      {
+         if( !segment.IsBsonDocument || !segment.AsBsonDocument.TryGetValue( "docCount", out BsonValue? count ) || !count.IsNumeric )
+         {
+            return Array.Empty<long>();
+         }
+
+         counts.Add( count.ToInt64() );
+      }
+
+      return counts.OrderByDescending( c => c ).ToArray();
    }
 
    /// <summary>

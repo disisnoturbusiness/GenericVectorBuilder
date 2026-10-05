@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using GenericVectorBuilder.Bench.Targets;
 
 namespace GenericVectorBuilder.Bench.Running;
@@ -17,10 +19,25 @@ namespace GenericVectorBuilder.Bench.Running;
 /// that was running before the run but down at its turn is started unrestricted, because run-all
 /// leaves it running afterwards and must leave it as it was; machine control pins it with
 /// "docker update" for the measurement and puts that back.
+/// Every start note keeps what the host reported about the start, whether or not a CPU set was asked for: a
+/// start that needed more than one attempt (Milvus exits while starting and is started again) lists every
+/// attempt in the note, in all three cases.
+/// <see cref="FilesNote"/> records which files the engine is configured from (its compose file and every
+/// read-only config file or folder it mounts) with a short SHA-256 each, so a change to a config file shows
+/// in the results and the consolidate command refuses to merge runs made under different files.
 /// </summary>
 public sealed class EngineLifecycle
 {
    #region Data Members
+
+   /// <summary>Hex digits of each file's SHA-256 that the engine-files note keeps (enough to tell two versions of a file apart).</summary>
+   public const int HASH_DIGITS = 12;
+
+   private const int MAX_FILES = 200;
+   private const long MAX_FILE_BYTES = 4 * 1024 * 1024;
+
+   /// <summary>A read-only bind mount of a file or folder next to the compose file ("- ./clickhouse-config/x.xml:/etc/x.xml:ro"): the benchmark's config files; data folders and env files are never read-only relative mounts.</summary>
+   private static readonly Regex READ_ONLY_MOUNT = new( @"^\s*-\s*[""']?(?<host>\.{1,2}/[^:""'\s]+):[^:""'\s]+:ro[""']?\s*$", RegexOptions.Compiled | RegexOptions.Multiline );
 
    private readonly IEngineHost _host;
    private readonly bool _runAll;
@@ -124,6 +141,40 @@ public sealed class EngineLifecycle
    }
 
    /// <summary>
+   /// The note that says which files the target's engine is configured from: the compose file and every
+   /// file under each read-only relative mount in it (config files and folders, never data folders or
+   /// env files), each with the first <see cref="HASH_DIGITS"/> hex digits of its SHA-256, in a bracketed
+   /// list, followed by a sentence that says whether this run created the engine from them.
+   /// Why a note and not a field: the result writer's target record is not this class's to change, and
+   /// the consolidate command reads this note into the target's engine files (TargetResult.EngineFiles), so
+   /// runs made under different files are refused. Why the hashes: ClickHouse's server configuration
+   /// changed between two runs (21 system log tables switched off, QPS@8 up 16%) and no field of the
+   /// results said so.
+   /// Call it after <see cref="EnsureRunningAsync"/>, so the sentence about who created the engine is true.
+   /// </summary>
+   /// <param name="target">The target.</param>
+   /// <returns>The note; null when the target has no compose file on disk (the host already fails on a missing file); a note that says the files could not be read when they exist but cannot be.</returns>
+   public string? FilesNote( BenchTarget target )
+   {
+      if( target.ComposePath is not string path || !File.Exists( path ) )
+      {
+         return null;
+      }
+
+      string origin = _startedByRun.Contains( path )
+         ? "This run created the engine from these files."
+         : "The engine was already running at its turn, so it may have been created from other files than these.";
+      try
+      {
+         return $"Engine files (SHA-256, first {HASH_DIGITS} hex digits): [{string.Join( "; ", FileHashes( path ).Select( p => $"{p.Key} {p.Value}" ) )}]. {origin}";
+      }
+      catch( Exception ex ) when( ex is IOException or UnauthorizedAccessException )
+      {
+         return $"Engine files could not be recorded for {Path.GetFileName( path )}: {ex.Message}";
+      }
+   }
+
+   /// <summary>
    /// Stops the target's engine when this run started it. Safe to call after a failed start:
    /// a half-started engine is stopped too. Problems become notes; nothing here throws.
    /// </summary>
@@ -155,22 +206,86 @@ public sealed class EngineLifecycle
    #region Private Methods
 
    /// <summary>
+   /// The compose file and every file under its read-only relative mounts, with the short SHA-256 of each,
+   /// sorted by the path relative to the compose file's folder.
+   /// </summary>
+   /// <param name="composePath">The compose file.</param>
+   /// <returns>Path and hash pairs; a mount that does not exist is listed as "missing", a file over the size limit as "too large to hash", and files past the count limit as one "more files" entry.</returns>
+   private static SortedDictionary<string, string> FileHashes( string composePath )
+   {
+      string folder = Path.GetDirectoryName( Path.GetFullPath( composePath ) ) ?? ".";
+      var hashes = new SortedDictionary<string, string>( StringComparer.Ordinal ) { [Path.GetFileName( composePath )] = Hash( composePath ) };
+      foreach( Match mount in READ_ONLY_MOUNT.Matches( File.ReadAllText( composePath ) ) )
+      {
+         string full = Path.GetFullPath( Path.Combine( folder, mount.Groups["host"].Value.TrimEnd( '/' ) ) );
+         string host = Path.GetRelativePath( folder, full );
+         if( File.Exists( full ) )
+         {
+            hashes[host] = Hash( full );
+         }
+         else if( Directory.Exists( full ) )
+         {
+            AddFolder( hashes, folder, full );
+         }
+         else
+         {
+            hashes[host] = "missing";
+         }
+      }
+
+      return hashes;
+   }
+
+   /// <summary>
+   /// Adds every file under a mounted folder (at most <see cref="MAX_FILES"/>, in path order).
+   /// </summary>
+   /// <param name="hashes">Receives the entries.</param>
+   /// <param name="baseFolder">The compose file's folder, which the entries are relative to.</param>
+   /// <param name="mounted">The mounted folder.</param>
+   private static void AddFolder( SortedDictionary<string, string> hashes, string baseFolder, string mounted )
+   {
+      List<string> files = Directory.EnumerateFiles( mounted, "*", SearchOption.AllDirectories ).OrderBy( f => f, StringComparer.Ordinal ).ToList();
+      foreach( string file in files.Take( MAX_FILES ) )
+      {
+         hashes[Path.GetRelativePath( baseFolder, file )] = Hash( file );
+      }
+
+      if( files.Count > MAX_FILES )
+      {
+         hashes[Path.GetRelativePath( baseFolder, mounted ) + "/"] = $"{files.Count - MAX_FILES} more files not hashed";
+      }
+   }
+
+   /// <summary>
+   /// The first <see cref="HASH_DIGITS"/> hex digits of a file's SHA-256, or a short reason when the file is over the size limit.
+   /// </summary>
+   /// <param name="path">The file.</param>
+   /// <returns>The digits, lower case.</returns>
+   private static string Hash( string path )
+   {
+      return new FileInfo( path ).Length > MAX_FILE_BYTES
+         ? "too large to hash"
+         : Convert.ToHexString( SHA256.HashData( File.ReadAllBytes( path ) ) )[..HASH_DIGITS].ToLowerInvariant();
+   }
+
+   /// <summary>
    /// The note for an engine run-all started.
    /// </summary>
    /// <param name="runningBefore">True when it was running before the run (so it is left running).</param>
    /// <param name="cpuset">The CPUs it was asked to be created on, or null.</param>
-   /// <param name="started">What the host read back about the start, or null when it applied no CPU set.</param>
-   /// <returns>The note.</returns>
+   /// <param name="started">What the host reported about the start (the CPU set it read back, and every attempt when the start needed more than one), or null when it reported nothing.</param>
+   /// <returns>The note; it always carries <paramref name="started"/>, so a start that was retried says so in every case.</returns>
    private static string StartNote( bool runningBefore, string? cpuset, string? started )
    {
+      string host = started == null ? string.Empty : $" What the host reported about the start: {started.TrimEnd( '.' )}.";
       if( runningBefore )
       {
-         return "Engine was running before the run but was down at its turn; run-all started it unrestricted (as it was) and leaves it running, as it found it.";
+         return "Engine was running before the run but was down at its turn; run-all started it unrestricted (as it was) and leaves it running, as it found it." + host;
       }
 
       if( cpuset == null )
       {
-         return "Started by run-all for this measurement, unrestricted (machine control off or the CPUs not split), and stopped afterwards.";
+         return "Started by run-all for this measurement, unrestricted (machine control off or the CPUs not split), and stopped afterwards." + host;
       }
 
       return started != null

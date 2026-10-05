@@ -22,10 +22,17 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// float[n] column, and doc key, table, origin, ordinal, text and metadata JSON are auxiliary
 /// columns. Auxiliary columns hold values of any length and come back with the KNN query, so a
 /// search needs no second lookup.
-/// Threading: a SQLite connection is not safe to share, so each collection has ONE connection
-/// and a gate that lets one operation run at a time. Different collections do not block each
-/// other.
-/// Why the connection is kept open: the extension must be loaded into every connection, and the
+/// Threading: each collection has one write connection and a bounded pool of search connections
+/// (<see cref="SqliteVecStore"/>). One connection runs one call at a time, so one shared connection
+/// would run searches one after another. SQLite documents that in WAL mode "readers do not block
+/// writers and a writer does not block readers" and that there is only one writer at a time, so
+/// each search rents a connection and they run side by side
+/// (<see cref="SqliteVecSinkOptions.MaxSearchConnections"/>); a search may overlap a write and
+/// sees the last commit before it started. Writes, counts and readiness checks use the write
+/// connection one at a time. With <see cref="SqliteVecSinkOptions.SerializeSearches"/> every
+/// search runs on the write connection, one at a time, and the index description says so.
+/// Different collections do not block each other.
+/// Why connections are kept open: the extension must be loaded into every connection, and the
 /// benchmark should time the search, not the connection setup.
 /// Readiness (<see cref="IIndexFinisher"/>): there is no index to finish, so
 /// <see cref="GetIndexStateAsync"/> reports ready with the detail "no index, exact scan by design",
@@ -38,6 +45,7 @@ public sealed class SqliteVecSink : ISink, IExactSearchSink, IEngineDescription,
 
    private const int WRITE_BATCH = 2000;
    private const int MAX_K = 4096;
+   private const int MIN_SEARCH_CONNECTIONS = 8;
    private const string DEFAULT_ENGINE = "SQLite + sqlite-vec (vec0, embedded, in process)";
    private static readonly Regex COLLECTION_PATTERN = new( "^[A-Za-z0-9_]{1,200}$", RegexOptions.Compiled | RegexOptions.CultureInvariant );
    private static readonly Regex DIMENSION_PATTERN = new( @"embedding\s+float\[(\d+)\]", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase );
@@ -80,7 +88,7 @@ public sealed class SqliteVecSink : ISink, IExactSearchSink, IEngineDescription,
    public string Engine => _engine ??= DetectEngine();
 
    /// <inheritdoc />
-   public string IndexDescription => "vec0 brute-force scan, no ANN index (exact), float32, cosine distance, default chunk_size=1024; score = 1 - cosine distance";
+   public string IndexDescription => $"vec0 brute-force scan, no ANN index (exact), float32, cosine distance, default chunk_size=1024; score = 1 - cosine distance; {ConcurrencyText()}";
 
    /// <inheritdoc />
    public string ComposeFile => "embedded";
@@ -108,14 +116,14 @@ public sealed class SqliteVecSink : ISink, IExactSearchSink, IEngineDescription,
    public async Task<IndexState> GetIndexStateAsync( string collection, CancellationToken ct )
    {
       SqliteVecStore store = RequireStore( collection );
-      await store.Gate.WaitAsync( ct );
+      await store.EnterWriteAsync( ct );
       try
       {
          return await Task.Run( () => ReadIndexState( store, collection ), ct );
       }
       finally
       {
-         store.Gate.Release();
+         store.ExitWrite();
       }
    }
 
@@ -123,7 +131,7 @@ public sealed class SqliteVecSink : ISink, IExactSearchSink, IEngineDescription,
    public async Task<bool> EnsureCollectionAsync( string collection, int dimension, CancellationToken ct )
    {
       SqliteVecStore store = OpenStore( collection, create: true );
-      await store.Gate.WaitAsync( ct );
+      await store.EnterWriteAsync( ct );
       try
       {
          if( store.Dimension > 0 && store.Dimension != dimension )
@@ -153,7 +161,7 @@ public sealed class SqliteVecSink : ISink, IExactSearchSink, IEngineDescription,
       }
       finally
       {
-         store.Gate.Release();
+         store.ExitWrite();
       }
    }
 
@@ -171,7 +179,7 @@ public sealed class SqliteVecSink : ISink, IExactSearchSink, IEngineDescription,
          CheckVector( store, collection, record.Vector );
       }
 
-      await store.Gate.WaitAsync( ct );
+      await store.EnterWriteAsync( ct );
       try
       {
          await Task.Run( () =>
@@ -185,7 +193,7 @@ public sealed class SqliteVecSink : ISink, IExactSearchSink, IEngineDescription,
       }
       finally
       {
-         store.Gate.Release();
+         store.ExitWrite();
       }
    }
 
@@ -198,7 +206,7 @@ public sealed class SqliteVecSink : ISink, IExactSearchSink, IEngineDescription,
       }
 
       SqliteVecStore store = RequireStore( collection );
-      await store.Gate.WaitAsync( ct );
+      await store.EnterWriteAsync( ct );
       try
       {
          await Task.Run( () =>
@@ -212,7 +220,7 @@ public sealed class SqliteVecSink : ISink, IExactSearchSink, IEngineDescription,
       }
       finally
       {
-         store.Gate.Release();
+         store.ExitWrite();
       }
    }
 
@@ -220,14 +228,14 @@ public sealed class SqliteVecSink : ISink, IExactSearchSink, IEngineDescription,
    public async Task<long> CountAsync( string collection, CancellationToken ct )
    {
       SqliteVecStore store = RequireStore( collection );
-      await store.Gate.WaitAsync( ct );
+      await store.EnterWriteAsync( ct );
       try
       {
          return await Task.Run( () => CountRows( store, collection ), ct );
       }
       finally
       {
-         store.Gate.Release();
+         store.ExitWrite();
       }
    }
 
@@ -250,14 +258,12 @@ public sealed class SqliteVecSink : ISink, IExactSearchSink, IEngineDescription,
       SqliteVecStore? store;
       lock( _openLock )
       {
-         _stores.TryRemove( collection, out store );
+         _stores.TryGetValue( collection, out store );
       }
 
       if( store != null )
       {
-         await store.Gate.WaitAsync( ct );
-         store.Connection.Dispose();
-         store.Gate.Release();
+         await CloseStoreAsync( store, collection, ct );
       }
 
       foreach( string suffix in new[] { string.Empty, "-wal", "-shm", "-journal" } )
@@ -268,6 +274,17 @@ public sealed class SqliteVecSink : ISink, IExactSearchSink, IEngineDescription,
             File.Delete( file );
          }
       }
+   }
+
+   /// <summary>
+   /// How many search connections the sink has opened for a collection in this process. Why it is
+   /// public: the tests and the report can show that 8 searchers really ran on 8 connections.
+   /// </summary>
+   /// <param name="collection">Collection name.</param>
+   /// <returns>The count, or 0 when the collection is not open or searches are serialized.</returns>
+   public int SearchConnectionsOpened( string collection )
+   {
+      return _stores.TryGetValue( collection, out SqliteVecStore? store ) ? store.SearchConnectionsOpened : 0;
    }
 
    #endregion Public Methods
@@ -309,7 +326,8 @@ public sealed class SqliteVecSink : ISink, IExactSearchSink, IEngineDescription,
    }
 
    /// <summary>
-   /// Runs the one KNN query that serves both the default and the exact search.
+   /// Runs the one KNN query that serves both the default and the exact search, on a pooled search
+   /// connection (or, when searches are serialized, on the write connection under the gate).
    /// </summary>
    /// <param name="collection">Collection name.</param>
    /// <param name="vector">Query vector.</param>
@@ -325,31 +343,39 @@ public sealed class SqliteVecSink : ISink, IExactSearchSink, IEngineDescription,
 
       SqliteVecStore store = RequireStore( collection );
       CheckVector( store, collection, vector );
-      await store.Gate.WaitAsync( ct );
-      try
+      int k = Math.Min( top, MAX_K );
+      if( _options.SerializeSearches )
       {
-         return await Task.Run( () => RunKnn( store, collection, vector, Math.Min( top, MAX_K ) ), ct );
+         await store.EnterWriteAsync( ct );
+         try
+         {
+            return await Task.Run( () => RunKnn( store.Connection, collection, vector, k ), ct );
+         }
+         finally
+         {
+            store.ExitWrite();
+         }
       }
-      finally
-      {
-         store.Gate.Release();
-      }
+
+      using SearchConnectionLease<SqliteConnection> lease = await store.RentSearchAsync( ct );
+      SqliteConnection connection = lease.Connection;
+      return await Task.Run( () => RunKnn( connection, collection, vector, k ), ct );
    }
 
    /// <summary>
    /// Executes the KNN query. vec0 returns cosine DISTANCE (0 = identical, 2 = opposite), so
    /// the score handed back is 1 - distance, the cosine similarity every sink reports.
    /// </summary>
-   /// <param name="store">The collection's open store.</param>
+   /// <param name="connection">The connection to run on: a leased search connection, or the write connection under the gate.</param>
    /// <param name="collection">Collection name.</param>
    /// <param name="vector">Query vector.</param>
    /// <param name="k">How many neighbours to return, at most 4096 (a vec0 limit).</param>
    /// <returns>Hits, best first.</returns>
-   private static IReadOnlyList<SearchHit> RunKnn( SqliteVecStore store, string collection, float[] vector, int k )
+   private static IReadOnlyList<SearchHit> RunKnn( SqliteConnection connection, string collection, float[] vector, int k )
    {
       string sql = $@"SELECT chunk_id, distance, doc_key, table_name, chunk_text FROM {Quote( collection )}
 WHERE embedding MATCH $query AND k = $k ORDER BY distance;";
-      using SqliteCommand command = store.Connection.CreateCommand();
+      using SqliteCommand command = connection.CreateCommand();
       command.CommandText = sql;
       command.Parameters.AddWithValue( "$query", ToBlob( vector ) );
       command.Parameters.AddWithValue( "$k", k );
@@ -501,7 +527,11 @@ VALUES ( $id, $embedding, $docKey, $table, $origin, $ordinal, $text, $metadata )
             LoadExtension( connection );
             Run( connection, "PRAGMA journal_mode=WAL;" );
             Run( connection, "PRAGMA synchronous=NORMAL;" );
-            var store = new SqliteVecStore( connection ) { Dimension = ReadDimension( connection, collection ) };
+            var searchBuilder = new SqliteConnectionStringBuilder( builder.ConnectionString ) { Mode = SqliteOpenMode.ReadWrite };
+            var store = new SqliteVecStore( connection, () => OpenSearchConnection( searchBuilder.ConnectionString ), MaxSearchConnections(), WaitLimit(), $"sqlitevec collection '{collection}'" )
+            {
+               Dimension = ReadDimension( connection, collection )
+            };
             _stores[collection] = store;
             return store;
          }
@@ -511,6 +541,124 @@ VALUES ( $id, $embedding, $docKey, $table, $origin, $ordinal, $text, $metadata )
             throw;
          }
       }
+   }
+
+   /// <summary>
+   /// Opens one more search connection on a collection's file: loads vec0 and makes the connection
+   /// query only, so a search can never write. The file is already in WAL mode (the write
+   /// connection set it when it opened the file, and the mode is stored in the file), which is
+   /// what lets this connection read while the write connection writes.
+   /// </summary>
+   /// <param name="connectionString">The collection file's connection string, pooling off.</param>
+   /// <returns>The prepared connection.</returns>
+   private static SqliteConnection OpenSearchConnection( string connectionString )
+   {
+      var connection = new SqliteConnection( connectionString );
+      try
+      {
+         connection.Open();
+         LoadExtension( connection );
+         Run( connection, "PRAGMA query_only=ON;" );
+         return connection;
+      }
+      catch
+      {
+         connection.Dispose();
+         throw;
+      }
+   }
+
+   /// <summary>
+   /// The search connection limit: the configured value, never below the benchmark's widest pass.
+   /// </summary>
+   /// <returns>Connections.</returns>
+   private int MaxSearchConnections()
+   {
+      return Math.Max( MIN_SEARCH_CONNECTIONS, _options.MaxSearchConnections );
+   }
+
+   /// <summary>
+   /// The longest any wait for a connection or for the write gate may last.
+   /// </summary>
+   /// <returns>At least one second.</returns>
+   private TimeSpan WaitLimit()
+   {
+      return TimeSpan.FromSeconds( Math.Max( 1, _options.ConnectionWaitSeconds ) );
+   }
+
+   /// <summary>
+   /// The sentence about concurrency that the index description ends with.
+   /// </summary>
+   /// <returns>Text for the report.</returns>
+   private string ConcurrencyText()
+   {
+      if( _options.SerializeSearches )
+      {
+         return "searches run one at a time (single connection)";
+      }
+
+      return $"searches run concurrently, one WAL reader connection per searcher (opened as searchers arrive, at most {MaxSearchConnections()}), writes run one at a time and may overlap searches";
+   }
+
+   /// <summary>
+   /// Closes one collection's connections once nothing is running on it, and forgets the store.
+   /// A store that another caller already closed is left alone.
+   /// </summary>
+   /// <param name="store">The store to close.</param>
+   /// <param name="collection">Collection name.</param>
+   /// <param name="ct">Cancellation.</param>
+   private async Task CloseStoreAsync( SqliteVecStore store, string collection, CancellationToken ct )
+   {
+      try
+      {
+         await store.EnterExclusiveAsync( ct );
+      }
+      catch( ObjectDisposedException )
+      {
+         return;
+      }
+
+      try
+      {
+         lock( _openLock )
+         {
+            _stores.TryRemove( collection, out _ );
+         }
+
+         store.CloseConnections();
+      }
+      finally
+      {
+         store.ExitExclusive();
+      }
+   }
+
+   /// <summary>
+   /// Closes one store's connections when nothing runs on it within the wait limit.
+   /// </summary>
+   /// <param name="store">The store.</param>
+   /// <returns>False when it stayed busy and was left open.</returns>
+   private static bool TryCloseStore( SqliteVecStore store )
+   {
+      try
+      {
+         store.EnterExclusiveAsync( CancellationToken.None ).GetAwaiter().GetResult();
+      }
+      catch( TimeoutException )
+      {
+         return false;
+      }
+
+      try
+      {
+         store.CloseConnections();
+      }
+      finally
+      {
+         store.ExitExclusive();
+      }
+
+      return true;
    }
 
    /// <summary>
@@ -659,9 +807,11 @@ VALUES ( $id, $embedding, $docKey, $table, $origin, $ordinal, $text, $metadata )
    #region IDisposable
 
    /// <summary>
-   /// Closes every open connection. Closing the last connection to a WAL database folds the
-   /// log back into the main file.
+   /// Closes every open connection once the searches and writes running on it have finished,
+   /// waiting at most the connection wait limit for each collection. Closing the last connection
+   /// to a WAL database folds the log back into the main file.
    /// </summary>
+   /// <exception cref="TimeoutException">A collection was still busy after the limit, so its connections were left open.</exception>
    public void Dispose()
    {
       if( _disposed )
@@ -670,14 +820,23 @@ VALUES ( $id, $embedding, $docKey, $table, $origin, $ordinal, $text, $metadata )
       }
 
       _disposed = true;
+      var busy = new List<string>();
       lock( _openLock )
       {
-         foreach( SqliteVecStore store in _stores.Values )
+         foreach( KeyValuePair<string, SqliteVecStore> pair in _stores )
          {
-            store.Connection.Dispose();
+            if( !TryCloseStore( pair.Value ) )
+            {
+               busy.Add( pair.Key );
+            }
          }
 
          _stores.Clear();
+      }
+
+      if( busy.Count > 0 )
+      {
+         throw new TimeoutException( $"The sqlitevec collection(s) {string.Join( ", ", busy )} stayed busy for {WaitLimit().TotalSeconds:F0} s while the sink was disposed, so their connections were left open." );
       }
    }
 

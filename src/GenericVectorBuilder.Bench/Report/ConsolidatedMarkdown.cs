@@ -25,6 +25,9 @@ public static class ConsolidatedMarkdown
    /// <summary>Text for a field the result files did not record.</summary>
    public const string MISSING = "missing";
 
+   /// <summary>What the engine notes column of the ranking tables holds, printed once under them.</summary>
+   public const string ENGINE_NOTES_LINE = "The engine notes column lists the notes under Per-engine notes and, after \"flags:\", every flag the engine carries (an unsettled engine, a spread above 15%, a shared core, a segment layout that differs between runs, and the rest). The number is still shown; read it with its flag, whose evidence is under Flags.";
+
    #endregion Data Members
 
    #region Public Methods
@@ -39,7 +42,9 @@ public static class ConsolidatedMarkdown
       var md = new StringBuilder();
       md.AppendLine( "# Consolidated benchmark" ).AppendLine();
       AppendSettings( md, report );
+      AppendMethod( md, report );
       AppendRuns( md, report );
+      AppendWithheld( md, report );
       AppendTargets( md, report );
       AppendRanking( md, report );
       AppendEngineNotes( md, report );
@@ -66,7 +71,7 @@ public static class ConsolidatedMarkdown
    private static void AppendSettings( StringBuilder md, ConsolidatedReport report )
    {
       RunSettings s = report.Settings;
-      Table( md, new[] { "item", "value" }, new List<string[]>
+      var rows = new List<string[]>
       {
          new[] { "created (UTC)", report.CreatedUtc },
          new[] { "command", "`" + report.CommandLine + "`" },
@@ -85,9 +90,47 @@ public static class ConsolidatedMarkdown
          new[] { "machine control", Recorded( s.MachineControl, s, "machineControl" ) },
          new[] { "CPU governor", Recorded( s.Governor, s, "governor" ) },
          new[] { "CPU partition", Recorded( s.CpuPartition, s, "cpuPartition" ) },
-         new[] { "warm-up searches before each timed pass", Recorded( s.WarmupSearches?.ToString( CultureInfo.InvariantCulture ), s, "warmupSearches" ) },
-         new[] { "exact mode seconds", Recorded( s.ExactSeconds?.ToString( CultureInfo.InvariantCulture ), s, "exactSeconds" ) },
-      } );
+      };
+      rows.AddRange( WarmupRows( s ) );
+      rows.Add( new[] { "fewest searches in a warm-up (the --warmup count)", Recorded( s.WarmupSearches?.ToString( CultureInfo.InvariantCulture ), s, "warmupSearches" ) } );
+      rows.Add( new[] { "exact mode seconds", Recorded( s.ExactSeconds?.ToString( CultureInfo.InvariantCulture ), s, "exactSeconds" ) } );
+      Table( md, new[] { "item", "value" }, rows );
+   }
+
+   /// <summary>
+   /// The warm-up, settle check and rehearsal rows of the settings table, from the method the runs
+   /// recorded; "missing" when they recorded none. Never a bare count: the count is only the fewest
+   /// searches in a warm-up, and the warm-up is time based.
+   /// </summary>
+   /// <param name="s">The shared settings.</param>
+   /// <returns>The rows.</returns>
+   private static IEnumerable<string[]> WarmupRows( RunSettings s )
+   {
+      if( s.WarmupMethod == null )
+      {
+         return new[] { new[] { "warm-up before each timed pass", MISSING }, new[] { "settle check before each timed pass", MISSING }, new[] { "rehearsal before the first timed pass", MISSING } };
+      }
+
+      return s.WarmupMethod.Rows().Select( r => new[] { r.Item, r.Value } );
+   }
+
+   /// <summary>
+   /// The warm-up and rehearsal notes of the runs, verbatim: the method as the runs wrote it, so the
+   /// rows above can be checked against the source.
+   /// </summary>
+   /// <param name="md">Output.</param>
+   /// <param name="report">The report.</param>
+   private static void AppendMethod( StringBuilder md, ConsolidatedReport report )
+   {
+      md.AppendLine( "## Warm-up method as the runs recorded it" ).AppendLine();
+      if( report.Settings.WarmupMethod is not { Recorded.Count: > 0 } method )
+      {
+         md.AppendLine( "(none: the runs recorded no warm-up or rehearsal note)" ).AppendLine();
+         return;
+      }
+
+      method.Recorded.ForEach( n => md.AppendLine( $"- {n}" ) );
+      md.AppendLine();
    }
 
    /// <summary>
@@ -108,18 +151,35 @@ public static class ConsolidatedMarkdown
    }
 
    /// <summary>
-   /// Engine, hosting and index text of each target (every distinct value seen).
+   /// Every target the runs hold that this report leaves out, with its reason; "(none)" when there
+   /// is nothing to say. Always printed, so its absence cannot be mistaken for a report that was
+   /// never checked.
+   /// </summary>
+   /// <param name="md">Output.</param>
+   /// <param name="report">The report.</param>
+   private static void AppendWithheld( StringBuilder md, ConsolidatedReport report )
+   {
+      md.AppendLine( "## Targets not in this report" ).AppendLine();
+      Table( md, new[] { "target", "kind", "runs", "reason" }, report.Withheld.Select( w => new[] { w.Target, w.Kind, string.Join( ", ", w.Runs ), w.Reason } ) );
+   }
+
+   /// <summary>
+   /// Engine, hosting, index, search settings, recorded engine settings, durability and engine files of
+   /// each target (every distinct value seen; the runs of a shown target agree, because runs that differ
+   /// are refused for it).
    /// </summary>
    /// <param name="md">Output.</param>
    /// <param name="report">The report.</param>
    private static void AppendTargets( StringBuilder md, ConsolidatedReport report )
    {
       md.AppendLine( "## Targets" ).AppendLine();
-      Table( md, new[] { "target", "hosting", "engine", "index", "search settings" }, report.TargetSummaries.Select( t => new[]
+      Table( md, new[] { "target", "hosting", "engine", "index", "search settings", "engine settings (recorded)", "durability", "engine files (SHA-256)" }, report.TargetSummaries.Select( t => new[]
       {
          t.Name, Join( t.Hosting ), Join( t.Engines ), Join( t.Indexes ),
          report.Settings.SearchSettings.TryGetValue( t.Name, out string? settings ) && settings != null ? settings : MISSING,
+         Join( t.EngineSettings ), Join( t.Durabilities ), Join( t.EngineFiles ),
       } ) );
+      md.AppendLine( "Every column is what the runs recorded for the engine: its description, its index and search settings, its non-default engine settings and configuration files (when a run recorded them) and its durability statement. Runs that differ in any of them are refused for that target, never merged; a column that reads missing was not recorded by any run, so a setting changed there would not show." ).AppendLine();
    }
 
    /// <summary>
@@ -331,6 +391,8 @@ public static class ConsolidatedMarkdown
       {
          md.AppendLine( ConsolidateFraming.CLIENT_CPU_LINE ).AppendLine();
       }
+
+      md.AppendLine( ENGINE_NOTES_LINE ).AppendLine();
    }
 
    /// <summary>
@@ -429,15 +491,30 @@ public static class ConsolidatedMarkdown
    }
 
    /// <summary>
-   /// The kinds of a target's engine notes, joined, or "-" when it has none.
+   /// The kinds of a target's engine notes and, after "flags:", the kinds of every flag the target
+   /// carries, or "-" when it has neither. Why the flags are here: the unsettled flag said "rerun
+   /// before quoting" under Flags while the headline tables printed the same number with nothing
+   /// beside it.
    /// </summary>
    /// <param name="report">The report.</param>
    /// <param name="target">Target name.</param>
-   /// <returns>E.g. "cpu-cap, exact-by-design".</returns>
+   /// <returns>E.g. "cpu-cap, exact-by-design; flags: unsettled-target, spread".</returns>
    private static string NoteKinds( ConsolidatedReport report, string target )
    {
       string[] kinds = report.TargetSummaries.FirstOrDefault( t => t.Name == target )?.EngineNotes.Select( n => n.Kind ).ToArray() ?? Array.Empty<string>();
-      return kinds.Length == 0 ? "-" : string.Join( ", ", kinds );
+      string[] flags = report.Flags.Where( f => f.Target == target ).Select( f => f.Kind ).Distinct( StringComparer.Ordinal ).ToArray();
+      var parts = new List<string>();
+      if( kinds.Length > 0 )
+      {
+         parts.Add( string.Join( ", ", kinds ) );
+      }
+
+      if( flags.Length > 0 )
+      {
+         parts.Add( "flags: " + string.Join( ", ", flags ) );
+      }
+
+      return parts.Count == 0 ? "-" : string.Join( "; ", parts );
    }
 
    /// <summary>

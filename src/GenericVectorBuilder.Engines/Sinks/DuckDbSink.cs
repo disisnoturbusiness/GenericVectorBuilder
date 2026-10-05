@@ -45,8 +45,14 @@ namespace GenericVectorBuilder.Engines.Sinks;
 /// How payload is stored: chunk_id is the UUID primary key, and doc_key, table_name, origin,
 /// ordinal, chunk_text and a JSON metadata column sit beside the FLOAT[n] vector, so a search
 /// returns everything it needs in one query.
-/// Threading: each collection has ONE connection and a gate that lets one operation run at a
-/// time. Different collections do not block each other.
+/// Threading: each collection has one write connection and a bounded pool of search connections
+/// (<see cref="DuckDbStore"/>). DuckDB's C API documents that connections are thread-safe but locked
+/// while they query, and recommends one connection per thread for parallel performance, so searches
+/// rent a connection each and run side by side (<see cref="DuckDbSinkOptions.MaxSearchConnections"/>).
+/// Writes, counts, readiness checks and index compaction take exclusive use of the collection, so
+/// they run one at a time and never overlap a search. With
+/// <see cref="DuckDbSinkOptions.SerializeSearches"/> every search runs on the write connection, one
+/// at a time, and the index description says so. Different collections do not block each other.
 /// Readiness (<see cref="IIndexFinisher"/>): the HNSW index is updated inside each transaction, so
 /// nothing is built after the writes return and <see cref="FinishLoadAsync"/> only confirms that.
 /// The proof is the engine's own account (<see cref="GetIndexStateAsync"/>): duckdb_indexes() lists
@@ -58,6 +64,7 @@ public sealed class DuckDbSink : ISink, IExactSearchSink, IEngineDescription, II
    #region Data Members
 
    private const string DEFAULT_ENGINE = "DuckDB + vss (HNSW, embedded, in process)";
+   private const int MIN_SEARCH_CONNECTIONS = 8;
    private const string VECTOR_COLUMN = "embedding";
    private static readonly Regex COLLECTION_PATTERN = new( "^[A-Za-z0-9_]{1,200}$", RegexOptions.Compiled | RegexOptions.CultureInvariant );
    private static readonly Regex DIMENSION_PATTERN = new( @"FLOAT\[(\d+)\]", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase );
@@ -102,7 +109,7 @@ public sealed class DuckDbSink : ISink, IExactSearchSink, IEngineDescription, II
 
    /// <inheritdoc />
    public string IndexDescription =>
-      $"HNSW (vss extension) FLOAT[n] metric=cosine m={_options.HnswM} ef_construction={_options.HnswEfConstruction}, ef_search={_options.HnswEfSearch} per connection, persistent (hnsw_enable_experimental_persistence=true, checkpoint_threshold={_options.CheckpointThreshold}); exact mode = array_cosine_similarity sequential scan; score = 1 - cosine distance";
+      $"HNSW (vss extension) FLOAT[n] metric=cosine m={_options.HnswM} ef_construction={_options.HnswEfConstruction}, ef_search={_options.HnswEfSearch} per connection, persistent (hnsw_enable_experimental_persistence=true, checkpoint_threshold={_options.CheckpointThreshold}); exact mode = array_cosine_similarity sequential scan; score = 1 - cosine distance; {ConcurrencyText()}";
 
    /// <inheritdoc />
    public string ComposeFile => "embedded";
@@ -132,14 +139,14 @@ public sealed class DuckDbSink : ISink, IExactSearchSink, IEngineDescription, II
    public async Task<IndexState> GetIndexStateAsync( string collection, CancellationToken ct )
    {
       DuckDbStore store = RequireStore( collection );
-      await store.Gate.WaitAsync( ct );
+      await store.EnterExclusiveAsync( ct );
       try
       {
          return await Task.Run( () => ReadIndexState( store, collection ), ct );
       }
       finally
       {
-         store.Gate.Release();
+         store.ExitExclusive();
       }
    }
 
@@ -147,7 +154,7 @@ public sealed class DuckDbSink : ISink, IExactSearchSink, IEngineDescription, II
    public async Task<bool> EnsureCollectionAsync( string collection, int dimension, CancellationToken ct )
    {
       DuckDbStore store = OpenStore( collection, create: true );
-      await store.Gate.WaitAsync( ct );
+      await store.EnterExclusiveAsync( ct );
       try
       {
          if( store.Dimension > 0 && store.Dimension != dimension )
@@ -162,7 +169,7 @@ public sealed class DuckDbSink : ISink, IExactSearchSink, IEngineDescription, II
       }
       finally
       {
-         store.Gate.Release();
+         store.ExitExclusive();
       }
    }
 
@@ -180,7 +187,7 @@ public sealed class DuckDbSink : ISink, IExactSearchSink, IEngineDescription, II
          CheckVector( store, collection, record.Vector );
       }
 
-      await store.Gate.WaitAsync( ct );
+      await store.EnterExclusiveAsync( ct );
       try
       {
          await Task.Run( () =>
@@ -194,7 +201,7 @@ public sealed class DuckDbSink : ISink, IExactSearchSink, IEngineDescription, II
       }
       finally
       {
-         store.Gate.Release();
+         store.ExitExclusive();
       }
    }
 
@@ -207,7 +214,7 @@ public sealed class DuckDbSink : ISink, IExactSearchSink, IEngineDescription, II
       }
 
       DuckDbStore store = RequireStore( collection );
-      await store.Gate.WaitAsync( ct );
+      await store.EnterExclusiveAsync( ct );
       try
       {
          await Task.Run( () =>
@@ -224,7 +231,7 @@ public sealed class DuckDbSink : ISink, IExactSearchSink, IEngineDescription, II
       }
       finally
       {
-         store.Gate.Release();
+         store.ExitExclusive();
       }
    }
 
@@ -232,14 +239,14 @@ public sealed class DuckDbSink : ISink, IExactSearchSink, IEngineDescription, II
    public async Task<long> CountAsync( string collection, CancellationToken ct )
    {
       DuckDbStore store = RequireStore( collection );
-      await store.Gate.WaitAsync( ct );
+      await store.EnterExclusiveAsync( ct );
       try
       {
          return await Task.Run( () => CountRows( store, collection ), ct );
       }
       finally
       {
-         store.Gate.Release();
+         store.ExitExclusive();
       }
    }
 
@@ -262,14 +269,12 @@ public sealed class DuckDbSink : ISink, IExactSearchSink, IEngineDescription, II
       DuckDbStore? store;
       lock( _openLock )
       {
-         _stores.TryRemove( collection, out store );
+         _stores.TryGetValue( collection, out store );
       }
 
       if( store != null )
       {
-         await store.Gate.WaitAsync( ct );
-         store.Connection.Dispose();
-         store.Gate.Release();
+         await CloseStoreAsync( store, collection, ct );
       }
 
       foreach( string suffix in new[] { string.Empty, ".wal", ".tmp" } )
@@ -282,12 +287,24 @@ public sealed class DuckDbSink : ISink, IExactSearchSink, IEngineDescription, II
       }
    }
 
+   /// <summary>
+   /// How many search connections the sink has opened for a collection in this process. Why it is
+   /// public: the tests and the report can show that 8 searchers really ran on 8 connections.
+   /// </summary>
+   /// <param name="collection">Collection name.</param>
+   /// <returns>The count, or 0 when the collection is not open or searches are serialized.</returns>
+   public int SearchConnectionsOpened( string collection )
+   {
+      return _stores.TryGetValue( collection, out DuckDbStore? store ) ? store.SearchConnectionsOpened : 0;
+   }
+
    #endregion Public Methods
 
    #region Private Methods
 
    /// <summary>
-   /// Runs the one query that serves both the default and the exact search.
+   /// Runs the one query that serves both the default and the exact search, on a pooled search
+   /// connection (or, when searches are serialized, on the write connection).
    /// </summary>
    /// <param name="collection">Collection name.</param>
    /// <param name="vector">Query vector.</param>
@@ -304,23 +321,82 @@ public sealed class DuckDbSink : ISink, IExactSearchSink, IEngineDescription, II
 
       DuckDbStore store = RequireStore( collection );
       CheckVector( store, collection, vector );
-      await store.Gate.WaitAsync( ct );
+      if( _options.SerializeSearches )
+      {
+         await store.EnterExclusiveAsync( ct );
+         try
+         {
+            return await Task.Run( () =>
+            {
+               CompactIfNeeded( store, collection );
+               return RunKnn( store.Connection, store, collection, vector, top, exact );
+            }, ct );
+         }
+         finally
+         {
+            store.ExitExclusive();
+         }
+      }
+
+      return await KnnPooledAsync( store, collection, vector, top, exact, ct );
+   }
+
+   /// <summary>
+   /// Runs the KNN query on a rented search connection. If rows were deleted since the last
+   /// compaction the lease is given back first, the index is compacted with exclusive use (a write
+   /// to the index, so no search may overlap it), and a connection is rented again.
+   /// Why the flag is read while holding a lease: only code with exclusive use changes it, so
+   /// while this search holds a connection no delete can be half done.
+   /// </summary>
+   /// <param name="store">The collection's open store.</param>
+   /// <param name="collection">Collection name.</param>
+   /// <param name="vector">Query vector.</param>
+   /// <param name="top">How many hits to return.</param>
+   /// <param name="exact">True for the sequential-scan query, false for the HNSW one.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>Hits, best first.</returns>
+   private async Task<IReadOnlyList<SearchHit>> KnnPooledAsync( DuckDbStore store, string collection, float[] vector, int top, bool exact, CancellationToken ct )
+   {
+      SearchConnectionLease<DuckDBConnection> lease = await store.RentSearchAsync( ct );
       try
       {
-         return await Task.Run( () =>
+         if( store.NeedsCompaction )
          {
-            if( store.NeedsCompaction )
+            lease.Dispose();
+            await store.EnterExclusiveAsync( ct );
+            try
             {
-               Run( store.Connection, $"PRAGMA hnsw_compact_index('{IndexName( collection )}');" );
-               store.NeedsCompaction = false;
+               await Task.Run( () => CompactIfNeeded( store, collection ), ct );
+            }
+            finally
+            {
+               store.ExitExclusive();
             }
 
-            return RunKnn( store, collection, vector, top, exact );
-         }, ct );
+            lease = await store.RentSearchAsync( ct );
+         }
+
+         DuckDBConnection connection = lease.Connection;
+         return await Task.Run( () => RunKnn( connection, store, collection, vector, top, exact ), ct );
       }
       finally
       {
-         store.Gate.Release();
+         lease.Dispose();
+      }
+   }
+
+   /// <summary>
+   /// Compacts the HNSW index when deleted rows are waiting in it. The caller must have exclusive
+   /// use of the collection.
+   /// </summary>
+   /// <param name="store">The collection's open store.</param>
+   /// <param name="collection">Collection name.</param>
+   private static void CompactIfNeeded( DuckDbStore store, string collection )
+   {
+      if( store.NeedsCompaction )
+      {
+         Run( store.Connection, $"PRAGMA hnsw_compact_index('{IndexName( collection )}');" );
+         store.NeedsCompaction = false;
       }
    }
 
@@ -330,15 +406,16 @@ public sealed class DuckDbSink : ISink, IExactSearchSink, IEngineDescription, II
    /// The exact query orders by cosine SIMILARITY, which the index cannot answer, so DuckDB scans
    /// every row.
    /// </summary>
-   /// <param name="store">The collection's open store.</param>
+   /// <param name="connection">The connection to run on: a leased search connection, or the write connection under exclusive use.</param>
+   /// <param name="store">The collection's open store, for its dimension.</param>
    /// <param name="collection">Collection name.</param>
    /// <param name="vector">Query vector.</param>
    /// <param name="k">How many neighbours to return.</param>
    /// <param name="exact">True for the sequential scan.</param>
    /// <returns>Hits, best first.</returns>
-   private static IReadOnlyList<SearchHit> RunKnn( DuckDbStore store, string collection, float[] vector, int k, bool exact )
+   private static IReadOnlyList<SearchHit> RunKnn( DuckDBConnection connection, DuckDbStore store, string collection, float[] vector, int k, bool exact )
    {
-      using DuckDBCommand command = store.Connection.CreateCommand();
+      using DuckDBCommand command = connection.CreateCommand();
       command.CommandText = KnnSql( store, collection, k, exact );
       command.Parameters.Add( new DuckDBParameter( vector ) );
       var hits = new List<SearchHit>( k );
@@ -636,16 +713,18 @@ WITH ( metric = 'cosine', m = {_options.HnswM.ToString( CultureInfo.InvariantCul
          CheckSize( _options.CheckpointThreshold, "checkpoint threshold" );
 
          Directory.CreateDirectory( _options.DirectoryPath );
-         var connection = new DuckDBConnection( $"Data Source={file}" );
+         string connectionString = $"Data Source={file}";
+         var connection = new DuckDBConnection( connectionString );
          try
          {
             connection.Open();
-            LoadExtension( connection );
-            Run( connection, "SET hnsw_enable_experimental_persistence = true;" );
-            Run( connection, $"SET hnsw_ef_search = {_options.HnswEfSearch.ToString( CultureInfo.InvariantCulture )};" );
+            PrepareConnection( connection );
             Run( connection, $"SET memory_limit = '{_options.MemoryLimit}';" );
             Run( connection, $"SET checkpoint_threshold = '{_options.CheckpointThreshold}';" );
-            var store = new DuckDbStore( connection ) { Dimension = ReadDimension( connection, collection ) };
+            var store = new DuckDbStore( connection, () => OpenSearchConnection( connectionString ), MaxSearchConnections(), WaitLimit(), $"duckdb collection '{collection}'" )
+            {
+               Dimension = ReadDimension( connection, collection )
+            };
             _stores[collection] = store;
             return store;
          }
@@ -654,6 +733,109 @@ WITH ( metric = 'cosine', m = {_options.HnswM.ToString( CultureInfo.InvariantCul
             connection.Dispose();
             throw;
          }
+      }
+   }
+
+   /// <summary>
+   /// Runs the per-connection setup every connection of this sink gets, in this order: load vss
+   /// (first, because a file with an HNSW index cannot be used by a connection that has not),
+   /// turn on file-backed HNSW, set ef_search. Why every connection repeats it: DuckDB keeps
+   /// ef_search per connection (measured: setting it on one connection leaves another at its
+   /// default), and a new connection to a file does not know the vss settings until it loads vss.
+   /// </summary>
+   /// <param name="connection">An open connection.</param>
+   private void PrepareConnection( DuckDBConnection connection )
+   {
+      LoadExtension( connection );
+      Run( connection, "SET hnsw_enable_experimental_persistence = true;" );
+      Run( connection, $"SET hnsw_ef_search = {_options.HnswEfSearch.ToString( CultureInfo.InvariantCulture )};" );
+   }
+
+   /// <summary>
+   /// Opens one more search connection on a collection's file. DuckDB.NET gives every connection
+   /// opened on the same file name in this process the same database instance, so the new
+   /// connection sees what the write connection committed.
+   /// </summary>
+   /// <param name="connectionString">The exact connection string the write connection used, because the instance is found by it.</param>
+   /// <returns>The prepared connection.</returns>
+   private DuckDBConnection OpenSearchConnection( string connectionString )
+   {
+      var connection = new DuckDBConnection( connectionString );
+      try
+      {
+         connection.Open();
+         PrepareConnection( connection );
+         return connection;
+      }
+      catch
+      {
+         connection.Dispose();
+         throw;
+      }
+   }
+
+   /// <summary>
+   /// The search connection limit: the configured value, never below the benchmark's widest pass.
+   /// </summary>
+   /// <returns>Connections.</returns>
+   private int MaxSearchConnections()
+   {
+      return Math.Max( MIN_SEARCH_CONNECTIONS, _options.MaxSearchConnections );
+   }
+
+   /// <summary>
+   /// The longest any wait for a connection or for exclusive use may last.
+   /// </summary>
+   /// <returns>At least one second.</returns>
+   private TimeSpan WaitLimit()
+   {
+      return TimeSpan.FromSeconds( Math.Max( 1, _options.ConnectionWaitSeconds ) );
+   }
+
+   /// <summary>
+   /// The sentence about concurrency that the index description ends with.
+   /// </summary>
+   /// <returns>Text for the report.</returns>
+   private string ConcurrencyText()
+   {
+      if( _options.SerializeSearches )
+      {
+         return "searches run one at a time (single connection)";
+      }
+
+      return $"searches run concurrently, one connection per searcher (opened as searchers arrive, at most {MaxSearchConnections()}), writes run one at a time and never overlap a search";
+   }
+
+   /// <summary>
+   /// Closes one collection's connections once nothing is running on it, and forgets the store.
+   /// A store that another caller already closed is left alone.
+   /// </summary>
+   /// <param name="store">The store to close.</param>
+   /// <param name="collection">Collection name.</param>
+   /// <param name="ct">Cancellation.</param>
+   private async Task CloseStoreAsync( DuckDbStore store, string collection, CancellationToken ct )
+   {
+      try
+      {
+         await store.EnterExclusiveAsync( ct );
+      }
+      catch( ObjectDisposedException )
+      {
+         return;
+      }
+
+      try
+      {
+         lock( _openLock )
+         {
+            _stores.TryRemove( collection, out _ );
+         }
+
+         store.CloseConnections();
+      }
+      finally
+      {
+         store.ExitExclusive();
       }
    }
 
@@ -830,14 +1012,45 @@ WITH ( metric = 'cosine', m = {_options.HnswM.ToString( CultureInfo.InvariantCul
       return $"\"{IndexName( collection )}\"";
    }
 
+   /// <summary>
+   /// Closes one store's connections when nothing runs on it within the wait limit.
+   /// </summary>
+   /// <param name="store">The store.</param>
+   /// <returns>False when it stayed busy and was left open.</returns>
+   private static bool TryCloseStore( DuckDbStore store )
+   {
+      try
+      {
+         store.EnterExclusiveAsync( CancellationToken.None ).GetAwaiter().GetResult();
+      }
+      catch( TimeoutException )
+      {
+         return false;
+      }
+
+      try
+      {
+         store.CloseConnections();
+      }
+      finally
+      {
+         store.ExitExclusive();
+      }
+
+      return true;
+   }
+
+
    #endregion Private Methods
 
    #region IDisposable
 
    /// <summary>
-   /// Closes every open connection. Closing the last connection to a file writes the
-   /// write-ahead log back into the main file.
+   /// Closes every open connection once the searches and writes running on it have finished,
+   /// waiting at most the connection wait limit for each collection. Closing the last connection
+   /// to a file writes the write-ahead log back into the main file.
    /// </summary>
+   /// <exception cref="TimeoutException">A collection was still busy after the limit, so its connections were left open.</exception>
    public void Dispose()
    {
       if( _disposed )
@@ -846,14 +1059,23 @@ WITH ( metric = 'cosine', m = {_options.HnswM.ToString( CultureInfo.InvariantCul
       }
 
       _disposed = true;
+      var busy = new List<string>();
       lock( _openLock )
       {
-         foreach( DuckDbStore store in _stores.Values )
+         foreach( KeyValuePair<string, DuckDbStore> pair in _stores )
          {
-            store.Connection.Dispose();
+            if( !TryCloseStore( pair.Value ) )
+            {
+               busy.Add( pair.Key );
+            }
          }
 
          _stores.Clear();
+      }
+
+      if( busy.Count > 0 )
+      {
+         throw new TimeoutException( $"The duckdb collection(s) {string.Join( ", ", busy )} stayed busy for {WaitLimit().TotalSeconds:F0} s while the sink was disposed, so their connections were left open." );
       }
    }
 

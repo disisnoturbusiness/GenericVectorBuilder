@@ -28,6 +28,34 @@ public sealed record BenchEngineRow( string Key, string Name, double Qps8, doubl
 public sealed record BenchEngineNote( string Kind, string Text, string Source );
 
 /// <summary>
+/// An engine the runs hold that the consolidated report leaves out of its tables, as the report
+/// names it.
+/// Why shown on the page: an engine missing from a published table with no word said reads as an
+/// engine nobody measured.
+/// </summary>
+/// <param name="Key">The target name the Bench tool used, e.g. "mongodb".</param>
+/// <param name="Name">The friendly name a reader sees, e.g. "MongoDB Atlas Local".</param>
+/// <param name="Reason">Why it has no row, in the report's words (what the runs show).</param>
+public sealed record BenchWithheld( string Key, string Name, string Reason );
+
+/// <summary>
+/// What the runs recorded about how one engine was set up, as the summary lists it (a text the runs
+/// recorded is shown as written; null when no run recorded it).
+/// Why shown on the page: an engine's non-default settings (its index parameters, server settings, the
+/// files it was configured from, its durability) are part of what its numbers mean, and a setting nobody
+/// can see cannot be questioned.
+/// </summary>
+/// <param name="Key">The target name the Bench tool used, e.g. "clickhouse".</param>
+/// <param name="Name">The friendly name a reader sees.</param>
+/// <param name="Engine">The engine description (name, version, how it was hosted), or null.</param>
+/// <param name="Index">The index description with its build parameters, or null.</param>
+/// <param name="SearchSettings">The settings that set how hard it searched, or null.</param>
+/// <param name="EngineSettings">Non-default engine settings a run recorded as a structured field, or null.</param>
+/// <param name="Durability">What a crash can lose with the engine's settings, or null.</param>
+/// <param name="EngineFiles">The files the engine was configured from with a short SHA-256 each, or null.</param>
+public sealed record BenchEngineConfig( string Key, string Name, string? Engine, string? Index, string? SearchSettings, string? EngineSettings, string? Durability, string? EngineFiles );
+
+/// <summary>
 /// The ranked numbers behind a summary block: the leader first.
 /// Why one shape for both sources: the summary page (medians of several runs) and each run page
 /// (one run) must read the same way, so the chart, headline and table are built from this alone.
@@ -37,7 +65,12 @@ public sealed record BenchEngineNote( string Kind, string Text, string Source );
 /// <param name="Runs">How many runs each median covers (1 for a single run page).</param>
 /// <param name="Conditions">The machine conditions the numbers were measured under; null or <see cref="BenchConditions.None"/> when the result files did not record them.</param>
 /// <param name="Rows">Vectors in the collection that was searched; null when the result files did not record it.</param>
-public sealed record BenchSummary( IReadOnlyList<BenchEngineRow> Ranked, IReadOnlyList<string> NoResult, int Runs, BenchConditions? Conditions = null, int? Rows = null )
+/// <param name="Withheld">Engines the runs hold that the consolidated report does not show, each with the reason the report gives; null when the file lists none (older files do not).</param>
+/// <param name="Configs">How each engine was set up, as the runs recorded it; null for a file that does not carry it.</param>
+/// <param name="Dropped">Runs the consolidated report left out of the medians, each as "name: reason"; null when none or when the file does not say.</param>
+/// <param name="OldFormat">True for the first published shape (an object keyed by engine, no flags, settings or notes), which cannot say anything about itself.</param>
+public sealed record BenchSummary( IReadOnlyList<BenchEngineRow> Ranked, IReadOnlyList<string> NoResult, int Runs, BenchConditions? Conditions = null, int? Rows = null, IReadOnlyList<BenchWithheld>? Withheld = null,
+   IReadOnlyList<BenchEngineConfig>? Configs = null, IReadOnlyList<string>? Dropped = null, bool OldFormat = false )
 {
    /// <summary>True when the numbers are medians across runs, so the chart draws min to max lines and the engines are put in tie bands.</summary>
    public bool HasRanges => Runs > 1;
@@ -154,7 +187,7 @@ public static class BenchSummaryReader
             Stat( e, "p50", "median" ), Stat( e, "recall", "median" ), IN_MEMORY.Contains( engine.Name ) ) );
       }
 
-      return new BenchSummary( WithBands( Rank( rows ), runs ), missing, Math.Max( runs, 1 ) );
+      return new BenchSummary( WithBands( Rank( rows ), runs ), missing, Math.Max( runs, 1 ), OldFormat: true );
    }
 
    /// <summary>
@@ -192,6 +225,57 @@ public static class BenchSummaryReader
       return new BenchSummary( Rank( rows ), missing, 1, BenchConditions.FromRun( doc.RootElement ), WholeNumber( doc.RootElement, "rows" ) );
    }
 
+   /// <summary>
+   /// The one line that says what the published numbers were measured on. An old published file
+   /// records no settings and gets the fixed line written for it; a consolidate output builds the
+   /// line from its own settings (pipeline, vectors, dimensions, questions, top), so the page never
+   /// describes one folder's data with another folder's words.
+   /// </summary>
+   /// <param name="json">The file's text.</param>
+   /// <returns>The line, or null when the file records nothing to build it from and is not the old shape.</returns>
+   public static string? DataLine( string json )
+   {
+      using JsonDocument doc = JsonDocument.Parse( json );
+      JsonElement root = doc.RootElement;
+      if( root.ValueKind != JsonValueKind.Object || !root.TryGetProperty( "targetSummaries", out JsonElement summaries ) || summaries.ValueKind != JsonValueKind.Array )
+      {
+         return BenchSummaryHtml.PUBLISHED_DATA;
+      }
+
+      if( !root.TryGetProperty( "settings", out JsonElement settings ) || settings.ValueKind != JsonValueKind.Object )
+      {
+         return null;
+      }
+
+      int? rows = WholeNumber( settings, "rows" );
+      int? dimension = WholeNumber( settings, "dimension" );
+      int? questions = WholeNumber( settings, "queryCount" );
+      int? top = WholeNumber( settings, "top" );
+      string? kind = Text( settings, "queryKind" );
+      var parts = new List<string>();
+      if( Text( settings, "pipeline" ) is string pipeline )
+      {
+         parts.Add( $"{pipeline} pipeline" );
+      }
+
+      if( rows != null )
+      {
+         parts.Add( dimension == null ? $"{rows:N0} vectors" : $"{rows:N0} vectors of {dimension} dimensions" );
+      }
+
+      if( questions != null )
+      {
+         parts.Add( kind == "golden" ? $"{questions} labelled questions" : $"{questions} {kind ?? "unlabelled"} queries" );
+      }
+
+      if( top != null )
+      {
+         parts.Add( $"top {top}" );
+      }
+
+      return parts.Count == 0 ? null : "Data: " + string.Join( ", ", parts ) + ".";
+   }
+
    #endregion Public Methods
 
    #region Private Methods
@@ -209,10 +293,13 @@ public static class BenchSummaryReader
       Dictionary<string, List<BenchFlag>> flags = ReportFlags( root, runs );
       var rows = new List<BenchEngineRow>();
       var missing = new List<string>();
+      var configs = new List<BenchEngineConfig>();
+      bool hasSettings = root.TryGetProperty( "settings", out JsonElement settings ) && settings.ValueKind == JsonValueKind.Object;
       foreach( JsonElement t in summaries.EnumerateArray() )
       {
          GuardCount( rows.Count + missing.Count );
          string key = t.ValueKind == JsonValueKind.Object && t.TryGetProperty( "name", out JsonElement n ) && n.ValueKind == JsonValueKind.String ? n.GetString() ?? "?" : "?";
+         configs.Add( EngineConfig( t, key, hasSettings ? settings : default ) );
          JsonElement qps = t.ValueKind == JsonValueKind.Object && t.TryGetProperty( "qps", out JsonElement q ) ? q : default;
          double? median = qps.ValueKind == JsonValueKind.Object && qps.TryGetProperty( EIGHT_AT_ONCE, out JsonElement at8 ) ? Number( at8, "median" ) : null;
          if( median == null )
@@ -226,9 +313,94 @@ public static class BenchSummaryReader
             IN_MEMORY.Contains( key ), flags.GetValueOrDefault( key ), null, EngineNotes( t ), ClientCpuAtOne( t, true ) ) );
       }
 
-      bool hasSettings = root.TryGetProperty( "settings", out JsonElement settings ) && settings.ValueKind == JsonValueKind.Object;
       BenchConditions conditions = hasSettings ? BenchConditions.FromSettings( settings ) : BenchConditions.None;
-      return new BenchSummary( WithBands( Rank( rows ), runs ), missing, Math.Max( runs, 1 ), conditions, hasSettings ? WholeNumber( settings, "rows" ) : null );
+      return new BenchSummary( WithBands( Rank( rows ), runs ), missing, Math.Max( runs, 1 ), conditions, hasSettings ? WholeNumber( settings, "rows" ) : null, WithheldTargets( root ),
+         configs.Count == 0 ? null : configs, DroppedRuns( root ) );
+   }
+
+   /// <summary>
+   /// How one engine was set up, from its targetSummaries entry and the shared settings: the engine
+   /// and index descriptions, its search settings, any recorded engine settings and files, and its
+   /// durability statement (the "durabilities" list, or the one each run carries).
+   /// </summary>
+   /// <param name="target">One targetSummaries entry.</param>
+   /// <param name="key">The target name.</param>
+   /// <param name="settings">The report's settings object, or default when it has none.</param>
+   /// <returns>The configuration.</returns>
+   private static BenchEngineConfig EngineConfig( JsonElement target, string key, JsonElement settings )
+   {
+      JsonElement searchSettings = settings.ValueKind == JsonValueKind.Object && settings.TryGetProperty( "searchSettings", out JsonElement all ) ? all : default;
+      string? durability = TextList( target, "durabilities" ) ?? PerRunTexts( target, "durability" );
+      return new BenchEngineConfig( key, FriendlyName( key ), TextList( target, "engines" ), TextList( target, "indexes" ), Text( searchSettings, key ), TextList( target, "engineSettings" ), durability, TextList( target, "engineFiles" ) );
+   }
+
+   /// <summary>
+   /// The runs the report left out, each as "name: reason"; none when the file lists none.
+   /// </summary>
+   /// <param name="root">The file's root object.</param>
+   /// <returns>The runs, or null.</returns>
+   private static List<string>? DroppedRuns( JsonElement root )
+   {
+      if( !root.TryGetProperty( "dropped", out JsonElement dropped ) || dropped.ValueKind != JsonValueKind.Array )
+      {
+         return null;
+      }
+
+      List<string> list = dropped.EnumerateArray().Where( d => d.ValueKind == JsonValueKind.Object && Text( d, "name" ) != null )
+         .Select( d => $"{Text( d, "name" )}: {Text( d, "reason" ) ?? "no reason given"}" ).Take( MAX_ENGINES ).ToList();
+      return list.Count == 0 ? null : list;
+   }
+
+   /// <summary>
+   /// The distinct strings of an array property joined with " / ", or null when it is absent or empty.
+   /// </summary>
+   /// <param name="parent">Object.</param>
+   /// <param name="name">Property name.</param>
+   /// <returns>The text, or null.</returns>
+   private static string? TextList( JsonElement parent, string name )
+   {
+      if( parent.ValueKind != JsonValueKind.Object || !parent.TryGetProperty( name, out JsonElement list ) || list.ValueKind != JsonValueKind.Array )
+      {
+         return null;
+      }
+
+      string[] values = list.EnumerateArray().Where( v => v.ValueKind == JsonValueKind.String ).Select( v => v.GetString()! ).Distinct( StringComparer.Ordinal ).ToArray();
+      return values.Length == 0 ? null : string.Join( " / ", values );
+   }
+
+   /// <summary>
+   /// The distinct strings a property holds in each of the target's per-run facts, joined with " / ".
+   /// </summary>
+   /// <param name="target">One targetSummaries entry.</param>
+   /// <param name="name">Property name inside each perRun entry.</param>
+   /// <returns>The text, or null when no run carries it.</returns>
+   private static string? PerRunTexts( JsonElement target, string name )
+   {
+      if( target.ValueKind != JsonValueKind.Object || !target.TryGetProperty( "perRun", out JsonElement runs ) || runs.ValueKind != JsonValueKind.Array )
+      {
+         return null;
+      }
+
+      string[] values = runs.EnumerateArray().Select( r => Text( r, name ) ).OfType<string>().Distinct( StringComparer.Ordinal ).ToArray();
+      return values.Length == 0 ? null : string.Join( " / ", values );
+   }
+
+   /// <summary>
+   /// The engines the report names as left out ("withheld"), each with its reason; none for an
+   /// older file or an empty list.
+   /// </summary>
+   /// <param name="root">The file's root object.</param>
+   /// <returns>The engines, or null when there are none.</returns>
+   private static List<BenchWithheld>? WithheldTargets( JsonElement root )
+   {
+      if( !root.TryGetProperty( "withheld", out JsonElement withheld ) || withheld.ValueKind != JsonValueKind.Array )
+      {
+         return null;
+      }
+
+      List<BenchWithheld> list = withheld.EnumerateArray().Where( w => w.ValueKind == JsonValueKind.Object && Text( w, "target" ) != null )
+         .Select( w => new BenchWithheld( Text( w, "target" )!, FriendlyName( Text( w, "target" )! ), Text( w, "reason" ) ?? "no reason given" ) ).Take( MAX_ENGINES ).ToList();
+      return list.Count == 0 ? null : list;
    }
 
    /// <summary>
