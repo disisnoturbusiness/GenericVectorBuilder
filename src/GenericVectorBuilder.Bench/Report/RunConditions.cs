@@ -530,6 +530,10 @@ public sealed class WarmupMethod
    private static readonly Regex SETTLE = new( $@"median of its last (?<n>\d+) windows, which must agree within (?<p>{NUMBER})%", RegexOptions.Compiled );
    private static readonly Regex EXTENSION = new( $@"extended once \(at least (?<min>{NUMBER}) s, until its windows agree, at most (?<cap>{NUMBER}) s\)", RegexOptions.Compiled );
    private static readonly Regex REHEARSAL = new( $@"a rehearsal of every pass type at its own concurrency for (?<s>{NUMBER}) s each", RegexOptions.Compiled );
+   private static readonly Regex LEVEL = new( $@"its level test passes: the older and the newer half of its latest windows, (?<min>\d+) to (?<max>\d+) windows a half, each half read as the pass reads it \(the p50 of all its searches with one searcher, its searches per second with several\), agree within (?<p>{NUMBER})%", RegexOptions.Compiled );
+   private static readonly Regex RANGE = new( $@"a second trial is taken, which must lie inside the range of the newer half's windows or within (?<p>{NUMBER})% of the newer half's figure", RegexOptions.Compiled );
+   private static readonly Regex HOLD = new( $@"After the pass its own figure is held against the settled figure, within (?<p>{NUMBER})%", RegexOptions.Compiled );
+   private static readonly Regex FLOOR = new( $@"two one-searcher p50s no more than (?<ms>{NUMBER}) ms apart agree whatever their percentage", RegexOptions.Compiled );
    private static readonly Regex LEGACY = new( @"untimed warm-up of (?<n>\d+) searches", RegexOptions.Compiled );
 
    #endregion Data Members
@@ -578,6 +582,24 @@ public sealed class WarmupMethod
    /// <summary>True when the notes say a pass whose trial still disagrees flags its target as unsettled.</summary>
    public bool FlagsUnsettled { get; init; }
 
+   /// <summary>Fewest windows in each half of the extension's level test; null when the notes do not say (runs before the level test).</summary>
+   public int? LevelHalfMin { get; init; }
+
+   /// <summary>Most windows in each half of the extension's level test; null when the notes do not say.</summary>
+   public int? LevelHalfMax { get; init; }
+
+   /// <summary>How closely the two halves of the level test must agree, in percent; null when the notes do not say.</summary>
+   public double? LevelPercent { get; init; }
+
+   /// <summary>How far, in percent, a second trial outside the newer half's window range may lie from the newer half's figure; null when the notes do not say.</summary>
+   public double? RangePercent { get; init; }
+
+   /// <summary>How far, in percent, a timed pass's own figure may lie from its settled figure; null when the notes do not say (runs before the hold check).</summary>
+   public double? HoldPercent { get; init; }
+
+   /// <summary>Difference in ms under which two one-searcher p50s agree in the level test, the second trial and the hold; null when the notes do not say (runs before the floor).</summary>
+   public double? FloorMs { get; init; }
+
    /// <summary>The run's own method notes about the rehearsal and the warm-up, verbatim, in the order recorded.</summary>
    public List<string> Recorded { get; init; } = new();
 
@@ -600,7 +622,7 @@ public sealed class WarmupMethod
 
          return $"warm-up at the pass's own concurrency for at least {Seconds( MinSeconds )} and at least {Count( MinSearches )} searches (at most {Seconds( CapSeconds )}); "
             + $"then a {Seconds( TrialSeconds )} trial that must land within {Percent( TrialPercent )} of the settled figure; "
-            + $"one extension of {Seconds( ExtensionMinSeconds )} to {Seconds( ExtensionCapSeconds )} if it does not; "
+            + $"one extension of {Seconds( ExtensionMinSeconds )} to {Seconds( ExtensionCapSeconds )} if it does not{LevelDescription()}; "
             + $"rehearsal of every pass type for {Seconds( RehearsalSeconds )} before the first timed pass";
       }
    }
@@ -617,12 +639,20 @@ public sealed class WarmupMethod
          return new[] { ( "warm-up before each timed pass", Description ) };
       }
 
-      string unsettled = FlagsUnsettled ? "; a pass whose trial still disagrees flags its target as unsettled" : string.Empty;
+      string unsettled = !FlagsUnsettled ? string.Empty
+         : HoldPercent.HasValue ? "; a pass whose trial still disagrees, or whose own figure did not hold, flags its target as unsettled"
+         : "; a pass whose trial still disagrees flags its target as unsettled";
+      string level = LevelHalfMin.HasValue
+         ? $"; the extension stops once the older and the newer half of its latest windows ({Count( LevelHalfMin )} to {Count( LevelHalfMax )} windows a half, each half read as the pass reads it) agree within {Percent( LevelPercent )}, judged on the windows that stopped it, "
+            + $"and the second trial must lie inside the range of the newer half's windows or within {Percent( RangePercent )} of the newer half's figure"
+         : string.Empty;
+      string hold = HoldPercent.HasValue ? $"; after the pass its own figure must lie within {Percent( HoldPercent )} of the settled figure" : string.Empty;
+      hold += FloorMs.HasValue ? $"; in the level test, the second trial and the hold, one-searcher p50s within {FloorMs.Value.ToString( "0.0##", CultureInfo.InvariantCulture )} ms of each other agree" : string.Empty;
       return new[]
       {
          ( "warm-up before each timed pass", $"time based: the pass's own search at the pass's own concurrency for at least {Seconds( MinSeconds )} and at least {Count( MinSearches )} searches (at most {Seconds( CapSeconds )}), read in windows of at least {Seconds( WindowSeconds )} and {Count( WindowSearches )} searches" ),
          ( "settle check before each timed pass", $"a {Seconds( TrialSeconds )} trial of the same pass must land within {Percent( TrialPercent )} of the warm-up's settled figure (the median of its last {Count( SettleWindows )} windows, which must agree within {Percent( SettlePercent )}); "
-            + $"if not, the warm-up is extended once (at least {Seconds( ExtensionMinSeconds )}, at most {Seconds( ExtensionCapSeconds )}) and a second trial is taken{unsettled}" ),
+            + $"if not, the warm-up is extended once (at least {Seconds( ExtensionMinSeconds )}, at most {Seconds( ExtensionCapSeconds )}) and a second trial is taken{level}{hold}{unsettled}" ),
          ( "rehearsal before the first timed pass", $"every pass type at its own concurrency for {Seconds( RehearsalSeconds )} each, untimed" ),
       };
    }
@@ -658,6 +688,12 @@ public sealed class WarmupMethod
             ExtensionCapSeconds = Number( extension, "cap" ),
             RehearsalSeconds = Number( REHEARSAL.Match( text ), "s" ),
             FlagsUnsettled = text.Contains( "flags its target as unsettled", StringComparison.Ordinal ),
+            LevelHalfMin = Whole( LEVEL.Match( text ), "min" ),
+            LevelHalfMax = Whole( LEVEL.Match( text ), "max" ),
+            LevelPercent = Number( LEVEL.Match( text ), "p" ),
+            RangePercent = Number( RANGE.Match( text ), "p" ),
+            HoldPercent = Number( HOLD.Match( text ), "p" ),
+            FloorMs = Number( FLOOR.Match( text ), "ms" ),
             Recorded = mine,
          };
       }
@@ -669,6 +705,22 @@ public sealed class WarmupMethod
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// The level test, the second trial's range and the hold check for the one-line description,
+   /// or nothing for a run that recorded none of them (so older runs keep their description, and
+   /// runs judged by different rules do not share one and are not merged).
+   /// </summary>
+   /// <returns>"; the extension judged by its level test (5 to 10 windows a half, within 5%), its second trial inside the newer windows' range or within 10%; each timed pass held within 10% of its settled figure", or less.</returns>
+   private string LevelDescription()
+   {
+      string level = LevelHalfMin.HasValue
+         ? $"; the extension judged by its level test ({Count( LevelHalfMin )} to {Count( LevelHalfMax )} windows a half, within {Percent( LevelPercent )}), its second trial inside the newer windows' range or within {Percent( RangePercent )}"
+         : string.Empty;
+      string hold = HoldPercent.HasValue ? $"; each timed pass held within {Percent( HoldPercent )} of its settled figure" : string.Empty;
+      string floor = FloorMs.HasValue ? $"; one-searcher p50s within {FloorMs.Value.ToString( "0.0##", CultureInfo.InvariantCulture )} ms agree in those checks" : string.Empty;
+      return level + hold + floor;
+   }
 
    /// <summary>
    /// A number captured by a group, or null when the pattern did not match.

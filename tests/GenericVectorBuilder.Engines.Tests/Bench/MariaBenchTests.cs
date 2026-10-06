@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.Loader;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -170,7 +171,7 @@ public class MariaBenchTests
          "down before|running?|mariadb-bench.compose.yaml|False",
          "down before|up|mariadb-bench.compose.yaml|cpuset 2-3,6-7",
          "down before|down|mariadb-bench.compose.yaml|",
-         "down before|notes|Started by run-all for this measurement with every container created on CPUs 2-3,6-7 (fake start on 2-3,6-7); stopped afterwards.",
+         "down before|notes|Started by run-all for this measurement with every container created on CPUs 2-3,6-7 (fake start on 2-3,6-7); stopped afterwards. / " + EngineFilesNote( "mariadb-bench.compose.yaml", "This run created the engine from these files." ),
       }, down );
 
       string[] up = lines.Where( l => l.StartsWith( "already up|", StringComparison.Ordinal ) ).ToArray();
@@ -178,7 +179,7 @@ public class MariaBenchTests
       {
          "already up|running?|mariadb-bench.compose.yaml|True",
          "already up|running?|mariadb-bench.compose.yaml|True",
-         "already up|notes|Engine was already running before the run; left running.",
+         "already up|notes|Engine was already running before the run; left running. / " + EngineFilesNote( "mariadb-bench.compose.yaml", "The engine was already running at its turn, so it may have been created from other files than these." ),
       }, up );
       Assert.DoesNotContain( lines, l => l.Contains( "|mariadb.compose.yaml", StringComparison.Ordinal ) );
    }
@@ -216,6 +217,21 @@ public class MariaBenchTests
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// The engine-files note the lifecycle adds to a target's notes for a compose file of deploy/engines that
+   /// mounts no config file: the file's name and the first 12 hex digits of its SHA-256, computed here
+   /// from the file itself, then the sentence that says who created the engine.
+   /// </summary>
+   /// <param name="composeFile">File name under deploy/engines.</param>
+   /// <param name="origin">The closing sentence.</param>
+   /// <returns>The note.</returns>
+   private static string EngineFilesNote( string composeFile, string origin )
+   {
+      string path = Path.Combine( TargetsHarness.RepoRoot(), "deploy", "engines", composeFile );
+      string hash = Convert.ToHexString( SHA256.HashData( File.ReadAllBytes( path ) ) )[..12].ToLowerInvariant();
+      return $"Engine files (SHA-256, first 12 hex digits): [{composeFile} {hash}]. {origin}";
+   }
 
    /// <summary>
    /// The lines of a compose file under deploy/engines without blank lines and comments.

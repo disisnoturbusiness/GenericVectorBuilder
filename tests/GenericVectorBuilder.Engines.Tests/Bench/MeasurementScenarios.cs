@@ -88,8 +88,9 @@ public static class MeasurementScenarios
    /// </summary>
    /// <param name="defaultScript">Latency script of default searches.</param>
    /// <param name="folder">Folder for the results.</param>
+   /// <param name="outside">Outside load the runner is handed as machine control's reading ("window,recent,limit"), "none" for a reader that has nothing, or null for no reader at all.</param>
    /// <returns>The trace, notes, error, pass order and results.json text.</returns>
-   public static async Task<TargetRun> MeasureAsync( string defaultScript, string folder )
+   public static async Task<TargetRun> MeasureAsync( string defaultScript, string folder, string? outside = null )
    {
       var trace = new MeasureTrace();
       BenchOptions options = BenchOptions.Parse( new[] { "run-all", "--pipeline", "m", "--warmup", "3", "--seconds", "1", "--exact-seconds", "1",
@@ -97,7 +98,7 @@ public static class MeasurementScenarios
       PipelineData data = Data( 30, 4 );
       QuerySet queries = QuerySet.Random( data, options.RandomCount );
       SearchRunner runner = Runner( data, queries, options, 9, Quick( 0.4, 1.5 ) );
-      var measurer = new TargetRunner( options, new EngineLifecycle( new NoHost(), true, _ => { } ), line => trace.Add( "LOG " + line, 0 ) );
+      var measurer = new TargetRunner( options, new EngineLifecycle( new NoHost(), true, _ => { } ), line => trace.Add( "LOG " + line, 0 ) ) { OutsideLoad = OutsideReader( outside ) };
       TargetReport result = await measurer.MeasureAsync( Target( new ScriptedExactSink( trace, defaultScript, "fixed:1" ) ), data, runner, CancellationToken.None );
       var report = new BenchReport { RunSeed = 9, Command = "run-all", Pipeline = "m" };
       report.Targets.Add( result );
@@ -133,7 +134,7 @@ public static class MeasurementScenarios
       using var doc = System.Text.Json.JsonDocument.Parse( System.Text.Json.JsonSerializer.Serialize( new { name = "fake", notes = new[] { note } } ) );
       TargetResult read = TargetResult.Parse( doc.RootElement );
       string[] checks = p.Checks.Select( c => string.Join( "|", c.Pass, c.Trial.Concurrency, c.Settle.Settled, SearchRunner.SettledFigure( c.Settle.WindowFigures ) ?? -1, c.Trial.Figure ?? -1, c.Trial.Agrees,
-         c.Extension != null, c.Extension?.Seconds ?? 0, c.Retrial?.Figure ?? -1, c.Retrial?.Agrees ?? false, c.Confirmed, c.Settle.Concurrency ) ).ToArray();
+         c.Extension != null, c.Extension?.Seconds ?? 0, c.Retrial?.Figure ?? -1, c.Retrial?.Agrees ?? false, c.Confirmed, c.Settle.Concurrency, c.Held, c.PassFigure ?? -1, c.SettledFigure ?? -1 ) ).ToArray();
       return new CheckScenario( trace.Events(), trace.InFlight(), checks, note, read.Settled, outcome.PassOrder.ToArray(), p.Searches, outcome.Report.Qps.ToDictionary( q => q.Key, q => q.Value ) );
    }
 
@@ -183,6 +184,10 @@ public static class MeasurementScenarios
          "extended-ok" => new[] { new SettleCheck( "default@8", settled, trialBad, extension, trialOk, true ), one },
          "extended-bad" => new[] { new SettleCheck( "default@8", settled, trialBad, extension, trialBad with { Settled = 2880, Figure = 3600 }, false ), one },
          "gave-up" => new[] { new SettleCheck( "default@8", unsettled, trialBad, null, null, false ), one },
+         "held" => new[] { new SettleCheck( "default@8", settled, trialOk with { Settled = 2899 }, null, null, true, 2950 ), one with { PassFigure = 1.90 } },
+         "not-held" => new[] { new SettleCheck( "default@8", settled, trialOk with { Settled = 2899 }, null, null, true, 2400 ), one with { PassFigure = 1.90 } },
+         "held-floor" => new[] { new SettleCheck( "default@8", settled, trialOk with { Settled = 2899 }, null, null, true, 2950 ), one with { Trial = new TrialRecord( 1, 0.366, 0.36, 8000, 0, 3.0 ), PassFigure = 0.325 } },
+         "not-held-p50" => new[] { new SettleCheck( "default@8", settled, trialOk with { Settled = 2899 }, null, null, true, 2950 ), one with { Trial = new TrialRecord( 1, 0.366, 0.36, 8000, 0, 3.0 ), PassFigure = 0.25 } },
          _ => Array.Empty<SettleCheck>(),
       };
       string note = TargetRunner.DescribeSettle( checks );
@@ -239,6 +244,107 @@ public static class MeasurementScenarios
    }
 
    /// <summary>
+   /// <see cref="SearchRunner.LevelOf"/> on hand-made windows: windows of the given figures, each
+   /// of the given searches and seconds; with one searcher each window's latencies are its figure
+   /// repeated, except where <paramref name="latencies"/> gives them.
+   /// </summary>
+   /// <param name="figures">Window figures, oldest first.</param>
+   /// <param name="searches">Searches of each window.</param>
+   /// <param name="seconds">Seconds of each window.</param>
+   /// <param name="concurrency">Searchers.</param>
+   /// <param name="latencies">Latencies of each window (one searcher), or null for the figure repeated.</param>
+   /// <returns>Older, newer, windows a half, 1 when they agree, apart; or an empty array when there is no level test.</returns>
+   public static double[] LevelRules( double[] figures, int[] searches, double[] seconds, int concurrency, double[][]? latencies )
+   {
+      List<SettleWindow> windows = figures.Select( ( f, i ) => new SettleWindow( f, searches[i], seconds[i],
+         concurrency == 1 ? ( latencies?[i] ?? Enumerable.Repeat( f, searches[i] ).ToArray() ) : null ) ).ToList();
+      SettleLevel? level = SearchRunner.LevelOf( windows, concurrency );
+      return level == null ? Array.Empty<double>() : new[] { level.Older, level.Newer, level.HalfWindows, level.Agrees ? 1 : 0, level.Apart, level.Low, level.High };
+   }
+
+   /// <summary>
+   /// How a second trial is judged: its distance from the settled figure, whether it lies inside
+   /// the given range, and whether it agrees.
+   /// </summary>
+   /// <param name="settled">Settled figure.</param>
+   /// <param name="figure">Trial figure.</param>
+   /// <param name="low">Range low, or NaN for none.</param>
+   /// <param name="high">Range high, or NaN for none.</param>
+   /// <param name="concurrency">Searchers (one: the figures are p50s in ms).</param>
+   /// <returns>Apart (NaN for none), 1 when inside the range, 1 when it agrees, and its text.</returns>
+   public static object[] TrialJudged( double settled, double figure, double low, double high, int concurrency )
+   {
+      var trial = new TrialRecord( concurrency, settled, figure, 3000, 0, 3.0, double.IsNaN( low ) ? null : low, double.IsNaN( high ) ? null : high );
+      return new object[] { trial.Apart ?? double.NaN, trial.InRange ? 1 : 0, trial.Agrees ? 1 : 0, trial.Describe( "second trial" ) };
+   }
+
+   /// <summary>
+   /// An extension's verdict when one more full window arrives between the moment its windows
+   /// agreed (and it stopped) and the end of its searchers. Drives a real <see cref="SettleSampler"/>
+   /// at one searcher in windows of <paramref name="windowSeconds"/>: <paramref name="steady"/>
+   /// windows of 150 searches at 1 ms, then one window of 150 at 5 ms, then, once that window has
+   /// ended but before it is read (windows are read one window after they end), the poll, the
+   /// stop decision, and the final read. Why: the v6 runs judged an extension on that extra
+   /// window, and 7 of their 10 unsettled checks came from it.
+   /// </summary>
+   /// <param name="windowSeconds">Window length (keep it well above the box's timer jitter).</param>
+   /// <param name="steady">Steady windows before the slow one.</param>
+   /// <returns>Settled (1/0), stopped by settling (1/0), windows judged, the last figure judged, and whether the timing held (1/0: every step landed in its window).</returns>
+   public static async Task<double[]> FrozenVerdictAsync( double windowSeconds, int steady )
+   {
+      var plan = new SustainPlan( 0, TimeSpan.Zero, TimeSpan.FromMinutes( 5 ), true );
+      var sampler = new SettleSampler( 1, TimeSpan.FromSeconds( windowSeconds ), 20, true );
+      var clock = Stopwatch.StartNew();
+      bool onTime = true;
+      for( int window = 0; window <= steady; window++ )
+      {
+         onTime &= await UntilAsync( clock, ( window + 0.2 ) * windowSeconds, ( window + 0.6 ) * windowSeconds );
+         Enumerable.Range( 0, 150 ).ToList().ForEach( _ => sampler.Record( 0, window < steady ? 1.0 : 5.0, null ) );
+         onTime &= clock.Elapsed.TotalSeconds < ( window + 0.8 ) * windowSeconds;
+      }
+
+      onTime &= await UntilAsync( clock, ( steady + 1.2 ) * windowSeconds, ( steady + 1.6 ) * windowSeconds );
+      sampler.Evaluate( false );
+      bool stopped = !sampler.Continues( 1, plan );
+      onTime &= clock.Elapsed.TotalSeconds < ( steady + 1.8 ) * windowSeconds;
+      sampler.Evaluate( true );
+      SettleResult result = sampler.Result( plan );
+      return new[] { result.Settled ? 1.0 : 0, stopped ? 1 : 0, result.WindowFigures.Count, result.WindowFigures.Count > 0 ? result.WindowFigures[^1] : -1, onTime ? 1 : 0 };
+   }
+
+   /// <summary>
+   /// The load note <see cref="TargetRunner.DescribeLoad"/> writes for a reading.
+   /// </summary>
+   /// <param name="loadAverage">Load average text.</param>
+   /// <param name="window">Outside load over the busy window, or NaN for none.</param>
+   /// <param name="recent">Outside load over the recent window, or NaN for none.</param>
+   /// <param name="limit">Busy limit.</param>
+   /// <param name="hasReading">False for no reading at all (machine control off).</param>
+   /// <param name="wired">False for no reader handed to the runner.</param>
+   /// <returns>The note.</returns>
+   public static string LoadNote( string loadAverage, double window, double recent, double limit, bool hasReading, bool wired )
+   {
+      OutsideLoadSample? sample = hasReading ? new OutsideLoadSample( Reading( window, recent ), limit ) : null;
+      return TargetRunner.DescribeLoad( loadAverage, sample, wired );
+   }
+
+   /// <summary>
+   /// The run's warm-up method as the consolidation reads it back from the runner's own method
+   /// notes (<see cref="WarmupMethod.From"/>), as numbers: shortest warm-up s, fewest searches, cap
+   /// s, window s, window searches, trial s, trial %, settle windows, settle %, extension minimum s,
+   /// extension cap s, rehearsal s, and 1 when it reads that an unsettled pass flags its target.
+   /// </summary>
+   /// <param name="warmupSearches">The --warmup count.</param>
+   /// <returns>The numbers (NaN for a part it could not read).</returns>
+   public static double[] MethodReadBack( int warmupSearches )
+   {
+      WarmupMethod m = WarmupMethod.From( SearchRunner.DescribeMethod( warmupSearches ).ToList() ) ?? throw new InvalidOperationException( "the method notes were not read at all" );
+      double N( double? v ) => v ?? double.NaN;
+      return new[] { N( m.MinSeconds ), N( m.MinSearches ), N( m.CapSeconds ), N( m.WindowSeconds ), N( m.WindowSearches ), N( m.TrialSeconds ), N( m.TrialPercent ), N( m.SettleWindows ),
+         N( m.SettlePercent ), N( m.ExtensionMinSeconds ), N( m.ExtensionCapSeconds ), N( m.RehearsalSeconds ), m.FlagsUnsettled ? 1 : 0 };
+   }
+
+   /// <summary>
    /// The run's method notes as the runner writes them for a --warmup count.
    /// </summary>
    /// <param name="warmupSearches">The --warmup count.</param>
@@ -251,6 +357,59 @@ public static class MeasurementScenarios
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// The outside-load reader a scenario hands the target runner: null for none, one that has
+   /// nothing for "none", else a fixed reading from "window,recent,limit".
+   /// </summary>
+   /// <param name="outside">The reading as text, "none", or null.</param>
+   /// <returns>The reader, or null.</returns>
+   private static Func<OutsideLoadSample?>? OutsideReader( string? outside )
+   {
+      if( outside == null )
+      {
+         return null;
+      }
+
+      if( outside == "none" )
+      {
+         return () => null;
+      }
+
+      double[] v = outside.Split( ',' ).Select( x => double.Parse( x, System.Globalization.CultureInfo.InvariantCulture ) ).ToArray();
+      return () => new OutsideLoadSample( Reading( v[0], v[1] ), v[2] );
+   }
+
+   /// <summary>
+   /// An outside load reading over a 60 s window ending now.
+   /// </summary>
+   /// <param name="window">CPUs over the busy window, or NaN for none.</param>
+   /// <param name="recent">CPUs over the recent window, or NaN for none.</param>
+   /// <returns>The reading.</returns>
+   private static OutsideReading Reading( double window, double recent )
+   {
+      DateTime now = DateTime.UtcNow;
+      return new OutsideReading( double.IsNaN( window ) ? null : window, double.IsNaN( recent ) ? null : recent, now.AddSeconds( -60 ), now );
+   }
+
+   /// <summary>
+   /// Waits until the clock reads <paramref name="at"/> seconds; false when it was already past
+   /// <paramref name="latest"/> by then (the box was too slow for the step to land in its window).
+   /// </summary>
+   /// <param name="clock">The clock.</param>
+   /// <param name="at">Seconds to wait for.</param>
+   /// <param name="latest">Latest acceptable seconds.</param>
+   /// <returns>True when on time.</returns>
+   private static async Task<bool> UntilAsync( Stopwatch clock, double at, double latest )
+   {
+      double wait = at - clock.Elapsed.TotalSeconds;
+      if( wait > 0 )
+      {
+         await Task.Delay( TimeSpan.FromSeconds( wait ) );
+      }
+
+      return clock.Elapsed.TotalSeconds <= latest;
+   }
 
    /// <summary>
    /// Short test lengths: the given rehearsal and warm-up, windows of 0.25 s, a 0.3 s trial, an
@@ -290,9 +449,10 @@ public static class MeasurementScenarios
 
    /// <summary>
    /// Records a progress line; restarts the sink's latency script at the first warm-up line, so a
-   /// script like "decay" plays out inside the first warm-up and not inside the rehearsal; and
-   /// drops a "drop" script to its low latency when the first trial starts (an engine that gets
-   /// faster right after its warm-up looked settled).
+   /// script like "decay" plays out inside the first warm-up and not inside the rehearsal; drops a
+   /// "drop" script to its low latency when the first trial starts (an engine that gets faster
+   /// right after its warm-up looked settled); and moves a "jump" script to its second latency when
+   /// the first timed pass begins (an engine that changes once the clock is running).
    /// </summary>
    /// <param name="trace">Trace.</param>
    /// <param name="sink">The sink.</param>
@@ -308,6 +468,11 @@ public static class MeasurementScenarios
       if( line.Contains( $": {SearchRunner.CHECK_STEP} before ", StringComparison.Ordinal ) && line.Contains( ": trial, ", StringComparison.Ordinal ) )
       {
          sink.Drop();
+      }
+
+      if( line.Contains( ": timing ", StringComparison.Ordinal ) )
+      {
+         sink.Jump();
       }
    }
 
@@ -408,7 +573,7 @@ public sealed record PrepareScenario( string[] Events, int[] InFlight, string[] 
 /// <summary>What <see cref="MeasurementScenarios.CheckAsync"/> saw.</summary>
 /// <param name="Events">Trace (searches and progress lines).</param>
 /// <param name="InFlight">Searches in flight when each search started (0 for log lines).</param>
-/// <param name="Checks">Per check: pass|trial searchers|warm-up settled|settled figure|trial figure|trial agreed|extended|extension s|retrial figure|retrial agreed|confirmed|warm-up searchers.</param>
+/// <param name="Checks">Per check: pass|trial searchers|warm-up settled|settled figure|trial figure|trial agreed|extended|extension s|retrial figure|retrial agreed|confirmed|warm-up searchers|held|timed pass figure|figure it was held against.</param>
 /// <param name="Note">The settle note.</param>
 /// <param name="ReadSettled">How the consolidation's reader reads the note.</param>
 /// <param name="PassOrder">Passes as run.</param>
@@ -513,8 +678,9 @@ public sealed class MeasureTrace
 /// <see cref="Drop"/> and LOW after (an engine that is still getting faster after it looked
 /// settled); "climb" waits 1 ms more every 100 searches (it never settles); "jit:HIGH:LOW:N"
 /// waits HIGH ms until it has served N searches that started while another was in flight, and
-/// LOW after (an engine whose concurrent paths warm up only under concurrent load); "fail"
-/// throws every time.
+/// LOW after (an engine whose concurrent paths warm up only under concurrent load); "jump:A:B"
+/// waits A ms until <see cref="Jump"/> and B after (an engine that changes once the first timed
+/// pass has begun); "fail" throws every time.
 /// </summary>
 public class ScriptedSink : ISink
 {
@@ -527,6 +693,7 @@ public class ScriptedSink : ISink
    private int _concurrentServed;
    private int _restarted;
    private volatile bool _dropped;
+   private volatile bool _jumped;
 
    #endregion Data Members
 
@@ -659,6 +826,14 @@ public class ScriptedSink : ISink
    }
 
    /// <summary>
+   /// Switches a "jump" script to its second latency from now on.
+   /// </summary>
+   public void Jump()
+   {
+      _jumped = true;
+   }
+
+   /// <summary>
    /// Drops every row.
    /// </summary>
    /// <param name="collection">Collection.</param>
@@ -696,6 +871,7 @@ public class ScriptedSink : ISink
          "decay" => n < 600 ? 6 - n / 150 : 2,
          "alternate" => n / 100 % 2 == 0 ? 1 : 4,
          "drop" => double.Parse( parts[1] ),
+         "jump" => double.Parse( parts[1] ),
          "climb" => 1 + n / 100,
          "fail" => throw new InvalidOperationException( "scripted failure" ),
          _ => throw new ArgumentException( $"unknown script {script}" ),
@@ -736,6 +912,11 @@ public class ScriptedSink : ISink
       if( parts[0] == "drop" && _dropped )
       {
          return "fixed:" + parts[2];
+      }
+
+      if( parts[0] == "jump" )
+      {
+         return "fixed:" + ( _jumped ? parts[2] : parts[1] );
       }
 
       if( parts[0] != "jit" )

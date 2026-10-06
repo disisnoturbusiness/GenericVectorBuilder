@@ -52,22 +52,28 @@ public sealed class MachineControlOptions
 
 /// <summary>
 /// Puts the machine into a known state for a timed run and back afterwards: every CPU on the
-/// "performance" governor, the engine under test on two physical cores and the client on the
-/// other two, and no pass's warm-up started while other work keeps the box busy. It records the
+/// "performance" governor with turbo off and the uncore (L3 and memory) clock held at its top
+/// ratio (so every pass runs at the same clocks, whatever the engine under test runs), the engine
+/// under test on two physical cores and the client on the other two, and no pass's warm-up
+/// started while other work keeps the box busy. It records the
 /// governor, the split, each engine's pinning, the CPU idle settings, how each target was
-/// reached, and every CPU's clock per pass in results.json.
-/// Every change is written to a state file before it is made and put back in a finally block;
-/// a run that dies without its finally leaves the file, and the next start (or the
-/// restore-machine command) puts the machine back before changing anything.
+/// reached, and every CPU's clock per pass in results.json; each pass's average clock per CPU
+/// group, and any pass more than 1% off the pinned clock, are in the notes.
+/// Every change is written to a state file (the clock to its clock record beside it, see
+/// <see cref="ClockStore"/>) before it is made and put back in a finally block; a run that dies
+/// without its finally leaves the files, and the next start (or the restore-machine command)
+/// puts the machine back before changing anything.
 /// Why it watches the progress lines: the timed passes run inside the search runner, which
 /// announces each pass's warm-up ("NAME: warm-up before PASS"), then the pass ("NAME: timing
 /// PASS"), and reports each result in a line. The warm-up line is where a pass is held for a
 /// quiet box, before the warm-up starts (a wait between the warm-up and the timed pass let the
 /// engine go cold, review finding 13), and the timing line opens its clock window, without the
 /// runner knowing about machine control. So the quiet check is as old as the warm-up when the
-/// clock opens, and on a target's first pass also as old as the settle check that runs between
-/// the warm-up and the timing; each pass records that lead (QuietCheckLeadSeconds). If a searched
-/// target shows no pass, the results say so.
+/// clock opens, plus, in a run with a rehearsal, the settle trial that follows every pass's
+/// warm-up (about 18 s in all); after a settle extension the warm-up is announced, checked and
+/// run again, so the check is then as old as that second warm-up alone (about 15 s). Each pass
+/// records that lead (QuietCheckLeadSeconds). If a searched target shows no pass, the results
+/// say so.
 /// </summary>
 public sealed class MachineControl : IDisposable
 {
@@ -85,6 +91,7 @@ public sealed class MachineControl : IDisposable
    private readonly MachineStateKeeper? _keeper;
    private readonly CpuPartition? _partition;
    private readonly EnginePinner? _pinner;
+   private readonly ClockStore? _clockStore;
    private readonly object _passLock = new();
    private MachineSampler? _sampler;
    private OpenPass? _open;
@@ -94,6 +101,12 @@ public sealed class MachineControl : IDisposable
    private DateTime _outsideFrom = DateTime.MinValue;
    private CancellationToken _ct;
    private bool _restored;
+   private ClockPin? _clock;
+   private ClockSettings? _clockFound;
+   private ClockSettings? _clockAtEnd;
+   private ClockSettings? _clockAfterRestore;
+   private ( UncoreLimit? Limit, string Text ) _uncoreAtEnd = ( null, "not read" );
+   private ( UncoreLimit? Limit, string Text ) _uncoreAfterRestore = ( null, "not read" );
 
    #endregion Data Members
 
@@ -117,6 +130,7 @@ public sealed class MachineControl : IDisposable
       _keeper = keeper;
       _partition = partition;
       _pinner = keeper != null && partition is { IsSplit: true } ? new EnginePinner( system, keeper, partition ) : null;
+      _clockStore = keeper != null ? new ClockStore( keeper.Store.Path ) : null;
    }
 
    #endregion Constructor
@@ -137,7 +151,8 @@ public sealed class MachineControl : IDisposable
 
    /// <summary>
    /// Starts machine control: puts back anything an earlier run left changed, splits the CPUs,
-   /// records and sets the governor, and starts sampling. When off, only reads the governor.
+   /// records and sets the governor, records and pins the clock (turbo off), and starts sampling.
+   /// When off, only reads the governor and the clock settings.
    /// </summary>
    /// <param name="conditions">The record to fill (build and settings already in it).</param>
    /// <param name="options">Settings.</param>
@@ -145,7 +160,7 @@ public sealed class MachineControl : IDisposable
    /// <param name="log">Progress output.</param>
    /// <param name="ct">Cancellation; also ends a wait for a quiet box.</param>
    /// <returns>The control; dispose it (or call <see cref="RestoreAsync"/>) to put the machine back.</returns>
-   /// <exception cref="InvalidOperationException">Another run controls the machine, an earlier run's changes cannot be put back, or the governor cannot be set.</exception>
+   /// <exception cref="InvalidOperationException">Another run controls the machine, an earlier run's changes cannot be put back, or the governor or the clock cannot be set.</exception>
    public static async Task<MachineControl> StartAsync( MachineConditions conditions, MachineControlOptions options, IMachineSystem system, Action<string> log, CancellationToken ct )
    {
       conditions.StateFile = Path.GetFullPath( options.StateFile );
@@ -154,7 +169,7 @@ public sealed class MachineControl : IDisposable
          conditions.MachineControl = "off (" + options.DisabledReason + ")";
          conditions.Governor = GovernorControl.Summarize( GovernorControl.Read( system, AllCpus( system ) ) );
          conditions.CpuIdle = CpuIdleReader.Read( system, AllCpus( system ) );
-         return new MachineControl( conditions, options, system, log, null, null ) { _ct = ct };
+         return new MachineControl( conditions, options, system, log, null, null ) { _ct = ct, _clockFound = ClockControl.Read( system, AllCpus( system ) ) };
       }
 
       var store = new MachineStateStore( options.StateFile );
@@ -179,40 +194,52 @@ public sealed class MachineControl : IDisposable
    }
 
    /// <summary>
-   /// Puts back everything a run that did not finish left changed, from its state file. Used at
-   /// start and by the restore-machine command.
+   /// Puts back everything a run that did not finish left changed, from its state file and its
+   /// clock record (either may be left alone: a run whose clock could not be put back at its end
+   /// removes the state file and keeps the clock record). Used at start and by the
+   /// restore-machine command.
    /// </summary>
    /// <param name="store">The state file.</param>
    /// <param name="system">The machine.</param>
    /// <param name="log">Progress output.</param>
    /// <param name="ct">Cancellation.</param>
    /// <returns>True when there was something to put back.</returns>
-   /// <exception cref="InvalidOperationException">The owning run is still alive, or something could not be put back (the file is kept).</exception>
+   /// <exception cref="InvalidOperationException">The owning run is still alive, or something could not be put back (the files are kept).</exception>
    public static async Task<bool> RestoreStaleAsync( MachineStateStore store, IMachineSystem system, Action<string> log, CancellationToken ct )
    {
       MachineState? stale = store.Load();
-      if( stale == null )
+      var clockStore = new ClockStore( store.Path );
+      ClockState? clock = clockStore.Load();
+      if( stale == null && clock == null )
       {
          return false;
       }
 
-      if( stale.OwnerPid != system.ProcessId && ProcessInfo.IsSameProcess( system, stale.OwnerPid, stale.OwnerStartTicks ) )
+      RefuseWhileOwnerRuns( system, store.Path, stale?.OwnerPid, stale?.OwnerStartTicks, stale?.StartedUtc );
+      RefuseWhileOwnerRuns( system, clockStore.Path, clock?.OwnerPid, clock?.OwnerStartTicks, clock?.StartedUtc );
+      string what = string.Join( "; ", new[] { stale?.Describe(), clock?.Describe() }.OfType<string>() );
+      string from = string.Join( " and ", new[] { stale != null ? store.Path : null, clock != null ? clockStore.Path : null }.OfType<string>() );
+      log( $"Machine: a run that did not finish (pid {stale?.OwnerPid ?? clock!.OwnerPid}, started {stale?.StartedUtc ?? clock!.StartedUtc}) left changes; putting back {what} from {from}" );
+      var problems = new List<string>();
+      if( stale != null )
       {
-         throw new InvalidOperationException( $"Another benchmark run (pid {stale.OwnerPid}, started {stale.StartedUtc}) is controlling this machine; its state file is {store.Path}. "
-            + "Wait for it to end, or stop it with Ctrl+C so it puts the machine back. Do not delete the state file while it runs." );
+         var keeper = new MachineStateKeeper( store, stale );
+         problems.AddRange( await MachineRestorer.RestoreAllAsync( system, keeper, log, ct ) );
+         keeper.Finish();
       }
 
-      log( $"Machine: a run that did not finish (pid {stale.OwnerPid}, started {stale.StartedUtc}) left changes; putting back {stale.Describe()} from {store.Path}" );
-      var keeper = new MachineStateKeeper( store, stale );
-      List<string> problems = await MachineRestorer.RestoreAllAsync( system, keeper, log, ct );
-      keeper.Finish();
+      if( clock != null )
+      {
+         problems.AddRange( await ClockControl.RestoreAsync( system, clockStore, clock, log, ct ) );
+      }
+
       if( problems.Count > 0 )
       {
-         throw new InvalidOperationException( $"Could not put the machine back from {store.Path}: {string.Join( "; ", problems )}. "
+         throw new InvalidOperationException( $"Could not put the machine back from {from}: {string.Join( "; ", problems )}. "
             + "This run changed nothing. Fix the cause, then run 'GenericVectorBuilder.Bench restore-machine'." );
       }
 
-      log( "Machine: the earlier run's changes are put back and its state file removed." );
+      log( $"Machine: the earlier run's changes are put back and {from} removed." );
       return true;
    }
 
@@ -379,6 +406,18 @@ public sealed class MachineControl : IDisposable
    }
 
    /// <summary>
+   /// The outside load right now, over the same windows and judged by the same limit as the
+   /// quiet check before each warm-up; null when nothing is sampled (machine control off). The
+   /// target runner's note when searching begins is judged by it instead of the load average,
+   /// which counts this benchmark's own client and engines.
+   /// </summary>
+   /// <returns>The reading and its limit, or null.</returns>
+   public OutsideLoadSample? OutsideLoadNow()
+   {
+      return _sampler == null ? null : new OutsideLoadSample( ReadOutside(), _options.BusyThreshold );
+   }
+
+   /// <summary>
    /// Adds the run-level machine notes and flags to the report (once, at the end).
    /// </summary>
    /// <param name="report">The run.</param>
@@ -386,11 +425,22 @@ public sealed class MachineControl : IDisposable
    {
       report.Notes.Add( SummaryNote() );
       Conditions.Flags = MachineFlags.Compute( Conditions, report.Targets.Where( t => t.PassOrder is { Count: > 0 } ).Select( t => t.Name ) );
+      if( _clock != null && _clockAtEnd != null && _clockAtEnd.Key() != _clock.Pinned.Key() )
+      {
+         Conditions.Flags.Add( $"WARNING: the CPU clock settings changed during the run (pinned: {_clock.Pinned.Describe()}; at the end: {_clockAtEnd.Describe()}). This run did not change them, so something else did; passes after the change may not have run at the pinned clock (each pass's average is in its target's clock note)." );
+      }
+
+      if( _clock?.Uncore != null && _uncoreAtEnd.Limit != _clock.Uncore.Pinned )
+      {
+         Conditions.Flags.Add( $"WARNING: the uncore clock limit was not as pinned at the end of the run (pinned: {_clock.Uncore.Pinned.Describe()}; at the end: {_uncoreAtEnd.Text}); passes may not all have run at the pinned uncore clock." );
+      }
+
       report.Notes.AddRange( Conditions.Flags );
    }
 
    /// <summary>
-   /// Adds a target's pinning, clock per pass and busy-box warnings to its notes.
+   /// Adds a target's pinning, clock per pass (median and average per CPU group), clock and
+   /// busy-box warnings to its notes.
    /// </summary>
    /// <param name="result">The target's results.</param>
    public void AnnotateTarget( TargetReport result )
@@ -423,13 +473,14 @@ public sealed class MachineControl : IDisposable
          result.Notes.Add( clock );
       }
 
+      result.Notes.AddRange( MachineFlags.ClockWarnings( passes ) );
       result.Notes.AddRange( passes.Where( p => p.BusyBox ).Select( p => $"WARNING: busy box during {p.Pass}: {p.BusyReason}." ) );
    }
 
    /// <summary>
-   /// Puts the machine back: the client's affinity, every pin still recorded, the governors.
-   /// Records what was done and what failed; removes the state file only when everything is
-   /// back. Safe to call twice.
+   /// Puts the machine back: the client's affinity, every pin still recorded, the governors, the
+   /// clock. Records what was done and what failed; removes the state file and the clock record
+   /// only when what each holds is back. Safe to call twice.
    /// </summary>
    public async Task RestoreAsync()
    {
@@ -451,13 +502,18 @@ public sealed class MachineControl : IDisposable
       }
 
       Conditions.GovernorAtEnd = GovernorControl.Summarize( GovernorControl.Read( _system, _partition!.OnlineCpus ) );
+      _clockAtEnd = ClockControl.Read( _system, _partition.OnlineCpus );
+      _uncoreAtEnd = await ReadUncoreAsync();
       await RestoreClientAsync();
       Conditions.RestoreProblems.AddRange( await MachineRestorer.RestoreAllAsync( _system, _keeper, line => Restored( line, null ), CancellationToken.None ) );
+      Conditions.RestoreProblems.AddRange( await RestoreClockAsync() );
       Conditions.GovernorAfterRestore = GovernorControl.Summarize( GovernorControl.Read( _system, _partition.OnlineCpus ) );
-      bool removed = _keeper.Finish();
+      _clockAfterRestore = ClockControl.Read( _system, _partition.OnlineCpus );
+      _uncoreAfterRestore = await ReadUncoreAsync();
+      bool removed = _keeper.Finish() && !_clockStore!.Exists;
       _log( removed
-         ? $"Machine: put back (governor now {Conditions.GovernorAfterRestore}); state file removed."
-         : $"WARNING: the machine is NOT fully put back: {string.Join( "; ", Conditions.RestoreProblems )}. State kept in {_keeper.Store.Path}; fix the cause, then run 'GenericVectorBuilder.Bench restore-machine'." );
+         ? $"Machine: put back (governor now {Conditions.GovernorAfterRestore}; clock now {_clockAfterRestore.Describe()}; uncore {_uncoreAfterRestore.Text}); state file and clock record removed."
+         : $"WARNING: the machine is NOT fully put back: {string.Join( "; ", Conditions.RestoreProblems )}. State kept in {_keeper.Store.Path} and {_clockStore!.Path}; fix the cause, then run 'GenericVectorBuilder.Bench restore-machine'." );
    }
 
    #endregion Public Methods
@@ -465,7 +521,8 @@ public sealed class MachineControl : IDisposable
    #region Private Methods
 
    /// <summary>
-   /// Sets the governor (recorded first), fills the CPU facts and starts sampling.
+   /// Sets the governor and pins the clock (each recorded first), fills the CPU facts and starts
+   /// sampling.
    /// </summary>
    /// <param name="ct">Cancellation.</param>
    private async Task TakeOverAsync( CancellationToken ct )
@@ -481,10 +538,11 @@ public sealed class MachineControl : IDisposable
       Dictionary<int, string?> before = await GovernorControl.ApplyAsync( _system, _keeper!, partition.OnlineCpus, ct );
       Conditions.GovernorBefore = GovernorControl.Summarize( before );
       Conditions.Governor = GovernorControl.Summarize( GovernorControl.Read( _system, partition.OnlineCpus ) );
+      _clock = await ClockControl.ApplyAsync( _system, _clockStore!, _keeper!.State, partition.OnlineCpus, ct );
       _sampler = new MachineSampler( _system, partition.OnlineCpus, await ClockTicksAsync( ct ), _options.SampleInterval );
       _sampler.Start();
       _outsideFrom = DateTime.UtcNow;
-      _log( $"Machine: governor {Conditions.Governor} on CPUs {CpuList.Format( partition.OnlineCpus )} (was {Conditions.GovernorBefore}); {partition.Describe()}; changes recorded in {_keeper!.Store.Path} before they are made." );
+      _log( $"Machine: governor {Conditions.Governor} on CPUs {CpuList.Format( partition.OnlineCpus )} (was {Conditions.GovernorBefore}); clock: {_clock.Describe()} (was {_clock.Before.Describe()}); {partition.Describe()}; changes recorded in {_keeper.Store.Path} and {_clockStore!.Path} before they are made." );
    }
 
    /// <summary>
@@ -646,7 +704,8 @@ public sealed class MachineControl : IDisposable
    }
 
    /// <summary>
-   /// Closes the open pass, if any, and records its clock and load.
+   /// Closes the open pass, if any, and records its clock (per CPU, and the average of each CPU
+   /// group against the pinned clock) and load.
    /// </summary>
    /// <param name="now">Now (UTC).</param>
    /// <param name="closedBy">What closed it, for a pass that showed no result line.</param>
@@ -682,6 +741,9 @@ public sealed class MachineControl : IDisposable
          NearestSample = nearest,
          EngineMhzMedian = MedianOf( cpus, _partition?.EngineCpus ),
          ClientMhzMedian = MedianOf( cpus, _partition?.ClientCpus ),
+         EngineMhzMean = _partition is { IsSplit: true } ? _sampler.MeanMhz( open.Start, end, _partition.EngineCpus ) : null,
+         ClientMhzMean = _sampler.MeanMhz( open.Start, end, _partition is { IsSplit: true } ? _partition.ClientCpus : _sampler.Cpus ),
+         PinnedMhz = _clock?.PinnedMhz,
          CpuMhz = cpus,
          QuietCheckBefore = gate.Before,
          QuietCheckUtc = Utc( gate.CheckedUtc ),
@@ -754,6 +816,35 @@ public sealed class MachineControl : IDisposable
    }
 
    /// <summary>
+   /// Puts this run's clock back from its clock record, if there is one.
+   /// </summary>
+   /// <returns>Problems; empty when the clock is back or was never changed.</returns>
+   private async Task<List<string>> RestoreClockAsync()
+   {
+      ClockState? state;
+      try
+      {
+         state = _clockStore!.Load();
+      }
+      catch( InvalidDataException ex )
+      {
+         return new List<string> { ex.Message };
+      }
+
+      if( state == null )
+      {
+         return new List<string>();
+      }
+
+      if( state.OwnerPid != _system.ProcessId )
+      {
+         return new List<string> { $"the clock record {_clockStore.Path} belongs to pid {state.OwnerPid}, not this run (pid {_system.ProcessId}); left as it is" };
+      }
+
+      return await ClockControl.RestoreAsync( _system, _clockStore, state, line => Restored( line, null ), CancellationToken.None );
+   }
+
+   /// <summary>
    /// Logs and records one thing put back.
    /// </summary>
    /// <param name="line">What was put back.</param>
@@ -794,14 +885,75 @@ public sealed class MachineControl : IDisposable
       string build = $"Client build {c.BuildConfiguration}, {c.DotNet}{( c.ServerGc ? ", server GC" : string.Empty )}.";
       if( !IsOn )
       {
-         return $"Machine control {c.MachineControl}: governor {c.Governor}, nothing pinned, passes not held for a quiet box. CPU idle states (recorded only): {c.CpuIdle?.Describe() ?? "not read"}. {build}";
+         return $"Machine control {c.MachineControl}: governor {c.Governor}, clock not pinned ({_clockFound?.Describe() ?? "not read"}; uncore clock not pinned), nothing pinned, passes not held for a quiet box. CPU idle states (recorded only): {c.CpuIdle?.Describe() ?? "not read"}. {build}";
       }
 
       string split = _partition is { IsSplit: true } ? _partition.Describe() : $"CPUs not split ({c.PartitionProblem})";
       return $"Machine control on: governor {c.Governor} on every CPU during the run (before: {c.GovernorBefore}; at the end: {c.GovernorAtEnd ?? "not read"}; after putting it back: {c.GovernorAfterRestore ?? "not read"}). "
+         + $"{ClockSummary()} "
          + $"{split}; the client process{( c.ClientPinning != null ? " was pinned" : " was NOT pinned" )}; each engine was pinned to the engine CPUs for its turn and put back after (conditions.engines); an engine run-all started (and stopped) was asked to be created on them, and its notes say whether the host did so or it was moved there after the start. "
          + $"Busy box: {c.BusyRule}. Outside load counts {c.CpuAccounting ?? "(not read)"} (conditions.cpuAccounting); each pass also records this client's own CPU time per search (conditions.passes[].clientCpuMsPerSearch). CPU clocks were sampled every {_options.SampleInterval.TotalMilliseconds:0} ms; each pass's min/median/max per CPU is in conditions.passes. "
          + $"CPU idle states, recorded and left as found: {c.CpuIdle?.Describe() ?? "not read"} (conditions.cpuIdle). How each target was reached: conditions.connections. {build}";
+   }
+
+   /// <summary>
+   /// Refuses to touch the machine while the run that owns a state file or clock record is
+   /// alive (another process, the same start time).
+   /// </summary>
+   /// <param name="system">The machine.</param>
+   /// <param name="path">The file, for the message.</param>
+   /// <param name="ownerPid">Its owner's process id, or null when there is no such file.</param>
+   /// <param name="ownerStartTicks">Its owner's start time.</param>
+   /// <param name="startedUtc">When the owner started controlling the machine.</param>
+   /// <exception cref="InvalidOperationException">The owner is alive.</exception>
+   private static void RefuseWhileOwnerRuns( IMachineSystem system, string path, int? ownerPid, long? ownerStartTicks, string? startedUtc )
+   {
+      if( ownerPid is int pid && pid != system.ProcessId && ProcessInfo.IsSameProcess( system, pid, ownerStartTicks ?? 0 ) )
+      {
+         throw new InvalidOperationException( $"Another benchmark run (pid {pid}, started {startedUtc}) is controlling this machine; its state file is {path}. "
+            + "Wait for it to end, or stop it with Ctrl+C so it puts the machine back. Do not delete the state file while it runs." );
+      }
+   }
+
+   /// <summary>
+   /// Reads the uncore limit for the record at the end of the run, when the run pinned it.
+   /// Why it never throws: it only records; a read that fails is said in the notes (and flagged
+   /// at the end of the run), and must not stop the machine being put back.
+   /// </summary>
+   /// <returns>The limit (null when not read) and its text.</returns>
+   private async Task<( UncoreLimit? Limit, string Text )> ReadUncoreAsync()
+   {
+      if( _clock?.Uncore == null )
+      {
+         return ( null, "not pinned" );
+      }
+
+      try
+      {
+         UncoreLimit limit = await UncoreControl.ReadAsync( _system, CancellationToken.None );
+         return ( limit, limit.Describe() );
+      }
+      catch( Exception ex ) when( ex is InvalidOperationException or TimeoutException or IOException )
+      {
+         return ( null, "not read: " + ex.Message );
+      }
+   }
+
+   /// <summary>
+   /// The clock part of the run-level summary note.
+   /// </summary>
+   /// <returns>The text.</returns>
+   private string ClockSummary()
+   {
+      if( _clock == null )
+      {
+         return "CPU clock NOT pinned.";
+      }
+
+      return string.Create( CultureInfo.InvariantCulture, $"CPU clock pinned for the run: {_clock.Describe()} (before: {_clock.Before.Describe()}; while pinned: {_clock.Pinned.Describe()}; at the end: {_clockAtEnd?.Describe() ?? "not read"}; after putting it back: {_clockAfterRestore?.Describe() ?? "not read"}). " )
+         + ( _clock.Uncore != null ? $"Uncore limit at the end: {_uncoreAtEnd.Text}; after putting it back: {_uncoreAfterRestore.Text}. " : string.Empty )
+         + string.Create( CultureInfo.InvariantCulture, $"Each target's clock note gives every pass's average MHz on the engine CPUs and on the client CPUs; a pass whose average on either is more than {MachineFlags.CLOCK_TOLERANCE:0%} off the pinned {_clock.PinnedMhz} MHz is flagged. " )
+         + "Figures from runs made with turbo on are not comparable with these in absolute terms.";
    }
 
    /// <summary>

@@ -16,7 +16,11 @@ namespace GenericVectorBuilder.Engines.Tests.Bench;
 /// time-based warm-up at its own concurrency and (after a preparation) a settle check that
 /// compares a trial of that same pass with the warm-up's settled figure and extends the warm-up
 /// once when they differ by more than 10%, each pass is recorded with its window, its searches
-/// and the pass before it, and lopsided or thin windows are flagged.
+/// and the pass before it, and lopsided or thin windows are flagged. Since v7: the extension is
+/// judged by its level test (older against newer half of its latest windows) on exactly the
+/// windows that stopped it, its second trial may land inside the newer half's window range, every
+/// timed pass is held against its settled figure, and the load note when searching begins is
+/// judged by the measured outside load, never by the load average.
 /// Why these rules get tests: each one closes a hole a review found (a p50 from a separate
 /// burst, an exact p50 from 20 searches, a client compiled during the first timed pass, JVM
 /// engines timed cold when their 8-searcher pass ran first, a settle at one searcher that said
@@ -141,8 +145,10 @@ public class MeasurementTests
    /// on. The warm-up's settled QPS is well below the trial's, so the check extends the warm-up
    /// once (for at least its minimum, at the pass's concurrency), the second trial agrees, the
    /// warm-up is announced and run again before the timing (so the quiet-box check and the
-   /// warm-up still come right before the timed pass), and the note says settled, with the
-   /// extension named. The next pass, already fast, is not extended.
+   /// warm-up still come right before the timed pass), and the note says default@4 settled after
+   /// the extension. The next pass, already fast, is not extended. Why the whole note's verdict is
+   /// not asserted: default@1's 4 ms fake searches and the 1 s timed passes can fairly wander past
+   /// the limits on a loaded test box (the baseline run of 2026-10-06 failed here that way).
    /// </summary>
    [Fact]
    public async Task SettleCheck_LateSpeedUpExtendsOnce()
@@ -162,10 +168,10 @@ public class MeasurementTests
       Assert.Equal( "True", first[10] );
       Assert.Equal( "False", checks[1][6] );
       string note = r.Note;
-      Assert.StartsWith( "Settle: settled before every timed pass", note );
-      Assert.Contains( "EXTENDED once", note );
-      Assert.DoesNotContain( "NOT settled", note );
-      Assert.True( (bool?)r.ReadSettled );
+      string four = note[note.IndexOf( "default@4: warm-up ", StringComparison.Ordinal )..];
+      Assert.Contains( "EXTENDED once", four );
+      Assert.Contains( "settled after the extension", four );
+      Assert.DoesNotContain( "NOT settled when timing began for default@4", note );
       string[] log = ( (string[])r.Events ).Where( e => e.StartsWith( "LOG ", StringComparison.Ordinal ) ).ToArray();
       int extending = Array.FindIndex( log, l => l.Contains( "before default@4: extending the warm-up once", StringComparison.Ordinal ) );
       int again = Array.FindIndex( log, l => l.Contains( "warm-up before default@4, 3 searches and 1.5 s at least, 4 searchers (again, after the settle extension)", StringComparison.Ordinal ) );
@@ -224,6 +230,8 @@ public class MeasurementTests
    {
       foreach( (string mode, bool settled, string start) in new[] { ( "agreed", true, "Settle: settled before every timed pass" ), ( "extended-ok", true, "Settle: settled before every timed pass" ),
          ( "extended-bad", false, "WARNING: latency had NOT settled when timing began for default@8" ), ( "gave-up", false, "WARNING: latency had NOT settled when timing began for default@8" ),
+         ( "held", true, "Settle: settled before every timed pass" ), ( "not-held", false, "WARNING: latency had NOT settled when timing began for default@8 (" ),
+         ( "held-floor", true, "Settle: settled before every timed pass" ), ( "not-held-p50", false, "WARNING: latency had NOT settled when timing began for default@1 (" ),
          ( "none", false, "WARNING: no settle ran" ) } )
       {
          dynamic n = Invoke( "SettleNote", mode );
@@ -237,6 +245,174 @@ public class MeasurementTests
       Assert.Contains( "EXTENDED once", ok );
       Assert.Contains( "p50 1.871 ms against the settled p50 1.870 ms", ok );
       Assert.Contains( "not extended, because the searches kept failing", (string)( (dynamic)Invoke( "SettleNote", "gave-up" ) ).Note );
+      string held = ( (dynamic)Invoke( "SettleNote", "held" ) ).Note;
+      Assert.Contains( "the timed pass 2,950 QPS, 2% from the settled 2,899 QPS (limit 10%)", held );
+      Assert.Contains( "the timed pass p50 1.900 ms, 2% from the settled p50 1.870 ms (limit 10% or 0.1 ms; 0.030 ms)", held );
+      string notHeld = ( (dynamic)Invoke( "SettleNote", "not-held" ) ).Note;
+      Assert.Contains( "the timed pass 2,400 QPS, 21% from the settled 2,899 QPS (limit 10%), NOT HELD: the engine was still changing when it was timed", notHeld );
+      Assert.DoesNotContain( "default@1 (", notHeld );
+      string floor = ( (dynamic)Invoke( "SettleNote", "held-floor" ) ).Note;
+      Assert.Contains( "the timed pass p50 0.325 ms, 13% from the settled p50 0.366 ms (limit 10% or 0.1 ms; 0.041 ms)", floor );
+      Assert.DoesNotContain( "NOT HELD", floor );
+      Assert.Contains( "the timed pass p50 0.250 ms, 46% from the settled p50 0.366 ms (limit 10% or 0.1 ms; 0.116 ms), NOT HELD", (string)( (dynamic)Invoke( "SettleNote", "not-held-p50" ) ).Note );
+   }
+
+   /// <summary>
+   /// The level test reads the latest windows as two halves, each as the pass reads it: QPS as all
+   /// its searches over all its seconds (not the mean of the window figures), p50 as the p50 of all
+   /// its searches (not the mean of the window p50s). It needs 5 windows a half, reads at most 10 a
+   /// half (the latest 20 windows; the oldest is left out when the count is odd), and the halves
+   /// agree under 5%, or, as one-searcher p50s, within 0.1 ms (Redis's two levels, 0.32 and
+   /// 0.37 ms, agree; the same 16% gap in QPS does not). A swing from one window to the next with
+   /// no trend passes; a level that keeps moving does not.
+   /// </summary>
+   [Fact]
+   public void LevelOf_Rules()
+   {
+      Assert.Empty( Level( Repeat( 100.0, 9 ), Repeat( 200, 9 ), Repeat( 2.0, 9 ), 8 ) );
+      double[] even = Level( Repeat( 100.0, 10 ), Repeat( 200, 10 ), Repeat( 2.0, 10 ), 8 );
+      Assert.Equal( new[] { 100.0, 100, 5, 1 }, even.Take( 4 ) );
+      double[] swing = Level( Alternate( 80.0, 120.0, 20 ), Alternate( 160, 240, 20 ), Repeat( 2.0, 20 ), 8 );
+      Assert.Equal( 10, swing[2] );
+      Assert.Equal( 1, swing[3] );
+      Assert.Equal( 80, swing[5] );
+      Assert.Equal( 120, swing[6] );
+      double[] pooled = Level( new[] { 100.0, 100, 100, 100, 300, 100, 100, 100, 100, 300 }, new[] { 100, 100, 100, 100, 900, 100, 100, 100, 100, 900 }, new[] { 1.0, 1, 1, 1, 3, 1, 1, 1, 1, 3 }, 8 );
+      Assert.Equal( 1300.0 / 7, pooled[1], 6 );
+      double[] old = Level( Repeat( 50.0, 5 ).Concat( Repeat( 100.0, 20 ) ).ToArray(), Repeat( 100, 5 ).Concat( Repeat( 200, 20 ) ).ToArray(), Repeat( 2.0, 25 ), 8 );
+      Assert.Equal( new[] { 100.0, 100, 10, 1 }, old.Take( 4 ) );
+      double[] drift = Level( Enumerable.Range( 0, 20 ).Select( i => 100.0 + i ).ToArray(), Enumerable.Range( 0, 20 ).Select( i => 200 + 2 * i ).ToArray(), Repeat( 2.0, 20 ), 8 );
+      Assert.Equal( 0, drift[3] );
+      double[][] latencies = Enumerable.Range( 0, 10 ).Select( i => i < 5 ? new[] { 1.0, 1, 2 } : new[] { 1.0, 2, 2 } ).ToArray();
+      double[] p50 = Level( latencies.Select( l => l.OrderBy( x => x ).ElementAt( 1 ) ).ToArray(), Repeat( 3, 10 ), Repeat( 2.0, 10 ), 1, latencies );
+      Assert.Equal( new[] { 1.0, 2, 5, 0 }, p50.Take( 4 ) );
+      double[] modes = Level( Repeat( 0.32, 5 ).Concat( Repeat( 0.37, 5 ) ).ToArray(), Repeat( 3, 10 ), Repeat( 2.0, 10 ), 1 );
+      Assert.Equal( 1, modes[3] );
+      Assert.True( modes[4] > 0.05, $"apart {modes[4]}" );
+      double[] sameGapAt8 = Level( Repeat( 320.0, 5 ).Concat( Repeat( 370.0, 5 ) ).ToArray(), Repeat( 640, 5 ).Concat( Repeat( 740, 5 ) ).ToArray(), Repeat( 2.0, 10 ), 8 );
+      Assert.Equal( 0, sameGapAt8[3] );
+   }
+
+   /// <summary>
+   /// A second trial after an extension agrees inside the range of the newer half's windows (an
+   /// engine's own swing), within 10% of the settled figure, or, as a one-searcher p50, within
+   /// 0.1 ms of it; outside all of them it does not. A first trial (after the warm-up) has no range
+   /// and no floor and is judged by the 10% alone (its failure only extends the warm-up). The text
+   /// says which.
+   /// </summary>
+   [Fact]
+   public void SecondTrial_InsideTheRangeOrWithinTenPercent()
+   {
+      object[] inside = (object[])Invoke( "TrialJudged", 2881.0, 2442.0, 2384.0, 3518.0, 8 );
+      Assert.Equal( 1, (int)inside[1] );
+      Assert.Equal( 1, (int)inside[2] );
+      Assert.Contains( "2,442 QPS against the settled 2,881 QPS, 18% apart (limit 10%), inside its newer windows' range 2,384 to 3,518 QPS", (string)inside[3] );
+      object[] outside = (object[])Invoke( "TrialJudged", 2881.0, 2300.0, 2384.0, 3518.0, 8 );
+      Assert.Equal( 0, (int)outside[1] );
+      Assert.Equal( 0, (int)outside[2] );
+      Assert.Contains( "outside its newer windows' range", (string)outside[3] );
+      object[] near = (object[])Invoke( "TrialJudged", 1000.0, 960.0, 980.0, 1020.0, 8 );
+      Assert.Equal( 0, (int)near[1] );
+      Assert.Equal( 1, (int)near[2] );
+      object[] plain = (object[])Invoke( "TrialJudged", 1000.0, 850.0, double.NaN, double.NaN, 8 );
+      Assert.Equal( 0, (int)plain[2] );
+      Assert.DoesNotContain( "range", (string)plain[3] );
+      object[] floor = (object[])Invoke( "TrialJudged", 0.366, 0.322, 0.350, 0.379, 1 );
+      Assert.Equal( 0, (int)floor[1] );
+      Assert.Equal( 1, (int)floor[2] );
+      Assert.Contains( "p50 0.322 ms against the settled p50 0.366 ms, 14% apart (limit 10%), outside its newer windows' range 0.350 to 0.379 ms, within the 0.1 ms floor", (string)floor[3] );
+      object[] firstTrial = (object[])Invoke( "TrialJudged", 0.366, 0.322, double.NaN, double.NaN, 1 );
+      Assert.Equal( 0, (int)firstTrial[2] );
+      object[] beyond = (object[])Invoke( "TrialJudged", 0.366, 0.25, 0.350, 0.379, 1 );
+      Assert.Equal( 0, (int)beyond[2] );
+   }
+
+   /// <summary>
+   /// An extension that stopped because its windows agreed is judged on exactly those windows:
+   /// the window that ended just before the stop, still held back (windows are read one window
+   /// after they end), is not read into the verdict afterwards. Here 12 steady windows at 1 ms are
+   /// followed by one at 5 ms; the verdict is settled on the 12. Why: in the v6 runs that extra
+   /// window decided 7 of the 10 unsettled checks. Retried with longer windows when the box is too
+   /// slow for each step to land in its window.
+   /// </summary>
+   [Fact]
+   public async Task Extension_JudgedOnTheWindowsThatStoppedIt()
+   {
+      double[] r = Array.Empty<double>();
+      foreach( double window in new[] { 0.2, 0.4, 0.8 } )
+      {
+         var task = (Task<double[]>)COMPILED.Value.GetType( SCENARIOS_TYPE )!.GetMethod( "FrozenVerdictAsync" )!.Invoke( null, new object[] { window, 12 } )!;
+         r = await task;
+         if( r[4] == 1 )
+         {
+            break;
+         }
+      }
+
+      Assert.True( r[4] == 1, "the box was too slow for the steps to land in their windows, even at 0.8 s" );
+      Assert.Equal( 1, r[1] );
+      Assert.Equal( 1, r[0] );
+      Assert.Equal( 12, r[2] );
+      Assert.Equal( 1.0, r[3] );
+   }
+
+   /// <summary>
+   /// An engine that changes once the clock runs (2 ms per search through the warm-up and the
+   /// trial, 6 ms from the first timing line on): the check before default@4 confirms its warm-up,
+   /// but the timed pass is far below the settled QPS, so it is NOT HELD and the target is flagged
+   /// as not settled, naming default@4 and saying why.
+   /// </summary>
+   [Fact]
+   public async Task TimedPass_HeldAgainstTheSettledFigure()
+   {
+      dynamic r = await ScenarioAsync( "CheckAsync", "jump:2:6", 8, 0.5, 3.0 );
+      string[] order = r.PassOrder;
+      Assert.Equal( "default@4", order[0] );
+      string[] first = ( (string[])r.Checks )[0].Split( '|' );
+      double settled = double.Parse( first[14], CultureInfo.InvariantCulture );
+      double timed = double.Parse( first[13], CultureInfo.InvariantCulture );
+      Assert.True( timed < 0.6 * settled, $"timed {timed} QPS against the settled {settled}" );
+      Assert.Equal( "False", first[12] );
+      string note = r.Note;
+      Assert.StartsWith( "WARNING: latency had NOT settled when timing began for default@4", note );
+      Assert.Contains( "NOT HELD: the engine was still changing when it was timed", note );
+      Assert.False( (bool?)r.ReadSettled );
+   }
+
+   /// <summary>
+   /// The load note when searching begins is judged by machine control's measured outside load,
+   /// never by the load average: a load average of 10.04 on 8 CPUs with 0.15 CPUs of outside
+   /// work is a quiet box (the v6 run 601 case), 0.55 CPUs is a WARNING, and with no reading or no
+   /// reader the note says so and never warns. The load average is always recorded, not judged.
+   /// </summary>
+   [Fact]
+   public void LoadNote_JudgedByTheMeasuredOutsideLoad()
+   {
+      string quiet = (string)Invoke( "LoadNote", "10.04 5.74 4.35", 0.152, 0.122, 0.3, true, true );
+      Assert.StartsWith( "Outside load when searching began: 0.15 CPUs on average over the last 60 s and 0.12 over the last few seconds (limit 0.3), a quiet box.", quiet );
+      Assert.Contains( "load average 10.04 5.74 4.35 (1/5/15 min; it also counts this benchmark's own client and engines, so it is recorded, not judged)", quiet );
+      Assert.DoesNotContain( "WARNING", quiet );
+      string busy = (string)Invoke( "LoadNote", "1.00 1.00 1.00", 0.55, 0.56, 0.3, true, true );
+      Assert.StartsWith( "WARNING: processes outside the benchmark used 0.55 CPUs", busy );
+      Assert.Contains( "(limit 0.3): the box was busy as the untimed rehearsal started", busy );
+      string recent = (string)Invoke( "LoadNote", "1.00 1.00 1.00", 0.10, 0.45, 0.3, true, true );
+      Assert.StartsWith( "WARNING:", recent );
+      Assert.StartsWith( "Outside load when searching began: not measured (machine control off). Load average 12.00", (string)Invoke( "LoadNote", "12.00 9.00 4.00", double.NaN, double.NaN, 0.3, false, true ) );
+      Assert.StartsWith( "Outside load when searching began: not known yet", (string)Invoke( "LoadNote", "12.00 9.00 4.00", double.NaN, double.NaN, 0.3, true, true ) );
+      Assert.StartsWith( "Outside load when searching began: not read here", (string)Invoke( "LoadNote", "12.00 9.00 4.00", double.NaN, double.NaN, 0.3, false, false ) );
+      Assert.All( new[] { quiet, busy }, n => Assert.DoesNotContain( "\u2014", n ) );
+   }
+
+   /// <summary>
+   /// The consolidation reads the runner's own method notes back into the same numbers: every
+   /// phrase it looks for is still there, word for word, after the v7 level test and hold check
+   /// were added to the text.
+   /// </summary>
+   [Fact]
+   public void MethodNotes_ReadBackByTheConsolidation()
+   {
+      double[] m = (double[])Invoke( "MethodReadBack", 20 );
+      Assert.Equal( new[] { 15.0, 20, 120, 2, 100, 3, 10, 3, 5, 30, 120, 30, 1 }, m );
    }
 
    /// <summary>
@@ -252,6 +428,11 @@ public class MeasurementTests
       Assert.Contains( "for at least 15 s and at least 20 searches", all );
       Assert.Contains( "within 10%", all );
       Assert.Contains( "at least 30 s, until its windows agree, at most 120 s", all );
+      Assert.Contains( "its level test passes: the older and the newer half of its latest windows, 5 to 10 windows a half", all );
+      Assert.Contains( "judged on the windows that stopped it", all );
+      Assert.Contains( "must lie inside the range of the newer half's windows or within 10% of the newer half's figure", all );
+      Assert.Contains( "After the pass its own figure is held against the settled figure, within 10%", all );
+      Assert.Contains( "two one-searcher p50s no more than 0.1 ms apart agree whatever their percentage", all );
       Assert.DoesNotContain( "NOT settled", all );
       Assert.DoesNotContain( "\u2014", all );
    }
@@ -437,7 +618,7 @@ public class MeasurementTests
       string folder = Path.Combine( AppContext.BaseDirectory, "measurement-tests", Guid.NewGuid().ToString( "N" ) );
       try
       {
-         dynamic r = await ScenarioAsync( "MeasureAsync", "fixed:1", folder );
+         dynamic r = await ScenarioAsync( "MeasureAsync", "fixed:1", folder, null );
          Assert.Null( (string?)r.Error );
          string[] events = r.Events;
          string[] order = r.PassOrder;
@@ -458,6 +639,8 @@ public class MeasurementTests
          Assert.Equal( order, notes.Where( n => n.StartsWith( "Pass ", StringComparison.Ordinal ) ).Select( n => n.Split( ' ' )[1] ) );
          Assert.StartsWith( $"Pass {order[0]} after rehearsal:", notes.First( n => n.StartsWith( "Pass ", StringComparison.Ordinal ) ) );
          Assert.Equal( 0, (int?)r.WarmupErrors );
+         Assert.Single( notes, n => n.StartsWith( "Outside load when searching began: not read here", StringComparison.Ordinal ) );
+         Assert.DoesNotContain( notes, n => n.StartsWith( "WARNING: load average", StringComparison.Ordinal ) );
          using JsonDocument json = JsonDocument.Parse( (string)r.Json );
          string[] written = json.RootElement.GetProperty( "targets" )[0].GetProperty( "notes" ).EnumerateArray().Select( n => n.GetString()! ).ToArray();
          Assert.Equal( notes, written );
@@ -467,6 +650,34 @@ public class MeasurementTests
          if( Directory.Exists( folder ) )
          {
             Directory.Delete( folder, true );
+         }
+      }
+   }
+
+   /// <summary>
+   /// Through TargetRunner with an outside-load reader (as the session wires machine control's):
+   /// a quiet reading gives the quiet note when searching begins, a busy one the WARNING, and
+   /// neither ever judges the load average.
+   /// </summary>
+   [Fact]
+   public async Task Target_LoadNoteFromTheOutsideLoadReader()
+   {
+      foreach( (string reading, string start) in new[] { ( "0.15,0.12,0.3", "Outside load when searching began: 0.15 CPUs on average" ), ( "0.55,0.56,0.3", "WARNING: processes outside the benchmark used 0.55 CPUs" ) } )
+      {
+         string folder = Path.Combine( AppContext.BaseDirectory, "measurement-tests", Guid.NewGuid().ToString( "N" ) );
+         try
+         {
+            dynamic r = await ScenarioAsync( "MeasureAsync", "fixed:1", folder, reading );
+            string[] notes = r.Notes;
+            Assert.Single( notes, n => n.StartsWith( start, StringComparison.Ordinal ) );
+            Assert.DoesNotContain( notes, n => n.StartsWith( "WARNING: load average", StringComparison.Ordinal ) );
+         }
+         finally
+         {
+            if( Directory.Exists( folder ) )
+            {
+               Directory.Delete( folder, true );
+            }
          }
       }
    }
@@ -510,6 +721,54 @@ public class MeasurementTests
    {
       string[] passes = result.Passes;
       return Assert.Single( passes, p => p.StartsWith( pass + "|", StringComparison.Ordinal ) ).Split( '|' );
+   }
+
+   /// <summary>MeasurementScenarios.LevelRules.</summary>
+   /// <param name="figures">Window figures.</param>
+   /// <param name="searches">Searches of each window.</param>
+   /// <param name="seconds">Seconds of each window.</param>
+   /// <param name="concurrency">Searchers.</param>
+   /// <param name="latencies">Latencies of each window, or null.</param>
+   /// <returns>Older, newer, windows a half, agrees, apart, low, high; empty for no level test.</returns>
+   private static double[] Level( double[] figures, int[] searches, double[] seconds, int concurrency, double[][]? latencies = null )
+   {
+      return (double[])Invoke( "LevelRules", figures, searches, seconds, concurrency, latencies! );
+   }
+
+   /// <summary>
+   /// A value repeated.
+   /// </summary>
+   /// <typeparam name="T">Value type.</typeparam>
+   /// <param name="value">The value.</param>
+   /// <param name="count">How many.</param>
+   /// <returns>The array.</returns>
+   private static T[] Repeat<T>( T value, int count )
+   {
+      return Enumerable.Repeat( value, count ).ToArray();
+   }
+
+   /// <summary>
+   /// Two values in turns, starting with the first.
+   /// </summary>
+   /// <param name="a">First value.</param>
+   /// <param name="b">Second value.</param>
+   /// <param name="count">How many.</param>
+   /// <returns>The array.</returns>
+   private static double[] Alternate( double a, double b, int count )
+   {
+      return Enumerable.Range( 0, count ).Select( i => i % 2 == 0 ? a : b ).ToArray();
+   }
+
+   /// <summary>
+   /// Two whole values in turns, starting with the first.
+   /// </summary>
+   /// <param name="a">First value.</param>
+   /// <param name="b">Second value.</param>
+   /// <param name="count">How many.</param>
+   /// <returns>The array.</returns>
+   private static int[] Alternate( int a, int b, int count )
+   {
+      return Enumerable.Range( 0, count ).Select( i => i % 2 == 0 ? a : b ).ToArray();
    }
 
    /// <summary>MeasurementScenarios.ShapeFlags.</summary>

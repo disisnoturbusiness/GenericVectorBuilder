@@ -106,7 +106,8 @@ public sealed class BenchOptions
 
    /// <summary>
    /// bench and run-all: put the machine into a known state for the timed passes (performance
-   /// governor, engine and client on separate physical cores, passes held while the box is
+   /// governor, turbo off and the uncore clock held at its top ratio so every pass runs at the
+   /// same clocks, engine and client on separate physical cores, passes held while the box is
    /// busy) and back afterwards. False with --no-machine-control, which changes nothing on the
    /// machine and says so in the results; meant for tests and for boxes without sudo.
    /// </summary>
@@ -175,8 +176,10 @@ Every target is loaded under the collection 'gvbbench_' + P, never the live name
 Targets run in a random order, and each target's timed passes (default search at each concurrency
 level, exact mode) run in a random order, each after its own warm-up. --seed N repeats an order;
 without it the seed comes from the start time and is written to results.json as runSeed.
-bench and run-all set every CPU's governor to performance, run the engine under test on the upper half
-of the physical cores and this client on the lower half, and " + held + @"; a box that stays busy
+bench and run-all set every CPU's governor to performance, turn turbo off and hold the uncore (L3 and
+memory) clock at its top ratio (MSR 0x620; needs msr-tools and the msr module) so every pass runs at
+the same clocks, run the engine under test on the upper half of the physical cores and this client on
+the lower half, and " + held + @"; a box that stays busy
 past that deadline runs the pass anyway, flagged 'busy box'. Everything is put back at the end and recorded under 'conditions'
 in results.json, with each pass's outside load and this client's own CPU time per search. --no-machine-control changes
 nothing on the machine.";

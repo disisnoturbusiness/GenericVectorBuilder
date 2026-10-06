@@ -229,8 +229,9 @@ public class RunnerTests
       int firstSearch = Array.FindIndex( events, e => e is "S" or "X" );
       int lastSearch = Array.FindLastIndex( events, e => e is "S" or "X" );
       Assert.True( finish > Array.LastIndexOf( events, "upsert" ) && finish < firstSearch, "the index step must run after the load and before searching" );
-      Assert.True( Array.IndexOf( events, "state", finish ) < firstSearch && Array.LastIndexOf( events, "state" ) > lastSearch, "state must be read before and after the searches" );
       Assert.Null( (string?)result.Error );
+      Assert.True( Array.IndexOf( events, "state", finish ) < firstSearch && Array.LastIndexOf( events, "state" ) > lastSearch,
+         $"state must be read before and after the searches (first search at {firstSearch}, last at {lastSearch} of {events.Length}; events after the last search: {string.Join( ",", events.Skip( lastSearch + 1 ) )}; notes: {string.Join( " | ", (string[])result.Notes )})" );
       using JsonDocument json = JsonDocument.Parse( (string)result.Json );
       JsonElement root = json.RootElement;
       Assert.Equal( 42, root.GetProperty( "runSeed" ).GetInt32() );

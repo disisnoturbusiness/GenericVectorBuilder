@@ -1,3 +1,4 @@
+using System.Globalization;
 using GenericVectorBuilder.Bench.Cli;
 using GenericVectorBuilder.Bench.Data;
 using GenericVectorBuilder.Bench.Report;
@@ -58,6 +59,18 @@ public sealed class TargetRunner
    /// session reads which connections the client holds); null for none. Must not throw.
    /// </summary>
    public Action<BenchTarget>? AfterSearch { get; init; }
+
+   /// <summary>
+   /// The outside load right now as machine control measures it (CPU time of every process but
+   /// this client and the engine under test), with the limit it is judged by; null for no reading.
+   /// Must not throw. The load note when searching begins is judged by it (see <see cref="DescribeLoad"/>).
+   /// Why not the load average: it counts this benchmark's own client and engines, and for a
+   /// minute after a pass it still carries that pass. Run 601 of 2026-10-05 printed "WARNING: load
+   /// average 10.04 ... the box was busy" as sqlite-vec began searching, about a minute after
+   /// ClickHouse's 8-searcher pass, while the outside load machine control measured at sqlite-vec's
+   /// three quiet checks was 0.15 to 0.16 CPUs over its busy window (limit 0.3).
+   /// </summary>
+   public Func<OutsideLoadSample?>? OutsideLoad { get; init; }
 
    /// <summary>
    /// Loads and/or searches one target, never letting its failure stop the others.
@@ -142,8 +155,9 @@ public sealed class TargetRunner
    /// <summary>
    /// One line for the settle checks, one made before each timed pass at that pass's own
    /// concurrency: "Settle: settled ..." when every check confirmed its warm-up (with or without
-   /// the one extension), a WARNING naming the passes when any did not, or when none ran. The
-   /// words "NOT settled" appear only in the warning, because the consolidation reads them.
+   /// the one extension) and every timed pass held to its settled figure, a WARNING naming the
+   /// passes when any did not, or when none ran. The words "NOT settled" appear only in the
+   /// warning, because the consolidation reads them.
    /// </summary>
    /// <param name="checks">The checks, in pass order (empty when none ran).</param>
    /// <returns>The note.</returns>
@@ -155,11 +169,43 @@ public sealed class TargetRunner
       }
 
       string each = string.Join( "; ", checks.Select( DescribeCheck ) );
-      List<string> unsettled = checks.Where( c => !c.Confirmed ).Select( c => c.Pass ).ToList();
-      string rule = $"each by its own warm-up at its own concurrency and a trial of the same pass within {SearchRunner.TRIAL_TOLERANCE:0%} of the warm-up's settled figure";
+      List<string> unsettled = checks.Where( c => !c.Settled ).Select( c => c.Pass ).ToList();
+      string rule = $"each by its own warm-up at its own concurrency and a trial of the same pass within {SearchRunner.TRIAL_TOLERANCE:0%} of the warm-up's settled figure, and the timed pass itself within {SearchRunner.TRIAL_TOLERANCE:0%} of it";
       return unsettled.Count == 0
          ? $"Settle: settled before every timed pass, {rule}. {each}."
-         : $"WARNING: latency had NOT settled when timing began for {string.Join( ", ", unsettled )} ({rule}). {each}. Its numbers may still include warm-up; rerun before quoting them.";
+         : $"WARNING: latency had NOT settled when timing began for {string.Join( ", ", unsettled )} ({rule}). {each}. Its numbers may still include warm-up or a change the engine was still going through; rerun before quoting them.";
+   }
+
+   /// <summary>
+   /// The load note written when searching begins. A WARNING only when the measured outside load
+   /// (over either window of machine control's busy rule) is above its limit; the load average is
+   /// recorded beside it but never judged, because it counts this benchmark's own client and
+   /// engines and still carries the previous pass for a minute. With no reading (machine control
+   /// off, no reader handed to the runner, or too little history yet) the note says so and does
+   /// not warn. Why the warning does not say the numbers are inflated: searching begins with the
+   /// untimed rehearsal, and each timed pass waits for a quiet box and is judged on its own.
+   /// </summary>
+   /// <param name="loadAverage">The 1/5/15 minute load average as read, or null.</param>
+   /// <param name="outside">The measured outside load and its limit, or null when there is none.</param>
+   /// <param name="wired">False when no outside-load reader was handed to the runner at all.</param>
+   /// <returns>The note.</returns>
+   public static string DescribeLoad( string? loadAverage, OutsideLoadSample? outside, bool wired = true )
+   {
+      string average = $"load average {loadAverage ?? "unknown"} (1/5/15 min; it also counts this benchmark's own client and engines, so it is recorded, not judged)";
+      if( outside == null || ( outside.Reading.Window == null && outside.Reading.Recent == null ) )
+      {
+         string why = !wired ? "not read here (machine control's quiet check before each pass judges the box)"
+            : outside == null ? "not measured (machine control off)"
+            : "not known yet (too little sampled history)";
+         return $"Outside load when searching began: {why}. {Capitalized( average )}.";
+      }
+
+      OutsideReading reading = outside.Reading;
+      string limit = string.Create( CultureInfo.InvariantCulture, $"limit {outside.Limit:0.0#}" );
+      return reading.IsBusy( outside.Limit )
+         ? $"WARNING: processes outside the benchmark used {reading.Describe()} when searching began ({limit}): the box was busy as the untimed rehearsal started. "
+            + $"Each timed pass still waits for a quiet box before its warm-up, and one that ran busy is flagged 'busy box' on its own. The {average}."
+         : $"Outside load when searching began: {reading.Describe()} ({limit}), a quiet box. The {average}.";
    }
 
    /// <summary>
@@ -193,25 +239,48 @@ public sealed class TargetRunner
       string trial = check.Trial.Describe( "trial" );
       if( check.Extension == null )
       {
-         return check.Confirmed ? $"{warm}; {trial}" : $"{warm}; {trial}; not extended, because the searches kept failing";
+         return check.Confirmed ? $"{warm}; {trial}{HeldText( check )}" : $"{warm}; {trial}; not extended, because the searches kept failing";
       }
 
       string extension = $"{SettleText( check.Extension )}{( check.Extension.Settled ? string.Empty : $", {check.Extension.StoppedBecause}" )}";
       string verdict = check.Confirmed ? "settled after the extension" : "still disagreeing after the extension";
-      return $"{warm}; {trial}, so the warm-up was EXTENDED once ({extension}); {check.Retrial!.Describe( "second trial" )}; {verdict}";
+      return $"{warm}; {trial}, so the warm-up was EXTENDED once ({extension}); {check.Retrial!.Describe( "second trial" )}; {verdict}{HeldText( check )}";
+   }
+
+   /// <summary>
+   /// The timed pass held against the settled figure, as text, or nothing before the pass ran.
+   /// </summary>
+   /// <param name="check">The check.</param>
+   /// <returns>"; the timed pass 2,880 QPS, 1% from the settled 2,849 QPS (limit 10%)", with "NOT HELD" when it was not.</returns>
+   private static string HeldText( SettleCheck check )
+   {
+      if( check.PassFigure is not double figure || check.SettledFigure is not double settled )
+      {
+         return string.Empty;
+      }
+
+      int searchers = check.Trial.Concurrency;
+      string limit = searchers == 1 ? $"limit {SearchRunner.TRIAL_TOLERANCE:0%} or {SearchRunner.P50_FLOOR_MS:0.0#} ms; {Math.Abs( figure - settled ):0.000} ms" : $"limit {SearchRunner.TRIAL_TOLERANCE:0%}";
+      string held = check.Held ? string.Empty : ", NOT HELD: the engine was still changing when it was timed";
+      return $"; the timed pass {SearchRunner.FigureText( figure, searchers )}, {check.PassApart:0%} from the settled {SearchRunner.FigureText( settled, searchers )} ({limit}){held}";
    }
 
    /// <summary>
    /// A warm-up's or an extension's length, searches and last window figures as text.
    /// </summary>
    /// <param name="settle">The warm-up or extension, read as a settle.</param>
-   /// <returns>"15.0 s and 22,431 searches (0 failed) at 8 searchers; QPS of the last windows 1,512, 1,530, 1,524 (windows of at least 2 s and 100 searches)".</returns>
+   /// <returns>"15.0 s and 22,431 searches (0 failed) at 8 searchers; QPS of the last windows 1,512, 1,530, 1,524 (windows of at least 2 s and 100 searches)"; for an extension its level test with the windows of both halves.</returns>
    private static string SettleText( SettleResult settle )
    {
       IEnumerable<double> last = settle.WindowFigures.TakeLast( SearchRunner.SETTLE_WINDOWS );
+      string Figure( double f ) => settle.Concurrency == 1 ? $"{f:0.000}" : $"{f:N0}";
+      string unit = settle.Concurrency == 1 ? " ms" : string.Empty;
+      string what = settle.Concurrency == 1 ? "p50" : "QPS";
       string figures = settle.WindowFigures.Count == 0 ? "no full window"
-         : settle.Concurrency == 1 ? "p50 of the last windows " + string.Join( ", ", last.Select( p => $"{p:0.000}" ) ) + " ms"
-         : "QPS of the last windows " + string.Join( ", ", last.Select( q => $"{q:N0}" ) );
+         : settle.Level is SettleLevel level
+            ? $"{what} of its older {level.HalfWindows} windows {Figure( level.Older )}{unit} (windows {string.Join( ", ", level.OlderWindows.Select( Figure ) )}) and of its newer {level.HalfWindows} {Figure( level.Newer )}{unit} "
+               + $"(windows {string.Join( ", ", level.NewerWindows.Select( Figure ) )}), {level.Apart:0.0%} apart (limit {SearchRunner.SETTLE_TOLERANCE:0%}{( settle.Concurrency == 1 ? $" or {SearchRunner.P50_FLOOR_MS:0.0#} ms; {Math.Abs( level.Newer - level.Older ):0.000} ms" : string.Empty )})"
+         : $"{what} of the last windows " + string.Join( ", ", last.Select( Figure ) ) + unit;
       return $"{settle.Seconds:0.0} s and {settle.Searches:N0} searches ({settle.Errors} failed) at {SearchRunner.Searchers( settle.Concurrency )}; {figures} (windows of at least {settle.WindowSeconds:0.##} s and {SearchRunner.SETTLE_WINDOW} searches)";
    }
 
@@ -373,16 +442,23 @@ public sealed class TargetRunner
    }
 
    /// <summary>
-   /// Records the box's load average as searching starts, with a warning when work was
-   /// queueing for a CPU (latency and QPS then include waiting for other processes).
+   /// Records the box's load as searching starts (see <see cref="DescribeLoad"/>): the measured
+   /// outside load judges it, the load average is only recorded.
    /// </summary>
    /// <param name="result">Target results.</param>
-   private static void NoteLoad( TargetReport result )
+   private void NoteLoad( TargetReport result )
    {
-      string? load = MachineFacts.ReadLoadAverage();
-      result.Notes.Add( MachineFacts.IsBusy( load )
-         ? $"WARNING: load average {load} (1/5/15 min) on {Environment.ProcessorCount} logical CPUs when searching began; the box was busy, so latency and QPS are inflated by other work."
-         : $"Load average {load ?? "unknown"} (1/5/15 min) when searching began." );
+      result.Notes.Add( DescribeLoad( MachineFacts.ReadLoadAverage(), OutsideLoad?.Invoke(), OutsideLoad != null ) );
+   }
+
+   /// <summary>
+   /// The text with its first letter in capitals.
+   /// </summary>
+   /// <param name="text">The text.</param>
+   /// <returns>"Load average ..." from "load average ...".</returns>
+   private static string Capitalized( string text )
+   {
+      return text.Length == 0 ? text : char.ToUpperInvariant( text[0] ) + text[1..];
    }
 
    /// <summary>
@@ -401,3 +477,12 @@ public sealed class TargetRunner
 
    #endregion Private Methods
 }
+
+/// <summary>
+/// The outside load at one moment as machine control measures it, with the busy limit it is
+/// judged by. Why a pair: the target runner must judge the load by the same rule as the per-pass
+/// quiet check, and the limit lives in machine control's settings.
+/// </summary>
+/// <param name="Reading">Outside load over the busy window and the recent window.</param>
+/// <param name="Limit">CPUs of outside work above which the box counts as busy.</param>
+public sealed record OutsideLoadSample( OutsideReading Reading, double Limit );

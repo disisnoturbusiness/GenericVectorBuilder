@@ -858,6 +858,12 @@ public sealed class FakeMachine : IMachineSystem
    /// <summary>State file to snapshot at each call, or null.</summary>
    public string? StateFile { get; set; }
 
+   /// <summary>The clock record's previous turbo value at each call (when <see cref="ClockFile"/> is set): "call => value" or "call => no clock record".</summary>
+   public List<string> ClockAtCall { get; } = new();
+
+   /// <summary>Clock record to snapshot at each call, or null.</summary>
+   public string? ClockFile { get; set; }
+
    /// <summary>Containers by id.</summary>
    public Dictionary<string, FakeContainer> Containers { get; } = new( StringComparer.Ordinal );
 
@@ -921,18 +927,28 @@ public sealed class FakeMachine : IMachineSystem
    /// <summary>Makes a command fail: returns a result for a call to fail, null to run it normally.</summary>
    public Func<string, ShellResult?>? Fail { get; set; }
 
+   /// <summary>The uncore ratio limit (MSR 0x620) every CPU reports; linus7795's is 0xc1e (min 12, max 30).</summary>
+   public long UncoreLimitMsr { get; set; } = 0xc1e;
+
+   /// <summary>False for a box without the msr module: rdmsr and wrmsr then fail as they do there.</summary>
+   public bool MsrLoaded { get; set; } = true;
+
    /// <summary>
-   /// The fake linus7795: 8 CPUs on schedutil, lscpu, this process.
+   /// The fake linus7795: 8 CPUs on schedutil, turbo on (intel_pstate no_turbo 0, every CPU's
+   /// ceiling 3600000 kHz and floor 1200000 kHz), lscpu, this process.
    /// </summary>
    /// <returns>The machine.</returns>
    public static FakeMachine Linus()
    {
       var machine = new FakeMachine();
       machine.Set( "/sys/devices/system/cpu/online", "0-7\n" );
+      machine.Set( ClockControl.NO_TURBO_PATH, "0\n" );
       for( int cpu = 0; cpu < 8; cpu++ )
       {
          machine.Set( GovernorControl.GovernorPath( cpu ), "schedutil\n" );
          machine.Set( GovernorControl.FrequencyPath( cpu ), "3491000\n" );
+         machine.Set( ClockControl.MaxPath( cpu ), "3600000\n" );
+         machine.Set( ClockControl.MinPath( cpu ), "1200000\n" );
       }
 
       machine.AddProcess( machine.ProcessId, "dotnet", 4242, 3, "0-7", "/user.slice/bench.scope" );
@@ -1000,6 +1016,18 @@ public sealed class FakeMachine : IMachineSystem
       lock( _lock )
       {
          _files[path] = () => text;
+      }
+   }
+
+   /// <summary>
+   /// Removes a file.
+   /// </summary>
+   /// <param name="path">Path.</param>
+   public void Remove( string path )
+   {
+      lock( _lock )
+      {
+         _files.Remove( path );
       }
    }
 
@@ -1187,6 +1215,7 @@ public sealed class FakeMachine : IMachineSystem
          "docker" when a[1] == "compose" => Ok( string.Join( "\n", ComposeRunning.GetValueOrDefault( a[3] ) ?? Array.Empty<string>() ) + "\n" ),
          "docker" when a[1] == "inspect" => Inspect( a[^1], a[3] ),
          "docker" when a[1] == "update" => Update( a[^1], a[3] ),
+         "rdmsr" or "wrmsr" => Msr( a ),
          _ => new ShellResult( 1, string.Empty, $"fake machine: unexpected command {line}" ),
       };
    }
@@ -1200,7 +1229,46 @@ public sealed class FakeMachine : IMachineSystem
    private ShellResult Write( string path, string value )
    {
       Set( path, value + "\n" );
+      bool? turboOff = path == ClockControl.NO_TURBO_PATH ? value == "1" : path == ClockControl.BOOST_PATH ? value == "0" : null;
+      if( turboOff is bool off )
+      {
+         // As the kernel does: switching turbo moves every CPU's ceiling between the turbo and the base clock.
+         // A ceiling someone set below the base clock stays where it is, as the kernel's user limit does.
+         foreach( int cpu in Enumerable.Range( 0, 8 ).Where( cpu => ReadFile( ClockControl.MaxPath( cpu ) ) != null ) )
+         {
+            long now = long.Parse( ReadFile( ClockControl.MaxPath( cpu ) )!.Trim(), CultureInfo.InvariantCulture );
+            Set( ClockControl.MaxPath( cpu ), ( off ? Math.Min( now, 3_500_000 ) : now == 3_500_000 ? 3_600_000 : now ).ToString( CultureInfo.InvariantCulture ) + "\n" );
+         }
+      }
+
       return Ok( string.Empty );
+   }
+
+   /// <summary>
+   /// msr-tools and the msr module as linus7795 has them: "rdmsr -a 0x620" prints the uncore
+   /// limit once per CPU, "wrmsr -a 0x620 0xV" sets it on every CPU; both fail without the module.
+   /// </summary>
+   /// <param name="a">Command and arguments.</param>
+   /// <returns>The result.</returns>
+   private ShellResult Msr( string[] a )
+   {
+      if( !MsrLoaded )
+      {
+         return new ShellResult( 1, string.Empty, $"{a[0]}: open: No such file or directory" );
+      }
+
+      if( a.Length >= 3 && a[1] == "-a" && a[2] == "0x620" )
+      {
+         if( a[0] == "wrmsr" )
+         {
+            UncoreLimitMsr = long.Parse( a[3][2..], NumberStyles.HexNumber, CultureInfo.InvariantCulture );
+            return Ok( string.Empty );
+         }
+
+         return Ok( string.Concat( Enumerable.Repeat( UncoreLimitMsr.ToString( "x", CultureInfo.InvariantCulture ) + "\n", 8 ) ) );
+      }
+
+      return new ShellResult( 4, string.Empty, $"{a[0]}: CPU 0 cannot access MSR {a[^1]}" );
    }
 
    /// <summary>
@@ -1268,6 +1336,12 @@ public sealed class FakeMachine : IMachineSystem
       {
          string recorded = File.Exists( StateFile ) ? string.Join( ",", new MachineStateStore( StateFile ).Load()!.Governors.OrderBy( g => g.Key ).Select( g => g.Value ) ) : "no file";
          StateAtCall.Add( $"{call} => {recorded}" );
+      }
+
+      if( ClockFile != null )
+      {
+         ClockState? clock = File.Exists( ClockFile ) ? new ClockStore( ClockFile.Replace( ".clock.json", ".json", StringComparison.Ordinal ) ).Load() : null;
+         ClockAtCall.Add( $"{call} => {( clock != null ? $"{clock.SwitchPath} was {clock.PreviousValue}, max {clock.MaxKhz.GetValueOrDefault( 0 )}" : "no clock record" )}" );
       }
    }
 

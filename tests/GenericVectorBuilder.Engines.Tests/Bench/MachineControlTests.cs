@@ -228,7 +228,7 @@ public class MachineControlTests
       Assert.Contains( "governor back to schedutil on CPUs 0-7", c.GetProperty( "restored" ).EnumerateArray().Select( e => e.GetString() ) );
       Assert.Contains( (string[])r.RunNotes, n => n.Contains( "no timed pass of never-seen", StringComparison.Ordinal ) );
       Assert.Contains( (string[])r.TargetNotes, n => n.StartsWith( "CPU pinning: ALTER SERVER CONFIGURATION", StringComparison.Ordinal ) );
-      Assert.Contains( (string[])r.TargetNotes, n => n.StartsWith( "Clock per pass", StringComparison.Ordinal ) && n.Contains( "default@1 3491/3491 MHz, performance", StringComparison.Ordinal ) );
+      Assert.Contains( (string[])r.TargetNotes, n => n.StartsWith( "Clock per pass", StringComparison.Ordinal ) && n.Contains( "default@1 3491/3491 MHz, average 3491.0/3491.0, performance", StringComparison.Ordinal ) );
    }
 
    /// <summary>
@@ -681,7 +681,7 @@ public class MachineControlTests
 }
 
 /// <summary>
-/// Compiles the benchmark's sources with MachineControlScenarios.cs and MachineControlAccountingScenarios.cs into one in-memory assembly
+/// Compiles the benchmark's sources with MachineControlScenarios.cs, MachineControlAccountingScenarios.cs and MachineControlClockScenarios.cs into one in-memory assembly
 /// and calls its scenarios. Why Roslyn: the benchmark is a console project this test project
 /// does not reference (the same approach as RunnerTests).
 /// </summary>
@@ -798,7 +798,7 @@ internal static class MachineControlCompiler
    }
 
    /// <summary>
-   /// Compiles every benchmark source plus the two scenario files.
+   /// Compiles every benchmark source plus the three scenario files.
    /// </summary>
    /// <returns>The assembly.</returns>
    private static Assembly Compile()
@@ -809,7 +809,7 @@ internal static class MachineControlCompiler
       List<SyntaxTree> trees = Directory.EnumerateFiles( bench, "*.cs", SearchOption.AllDirectories )
          .Where( f => Path.GetRelativePath( bench, f ).Split( Path.DirectorySeparatorChar )[0] is not ( "bin" or "obj" ) )
          .Select( f => CSharpSyntaxTree.ParseText( File.ReadAllText( f ), parse, f ) ).ToList();
-      foreach( string file in new[] { "MachineControlScenarios.cs", "MachineControlAccountingScenarios.cs" } )
+      foreach( string file in new[] { "MachineControlScenarios.cs", "MachineControlAccountingScenarios.cs", "MachineControlClockScenarios.cs" } )
       {
          string scenarios = Path.Combine( root, "tests", "GenericVectorBuilder.Engines.Tests", "Bench", file );
          trees.Add( CSharpSyntaxTree.ParseText( File.ReadAllText( scenarios ), parse.WithPreprocessorSymbols( "BENCH_UNDER_TEST" ), scenarios ) );

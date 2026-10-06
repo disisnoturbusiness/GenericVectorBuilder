@@ -115,23 +115,25 @@ public class BenchReportFixTests : IDisposable
    }
 
    /// <summary>
-   /// Every target of the published 5 Oct report gets settings out of its own index text, so run-all
-   /// would have recorded something for each of the 18 engines it measured.
+   /// Every target of the 19 engine run of 5 Oct (07:33, run 601, the first of the v6 final runs) gets
+   /// settings out of its own index text, so run-all would have recorded something for each of the 19
+   /// engines it measured. Read from the raw run folder, which is never renamed, and not from a
+   /// published or blocked folder, which is.
    /// </summary>
    [Fact]
-   public void SearchSettings_CoverEveryTargetOfThePublishedReport()
+   public void SearchSettings_CoverEveryTargetOfARealRun()
    {
-      using JsonDocument doc = JsonDocument.Parse( File.ReadAllText( Path.Combine( RepoRoot(), "bench-results", "published-2026-10-05", "consolidated.json" ) ) );
-      JsonElement[] summaries = doc.RootElement.GetProperty( "targetSummaries" ).EnumerateArray().ToArray();
+      using JsonDocument doc = JsonDocument.Parse( File.ReadAllText( Path.Combine( RepoRoot(), "bench-results", "20261005-073329-eshoponweb", "results.json" ) ) );
+      JsonElement[] targets = doc.RootElement.GetProperty( "targets" ).EnumerateArray().ToArray();
 
-      Assert.Equal( 18, summaries.Length );
-      foreach( JsonElement t in summaries )
+      Assert.Equal( 19, targets.Length );
+      foreach( JsonElement t in targets )
       {
-         string index = t.GetProperty( "indexes" )[0].GetString()!;
+         string index = t.GetProperty( "index" ).GetString()!;
          Assert.NotEmpty( Settings( index ) );
       }
 
-      Assert.Equal( "ef_search=100", string.Join( ", ", Settings( summaries.Single( t => t.GetProperty( "name" ).GetString() == "chroma" ).GetProperty( "indexes" )[0].GetString() ).Where( p => p.Key == "ef_search" ).Select( p => $"{p.Key}={p.Value}" ) ) );
+      Assert.Equal( "ef_search=100", string.Join( ", ", Settings( targets.Single( t => t.GetProperty( "name" ).GetString() == "chroma" ).GetProperty( "index" ).GetString() ).Where( p => p.Key == "ef_search" ).Select( p => $"{p.Key}={p.Value}" ) ) );
    }
 
    /// <summary>

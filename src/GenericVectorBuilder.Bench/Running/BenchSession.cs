@@ -151,7 +151,7 @@ public sealed class BenchSession : IDisposable
       var lifecycle = new EngineLifecycle( machine.WrapHost( _host ), _options.Command == "run-all", log, machine.EngineCpus );
       await lifecycle.SnapshotAsync( targets.Select( t => t.Target?.ComposePath ), ct );
       var connections = new ConnectionRecorder( _system, _settings.SqlServer, _settings.QdrantHost, _settings.QdrantGrpcPort );
-      var measurer = new TargetRunner( _options, lifecycle, log ) { AfterSearch = connections.Observe };
+      var measurer = new TargetRunner( _options, lifecycle, log ) { AfterSearch = connections.Observe, OutsideLoad = machine.OutsideLoadNow };
       await machine.PinClientAsync( ct );
       foreach( (string name, BenchTarget? target, string? error) in targets )
       {

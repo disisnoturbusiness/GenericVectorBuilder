@@ -3,9 +3,9 @@ using Xunit.Abstractions;
 namespace GenericVectorBuilder.Engines.Tests.Bench;
 
 /// <summary>
-/// Machine control against the real box: the governor of every CPU is set to performance
-/// through sudo and put back, both by the run's own restore and, after a simulated crash, by
-/// the restore every start does first. Uses the real state file
+/// Machine control against the real box: the governor of every CPU is set to performance, turbo
+/// is turned off and the uncore limit pinned through sudo, and all are put back, by the run's own
+/// restore and, after a simulated crash, by the restore every start does first. Uses the real state file
 /// (/home/dan/gvb-work/bench-machine-state.json), so if this test is killed half-way the next
 /// benchmark start, or "restore-machine", still puts the governor back. Fails, rather than
 /// waits, when a real benchmark run owns the machine.
@@ -60,6 +60,38 @@ public class MachineControlLiveTests
       Assert.All( (string[])r.CrashDuring, g => Assert.Equal( "performance", g ) );
       Assert.Equal( before, (string[])r.CrashAfter );
       Assert.False( (bool)r.CrashFileAfter );
+      Assert.Contains( (string[])r.Log, l => l.Contains( "did not finish", StringComparison.Ordinal ) );
+   }
+
+   /// <summary>
+   /// The real clock: while machine control holds the box, turbo is off, every CPU shares one
+   /// ceiling and the uncore limit's lowest ratio equals its highest, and the clock record holds
+   /// the values from before; afterwards the turbo switch, every CPU's ceiling and floor and the
+   /// uncore limit read exactly as before, with no file left. The same after a run that "dies"
+   /// with the clock pinned and is put back by the next start.
+   /// </summary>
+   [Fact]
+   public async Task Clock_PinnedAndPutBack()
+   {
+      dynamic r = await MachineControlCompiler.CallAsync( "LiveClockAsync" );
+      _output.WriteLine( "before:       " + (string)r.Before );
+      _output.WriteLine( "during:       " + (string)r.During );
+      _output.WriteLine( "during text:  " + (string)r.DuringText );
+      _output.WriteLine( "recorded:     " + (string)r.Recorded );
+      _output.WriteLine( "after:        " + (string)r.After );
+      _output.WriteLine( "crash during: " + (string)r.CrashDuring );
+      _output.WriteLine( "crash after:  " + (string)r.CrashAfter );
+      ( (string[])r.Log ).ToList().ForEach( _output.WriteLine );
+      Assert.StartsWith( "turbo off (", (string)r.DuringText );
+      Assert.Matches( "ceiling [0-9]+ MHz on CPUs [0-9,-]+, floor", (string)r.DuringText );
+      Assert.Contains( "-> 1, 8 CPUs, uncore 0x", (string)r.Recorded );
+      long during = long.Parse( ( (string)r.During ).Split( ";uncore=" )[1], System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture );
+      Assert.Equal( during & 0x7F, ( during >> 8 ) & 0x7F );
+      Assert.Equal( (string)r.Before, (string)r.After );
+      Assert.False( (bool)r.FilesAfter );
+      Assert.Equal( (string)r.During, (string)r.CrashDuring );
+      Assert.Equal( (string)r.Before, (string)r.CrashAfter );
+      Assert.False( (bool)r.CrashFilesAfter );
       Assert.Contains( (string[])r.Log, l => l.Contains( "did not finish", StringComparison.Ordinal ) );
    }
 

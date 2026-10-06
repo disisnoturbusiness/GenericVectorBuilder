@@ -26,10 +26,20 @@ namespace GenericVectorBuilder.Bench.Running;
 /// with one searcher, QPS with several, the number the pass reports) must lie within
 /// <see cref="TRIAL_TOLERANCE"/> of the warm-up's settled figure (the median of its last
 /// <see cref="SETTLE_WINDOWS"/> windows, which must agree within <see cref="SETTLE_TOLERANCE"/>).
-/// When it does not, the warm-up is extended once (at least <see cref="ExtensionMinimum"/>, until
-/// its windows agree, at most <see cref="ExtensionCap"/>), a second trial is taken, both are
-/// recorded, the warm-up is announced and run again, and a pass that still disagrees flags its
-/// target as not settled.
+/// When it does not, the warm-up is extended once (at least <see cref="ExtensionMinimum"/>, at
+/// most <see cref="ExtensionCap"/>, until its level test passes: the older and the newer half of
+/// its latest windows, each half read as the pass reads it, within <see cref="SETTLE_TOLERANCE"/>,
+/// see <see cref="LevelOf"/>), a second trial is taken (it agrees inside the range of the newer
+/// half's windows or within <see cref="TRIAL_TOLERANCE"/> of the settled figure, see
+/// <see cref="TrialRecord"/>), both are recorded, the warm-up is announced and run again, and a
+/// pass that still disagrees flags its target as not settled. After every timed pass its own
+/// figure is held against the settled figure; more than <see cref="TRIAL_TOLERANCE"/> away flags
+/// the target too (see <see cref="SettleCheck"/>).
+/// Why the extension is judged by halves and not by its last three windows (v7): an engine whose
+/// speed swings from one 2 s window to the next with no trend never shows three windows within 5%.
+/// In the three v6 runs Oracle Free at 8 searchers ran its extension to the 120 s cap every time
+/// (its engine CPUs stop for 0.25 to 0.4 s in every 1.25 s, its own 2-CPU cap, so a 2 s window
+/// holds one stop or two), while its timed QPS@8 agreed run to run within 2.5%.
 /// Why time-based and at the pass's own concurrency: the v5 runs timed Vespa at 914 and 977 QPS@8
 /// when default@8 ran first and at 1550 after a 60 s exact pass (engine CPU per search 4.3 against
 /// 2.5 ms). Its 20 warm-up searches at 8 searchers lasted milliseconds, and its settle ran one
@@ -57,6 +67,36 @@ public sealed class SearchRunner
 
    /// <summary>Most the figures of those windows may differ, as a share of the lowest.</summary>
    public const double SETTLE_TOLERANCE = 0.05;
+
+   /// <summary>
+   /// Fewest windows in each half of the extension's level test (see <see cref="LevelOf"/>).
+   /// Why 5 (10 s or more a half): a half must span several cycles of an engine whose speed cycles
+   /// every second or two (Oracle Free at 8 searchers, about 1.25 s), or the halves differ only by
+   /// where the cycle fell.
+   /// </summary>
+   public const int LEVEL_HALF_WINDOWS = 5;
+
+   /// <summary>
+   /// Most windows in each half of the extension's level test: it reads only the latest windows.
+   /// Why: a disturbance early in a long extension must not keep it unsettled once it has passed;
+   /// halves of the whole 120 s would still carry it.
+   /// </summary>
+   public const int LEVEL_MAX_HALF_WINDOWS = 10;
+
+   /// <summary>
+   /// Smallest difference, in ms, between two one-searcher p50 figures that counts as a change in
+   /// the checks that flag a target (the extension's level test, the second trial and the hold of
+   /// the timed pass); smaller differences agree whatever their percentage. Why: at a p50 under a
+   /// millisecond a relative tolerance is finer than this box can resolve one searcher's latency.
+   /// Measured 2026-10-06 (v7 diagnosis runs): Redis's one-searcher p50 sits on one of two steady
+   /// levels about 0.05 ms apart (0.32 and 0.37 ms), in either order, for 10 to 40 s at a time, with
+   /// the searches on all four client CPUs moving together and no trend, while its timed pass and its
+   /// settled figure can land on different levels (13 to 15% apart). 0.1 ms covers that gap with room
+   /// and stays below the 0.133 ms this box's CPUs take to wake from their deepest idle state (C6),
+   /// which a single searcher's request can pay on either side. Above 1 ms the 10% limit is already
+   /// wider than the floor, so only sub-millisecond engines are affected.
+   /// </summary>
+   public const double P50_FLOOR_MS = 0.1;
 
    /// <summary>A p50 above this many times the mean of the same window is flagged.</summary>
    public const double SKEW_LIMIT = 1.25;
@@ -174,14 +214,20 @@ public sealed class SearchRunner
    /// <summary>
    /// The untimed preparation of a target whose index is ready: a rehearsal of every pass type
    /// (default at each concurrency, and exact), each at its own concurrency for
-   /// <see cref="RehearsalTime"/>, through the same window code the timed passes use.
+   /// <see cref="RehearsalTime"/>, through the same window code the timed passes use. A rehearsal
+   /// whose window ended before any of its searchers sent a search is run once more.
+   /// Why: with the short rehearsals of the tests, a starved thread pool can start the searchers
+   /// after the window has already closed (RunnerTests.Finisher_CalledAndStateRecorded failed that
+   /// way on 2026-10-06 with "every rehearsal search failed (first: none sent)"); nothing had failed,
+   /// so throwing as if the engine had refused every search was wrong. The benchmark's 30 s
+   /// rehearsal never ends before its searchers start.
    /// </summary>
    /// <param name="target">The target.</param>
    /// <param name="collection">Benchmark collection name.</param>
    /// <param name="log">Progress output.</param>
    /// <param name="ct">Cancellation.</param>
    /// <returns>What the rehearsal did; the settle checks are added to it as the passes run.</returns>
-   /// <exception cref="InvalidOperationException">Every default-search rehearsal search failed; the target cannot be timed.</exception>
+   /// <exception cref="InvalidOperationException">Every default-search rehearsal search failed (or none was sent, twice); the target cannot be timed.</exception>
    public async Task<Preparation> PrepareAsync( BenchTarget target, string collection, Action<string> log, CancellationToken ct )
    {
       ( SearchCall search, SearchCall? exact ) = Calls( target.Sink, collection );
@@ -190,7 +236,14 @@ public sealed class SearchRunner
       {
          int concurrency = ConcurrencyOf( pass );
          log( $"  {target.Name}: rehearsal of {pass}, {RehearsalTime.TotalSeconds:0.#} s untimed at {Searchers( concurrency )}" );
-         SearchWindow window = await WindowAsync( pass == RunOrder.EXACT_PASS ? exact! : search, concurrency, RehearsalTime, false, ct );
+         SearchCall call = pass == RunOrder.EXACT_PASS ? exact! : search;
+         SearchWindow window = await WindowAsync( call, concurrency, RehearsalTime, false, ct );
+         if( window.Searches + window.Errors == 0 )
+         {
+            log( $"  {target.Name}: rehearsal of {pass} sent no search in its {window.Seconds:0.0#} s (its searchers had not started yet); running it once more" );
+            window = await WindowAsync( call, concurrency, RehearsalTime, false, ct );
+         }
+
          preparation.AddRehearsal( new RehearsalRecord( pass, window.Seconds, window.Searches, window.Errors ), window.FirstError );
       }
 
@@ -227,6 +280,7 @@ public sealed class SearchRunner
          log( $"  {target.Name}: timing {pass}" );
          outcome.PassOrder.Add( pass );
          await RunPassAsync( pass, call, concurrency, outcome, previous, log, target.Name, ct );
+         HoldPass( pass, concurrency, outcome, log, target.Name );
          previous = pass;
       }
 
@@ -320,6 +374,47 @@ public sealed class SearchRunner
    }
 
    /// <summary>
+   /// The extension's level test: its latest windows (at most twice <see cref="LEVEL_MAX_HALF_WINDOWS"/>)
+   /// split into an older and a newer half of equal count (the oldest window left out when the
+   /// count is odd), each half read as the pass reads it: with one searcher the p50 of all the
+   /// half's searches, with several its searches per second. Null with fewer than
+   /// <see cref="LEVEL_HALF_WINDOWS"/> windows a half.
+   /// Why halves: warm-up is a level that keeps moving, and two halves of 10 s or more show it,
+   /// while they average out a swing from one 2 s window to the next that has no trend.
+   /// Why each half is read as the pass reads it and not as the mean of its window figures: a timed
+   /// pass's p50 is the p50 of all its searches, and the mean of the p50s of windows from two
+   /// speeds is not that.
+   /// </summary>
+   /// <param name="windows">Every window, oldest first.</param>
+   /// <param name="concurrency">Searchers (one: halves read as a p50; several: as QPS).</param>
+   /// <returns>The two halves, or null.</returns>
+   public static SettleLevel? LevelOf( IReadOnlyList<SettleWindow> windows, int concurrency )
+   {
+      int half = Math.Min( windows.Count / 2, LEVEL_MAX_HALF_WINDOWS );
+      if( half < LEVEL_HALF_WINDOWS )
+      {
+         return null;
+      }
+
+      List<SettleWindow> older = windows.Skip( windows.Count - 2 * half ).Take( half ).ToList();
+      List<SettleWindow> newer = windows.Skip( windows.Count - half ).ToList();
+      return new SettleLevel( HalfFigure( older, concurrency ), HalfFigure( newer, concurrency ), older.Select( w => w.Figure ).ToArray(), newer.Select( w => w.Figure ).ToArray(), concurrency );
+   }
+
+   /// <summary>
+   /// True when two figures are one-searcher p50s (ms) no more than <see cref="P50_FLOOR_MS"/>
+   /// apart: a difference this box cannot resolve at one searcher (see the constant).
+   /// </summary>
+   /// <param name="a">One figure.</param>
+   /// <param name="b">The other.</param>
+   /// <param name="concurrency">Searchers of the pass they belong to (the floor is for one searcher only).</param>
+   /// <returns>True when inside the floor.</returns>
+   public static bool WithinFloor( double a, double b, int concurrency )
+   {
+      return concurrency == 1 && Math.Abs( a - b ) <= P50_FLOOR_MS;
+   }
+
+   /// <summary>
    /// True when the settled figure lies within <see cref="TRIAL_TOLERANCE"/> of the trial's
    /// figure (the difference over the trial's figure). False when either is missing.
    /// </summary>
@@ -357,7 +452,9 @@ public sealed class SearchRunner
    /// The method notes for the run's results: the rehearsal, and the warm-up and settle check
    /// before every timed pass, with the lengths and limits the runner uses.
    /// Why here: the review of 2026-10-04 found the run's method notes describing an older
-   /// method; kept next to the constants they quote, they change with the code.
+   /// method; kept next to the constants they quote, they change with the code. The phrases
+   /// RunConditions and the web's BenchConditions read the lengths from (for example "extended
+   /// once (at least 30 s, until its windows agree, at most 120 s)") are kept word for word.
    /// </summary>
    /// <param name="warmupSearches">The --warmup minimum of searches.</param>
    /// <param name="warmupTime">Shortest warm-up, or null for <see cref="WARMUP_TIME"/>.</param>
@@ -371,7 +468,12 @@ public sealed class SearchRunner
          $"Warm-up and settle check, untimed, right before every timed pass: the pass's own search at the pass's own number of searchers for at least {warm:0.#} s and at least {warmupSearches} searches (at most {SETTLE_CAP.TotalSeconds:0} s), "
             + $"read in windows of at least {WINDOW_TIME.TotalSeconds:0} s and {SETTLE_WINDOW} searches; then a {TRIAL_TIME.TotalSeconds:0} s trial of the same pass. The trial's figure (p50 with one searcher, QPS with several) must lie within {TRIAL_TOLERANCE:0%} "
             + $"of the warm-up's settled figure (the median of its last {SETTLE_WINDOWS} windows, which must agree within {SETTLE_TOLERANCE:0%}); if not, the warm-up is extended once (at least {EXTENSION_MINIMUM.TotalSeconds:0} s, until its windows agree, at most {EXTENSION_CAP.TotalSeconds:0} s), "
-            + "a second trial is taken and the warm-up runs again before the pass. Each target's notes give every check, and a pass that still disagrees flags its target as unsettled. "
+            + $"where an extension's windows agree when its level test passes: the older and the newer half of its latest windows, {LEVEL_HALF_WINDOWS} to {LEVEL_MAX_HALF_WINDOWS} windows a half, each half read as the pass reads it (the p50 of all its searches with one searcher, its searches per second with several), agree within {SETTLE_TOLERANCE:0%}, "
+            + $"judged on the windows that stopped it (an extension whose cap runs out with fewer than {2 * LEVEL_HALF_WINDOWS} windows is judged by its last {SETTLE_WINDOWS} instead); "
+            + $"then a second trial is taken, which must lie inside the range of the newer half's windows or within {TRIAL_TOLERANCE:0%} of the newer half's figure, and the warm-up runs again before the pass. "
+            + $"After the pass its own figure is held against the settled figure, within {TRIAL_TOLERANCE:0%}. "
+            + $"In the level test, the second trial and the hold, two one-searcher p50s no more than {P50_FLOOR_MS:0.0#} ms apart agree whatever their percentage (below what this box resolves at one searcher). "
+            + "Each target's notes give every check, and a pass that still disagrees, or whose own figure did not hold, flags its target as unsettled. "
             + "With machine control on, the check for a quiet box is made when the warm-up is announced, before it starts (a wait between the warm-up and the timed pass let the engine go cold), "
             + $"so by the time the clock opens that check is as old as the warm-up and the trial (about {warm + TRIAL_TIME.TotalSeconds:0} s, more after an extension); each pass's conditions record that lead (quietCheckLeadSeconds). "
             + "Failed untimed searches are counted per target (warmupErrors) and are not in the timed error counts.",
@@ -417,6 +519,25 @@ public sealed class SearchRunner
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// One half of the level test read as the pass reads it: with one searcher the p50 of all its
+   /// searches, with several its completed searches over its seconds.
+   /// </summary>
+   /// <param name="half">The half's windows.</param>
+   /// <param name="concurrency">Searchers.</param>
+   /// <returns>The figure.</returns>
+   /// <exception cref="InvalidOperationException">A one-searcher window came without its latencies.</exception>
+   private static double HalfFigure( IReadOnlyList<SettleWindow> half, int concurrency )
+   {
+      if( concurrency == 1 )
+      {
+         return BenchMath.Percentile( half.SelectMany( w => w.Latencies ?? throw new InvalidOperationException( "a one-searcher settle window has no latencies" ) ).ToList(), 50 );
+      }
+
+      double seconds = half.Sum( w => w.Seconds );
+      return seconds > 0 ? half.Sum( w => w.Searches ) / seconds : 0;
+   }
 
    /// <summary>
    /// The target's row count as it reports it, or null when it cannot count.
@@ -551,10 +672,10 @@ public sealed class SearchRunner
          return new SettleCheck( pass, settle, trial, null, null, settle.Settled && trial.Agrees );
       }
 
-      log( $"  {name}: {CHECK_STEP} before {pass}: extending the warm-up once, at least {ExtensionMinimum.TotalSeconds:0.#} s and at most {ExtensionCap.TotalSeconds:0.#} s, until its windows agree" );
+      log( $"  {name}: {CHECK_STEP} before {pass}: extending the warm-up once, at least {ExtensionMinimum.TotalSeconds:0.#} s and at most {ExtensionCap.TotalSeconds:0.#} s, until its level test passes" );
       var plan = new SustainPlan( 0, ExtensionMinimum, ExtensionCap, true );
       SettleResult extension = ( await SustainAsync( call, concurrency, plan, ct ) ).Result( plan );
-      TrialRecord retrial = await TrialAsync( call, concurrency, SettledFigure( extension.WindowFigures ), ct );
+      TrialRecord retrial = await TrialAsync( call, concurrency, extension.Level?.Newer ?? SettledFigure( extension.WindowFigures ), ct, extension.Level );
       var check = new SettleCheck( pass, settle, trial, extension, retrial, extension.Settled && retrial.Agrees );
       log( $"  {name}: {CHECK_STEP} before {pass}: extension ran {extension.Seconds:0.0} s and {extension.Searches:N0} searches; {retrial.Describe( "second trial" )}; {( check.Confirmed ? "confirmed" : "STILL NOT CONFIRMED" )}" );
       return check;
@@ -569,14 +690,15 @@ public sealed class SearchRunner
    /// <param name="concurrency">Searchers the pass uses.</param>
    /// <param name="settled">The settled figure it is compared with, or null.</param>
    /// <param name="ct">Cancellation.</param>
+   /// <param name="level">The extension's level test, whose newer half's window range the trial may also land in; null after the warm-up.</param>
    /// <returns>The trial.</returns>
-   private async Task<TrialRecord> TrialAsync( SearchCall call, int concurrency, double? settled, CancellationToken ct )
+   private async Task<TrialRecord> TrialAsync( SearchCall call, int concurrency, double? settled, CancellationToken ct, SettleLevel? level = null )
    {
       SearchWindow window = await WindowAsync( call, concurrency, TrialTime, false, ct );
       List<double> latencies = window.Latencies();
       double? figure = latencies.Count == 0 || window.Seconds <= 0 ? null
          : concurrency == 1 ? BenchMath.Percentile( latencies, 50 ) : latencies.Count / window.Seconds;
-      return new TrialRecord( concurrency, settled, figure, latencies.Count, window.Errors, window.Seconds );
+      return new TrialRecord( concurrency, settled, figure, latencies.Count, window.Errors, window.Seconds, level?.Low, level?.High );
    }
 
    /// <summary>
@@ -594,7 +716,7 @@ public sealed class SearchRunner
    /// <returns>The searches, read into windows.</returns>
    private async Task<SettleSampler> SustainAsync( SearchCall call, int concurrency, SustainPlan plan, CancellationToken ct )
    {
-      var sampler = new SettleSampler( concurrency, WindowTime, GIVE_UP_FAILURES );
+      var sampler = new SettleSampler( concurrency, WindowTime, GIVE_UP_FAILURES, plan.UntilSettled );
       long claims = -1;
       Task all = Task.WhenAll( Enumerable.Range( 0, concurrency ).Select( worker => Task.Run( async () =>
       {
@@ -654,6 +776,34 @@ public sealed class SearchRunner
 
       FillLatency( report, window, latencies, record.Qps );
       log( $"  {name}: p50 {report.P50Ms:0.00} ms, p95 {report.P95Ms:0.00} ms over {report.LatencySamples} searches, {record.Qps:0.0} QPS with one searcher, recall@{_options.Top} {report.Recall:0.000}{( report.Ndcg.HasValue ? $", nDCG {report.Ndcg:0.000}" : string.Empty )}" );
+   }
+
+   /// <summary>
+   /// Records the timed pass's own figure on its settle check, and logs it when it lies more than
+   /// <see cref="TRIAL_TOLERANCE"/> from the settled figure (the engine was still changing).
+   /// Why: a check can confirm an engine on a plateau of a slow drift, and only the pass itself,
+   /// timed for far longer than the trial, shows that the level it settled on held.
+   /// </summary>
+   /// <param name="pass">Pass name.</param>
+   /// <param name="concurrency">Searchers it used.</param>
+   /// <param name="outcome">Outcome (its last pass record; the check is in its preparation).</param>
+   /// <param name="log">Progress output.</param>
+   /// <param name="name">Target name, for the log.</param>
+   private static void HoldPass( string pass, int concurrency, SearchOutcome outcome, Action<string> log, string name )
+   {
+      List<SettleCheck>? checks = outcome.Preparation?.Checks;
+      if( checks is not { Count: > 0 } || checks[^1].Pass != pass || outcome.Passes.Count == 0 )
+      {
+         return;
+      }
+
+      PassRecord record = outcome.Passes[^1];
+      SettleCheck check = checks[^1] with { PassFigure = concurrency == 1 ? record.P50Ms : record.Qps };
+      checks[^1] = check;
+      if( !check.Held )
+      {
+         log( $"  {name}: {CHECK_STEP} after {pass}: the timed pass gave {FigureText( check.PassFigure!.Value, concurrency )} against the settled {FigureText( check.SettledFigure!.Value, concurrency )}, {check.PassApart:0%} apart (limit {TRIAL_TOLERANCE:0%}); NOT HELD, the engine was still changing" );
+      }
    }
 
    /// <summary>
@@ -852,7 +1002,7 @@ public sealed class SearchRunner
 /// <param name="MinimumSearches">Searches it sends at least (unless the cap or the failures stop it).</param>
 /// <param name="MinimumTime">Time it runs at least.</param>
 /// <param name="Cap">Time it never runs past.</param>
-/// <param name="UntilSettled">True to keep going after both minimums until the last windows agree.</param>
+/// <param name="UntilSettled">True for an extension: keep going after both minimums until its level test passes (<see cref="SearchRunner.LevelOf"/>).</param>
 public sealed record SustainPlan( int MinimumSearches, TimeSpan MinimumTime, TimeSpan Cap, bool UntilSettled );
 
 /// <summary>
@@ -862,6 +1012,13 @@ public sealed record SustainPlan( int MinimumSearches, TimeSpan MinimumTime, Tim
 /// fraction of a second, and three such windows agreed while the engine was still speeding up.
 /// Why a window's figure is the pass's own number: a settle at 8 searchers is judged by the
 /// QPS@8 it would report, a settle at one searcher by its p50.
+/// A warm-up is judged by its last windows (<see cref="SearchRunner.IsSettled"/>), an extension
+/// by its level test (<see cref="SearchRunner.LevelOf"/>). An extension that stops because it
+/// settled is judged on exactly the windows that stopped it.
+/// Why (v7): the v6 runs read the windows once more after the stop, and that read takes in the
+/// bucket that was held back while the searchers ran. In 7 of their 10 unsettled checks the
+/// extension had stopped at 30 to 38 s because its windows agreed, and that one extra window undid
+/// it; in 4 of the 7 the second trial agreed, so the extra window alone flagged the pass.
 /// </summary>
 public sealed class SettleSampler
 {
@@ -870,8 +1027,11 @@ public sealed class SettleSampler
    private readonly int _concurrency;
    private readonly TimeSpan _windowTime;
    private readonly int _giveUp;
+   private readonly bool _byLevel;
+   private readonly object _judge = new();
    private readonly long _start;
    private readonly List<List<double>>[] _buckets;
+   private readonly List<SettleWindow> _windows = new();
    private readonly List<double> _figures = new();
    private readonly List<double> _pending = new();
    private int _pendingBuckets;
@@ -883,6 +1043,7 @@ public sealed class SettleSampler
    private long _stopTicks;
    private int _capped;
    private volatile bool _settled;
+   private bool _stoppedSettled;
 
    #endregion Data Members
 
@@ -894,11 +1055,13 @@ public sealed class SettleSampler
    /// <param name="concurrency">Searchers.</param>
    /// <param name="windowTime">Shortest window (the bucket length).</param>
    /// <param name="giveUp">Failures in a row after which the run stops.</param>
-   public SettleSampler( int concurrency, TimeSpan windowTime, int giveUp )
+   /// <param name="byLevel">True for an extension (judged by its level test), false for a warm-up (judged by its last windows).</param>
+   public SettleSampler( int concurrency, TimeSpan windowTime, int giveUp, bool byLevel = false )
    {
       _concurrency = concurrency;
       _windowTime = windowTime > TimeSpan.Zero ? windowTime : TimeSpan.FromMilliseconds( 1 );
       _giveUp = giveUp;
+      _byLevel = byLevel;
       _buckets = Enumerable.Range( 0, concurrency ).Select( _ => new List<List<double>>() ).ToArray();
       _start = Stopwatch.GetTimestamp();
    }
@@ -936,7 +1099,7 @@ public sealed class SettleSampler
    {
       TimeSpan elapsed = Stopwatch.GetElapsedTime( _start );
       bool capped = elapsed >= plan.Cap;
-      bool more = !capped && !GaveUp && ( claim < plan.MinimumSearches || elapsed < plan.MinimumTime || ( plan.UntilSettled && !_settled ) );
+      bool more = !capped && !GaveUp && ( claim < plan.MinimumSearches || elapsed < plan.MinimumTime || ( plan.UntilSettled && !StopsSettled() ) );
       if( !more && Interlocked.CompareExchange( ref _stopTicks, Math.Max( 1, elapsed.Ticks ), 0 ) == 0 && capped )
       {
          Volatile.Write( ref _capped, 1 );
@@ -979,12 +1142,83 @@ public sealed class SettleSampler
 
    /// <summary>
    /// Turns the buckets that are complete into windows of at least <see cref="SearchRunner.SETTLE_WINDOW"/>
-   /// searches and refreshes whether the last windows agree. While searchers run, a bucket is
-   /// read one bucket after it ended (a search that completed at its end may still be on its
-   /// way into the list); at the end every bucket before the stop is read. Never called twice at once.
+   /// searches and refreshes whether the run is settled (its last windows for a warm-up, its level
+   /// test for an extension). While searchers run, a bucket is read one bucket after it ended (a
+   /// search that completed at its end may still be on its way into the list); at the end every
+   /// bucket before the stop is read, except after an extension stopped because it settled: its
+   /// windows stay the ones that stopped it. Never called twice at once.
    /// </summary>
    /// <param name="final">True once every searcher has finished.</param>
    public void Evaluate( bool final )
+   {
+      lock( _judge )
+      {
+         if( !_stoppedSettled )
+         {
+            Merge( final );
+         }
+      }
+   }
+
+   /// <summary>
+   /// The run read as a settle: whether its last windows agreed (a warm-up) or its level test
+   /// passed (an extension), how long it ran, its searches, its window figures, the level test
+   /// for an extension, and why it did not settle. An extension whose cap ran out with fewer
+   /// windows than its level test needs is judged by its last windows, as a warm-up is. Why: an
+   /// engine slow enough that 100 searches take longer than the window would otherwise be called
+   /// unsettled for want of windows, not for anything it did.
+   /// </summary>
+   /// <param name="plan">The plan it ran under.</param>
+   /// <returns>The settle.</returns>
+   public SettleResult Result( SustainPlan plan )
+   {
+      lock( _judge )
+      {
+         SettleLevel? level = _byLevel ? SearchRunner.LevelOf( _windows, _concurrency ) : null;
+         bool settled = ( level != null ? level.Agrees : SearchRunner.IsSettled( _figures ) ) && !GaveUp;
+         string windows = $"only {_figures.Count} full window{( _figures.Count == 1 ? string.Empty : "s" )}";
+         string? why = settled ? null
+            : GaveUp ? $"{_giveUp} searches in a row failed"
+            : level != null ? $"the {plan.Cap.TotalSeconds:0} s cap ran out with its older and newer halves {level.Apart:0.0%} apart (limit {SearchRunner.SETTLE_TOLERANCE:0%}{( _concurrency == 1 ? $", or {SearchRunner.P50_FLOOR_MS:0.0#} ms" : string.Empty )})"
+            : _figures.Count < SearchRunner.SETTLE_WINDOWS ? $"{windows}, fewer than {SearchRunner.SETTLE_WINDOWS}"
+            : _byLevel ? $"{windows} when the {plan.Cap.TotalSeconds:0} s cap ran out, fewer than the {2 * SearchRunner.LEVEL_HALF_WINDOWS} its level test needs, and its last {SearchRunner.SETTLE_WINDOWS} differed by more than {SearchRunner.SETTLE_TOLERANCE:0%}"
+            : $"its last {SearchRunner.SETTLE_WINDOWS} windows differed by more than {SearchRunner.SETTLE_TOLERANCE:0%}";
+         double seconds = Stopwatch.GetElapsedTime( _start ).TotalSeconds;
+         return new SettleResult( settled, seconds, Sent, Errors, FirstError, _figures.ToArray(), why, GaveUp, _concurrency, _windowTime.TotalSeconds, level );
+      }
+   }
+
+   #endregion Public Methods
+
+   #region Private Methods
+
+   /// <summary>
+   /// True when the run may stop because it settled; the first such answer freezes the windows,
+   /// so the verdict is made on exactly the windows that stopped it. Why the lock only here: it
+   /// is taken only once the windows already agree, so the searchers never wait on it before then.
+   /// </summary>
+   /// <returns>True when settled.</returns>
+   private bool StopsSettled()
+   {
+      if( !_settled )
+      {
+         return false;
+      }
+
+      lock( _judge )
+      {
+         _stoppedSettled |= _settled;
+         return _settled;
+      }
+   }
+
+   /// <summary>
+   /// Turns the complete buckets into windows and refreshes whether the run is settled (see
+   /// <see cref="Evaluate"/>). Called under the judge lock. A window keeps its latencies only for
+   /// an extension at one searcher, whose level test reads a half's p50 from all its searches.
+   /// </summary>
+   /// <param name="final">True once every searcher has finished.</param>
+   private void Merge( bool final )
    {
       long stop = Volatile.Read( ref _stopTicks );
       long now = Stopwatch.GetElapsedTime( _start ).Ticks;
@@ -994,6 +1228,7 @@ public sealed class SettleSampler
          limit = Math.Min( limit, (int)( now / _windowTime.Ticks ) - 1 );
       }
 
+      bool added = false;
       for( int bucket = _merged; bucket < limit; bucket++ )
       {
          foreach( List<List<double>> worker in _buckets )
@@ -1007,35 +1242,24 @@ public sealed class SettleSampler
          _pendingBuckets++;
          if( _pending.Count >= SearchRunner.SETTLE_WINDOW )
          {
-            _figures.Add( _concurrency == 1 ? BenchMath.Percentile( _pending, 50 ) : _pending.Count / ( _pendingBuckets * _windowTime.TotalSeconds ) );
+            double seconds = _pendingBuckets * _windowTime.TotalSeconds;
+            double figure = _concurrency == 1 ? BenchMath.Percentile( _pending, 50 ) : _pending.Count / seconds;
+            _windows.Add( new SettleWindow( figure, _pending.Count, seconds, _byLevel && _concurrency == 1 ? _pending.ToArray() : null ) );
+            _figures.Add( figure );
             _pending.Clear();
             _pendingBuckets = 0;
+            added = true;
          }
       }
 
       _merged = Math.Max( _merged, limit );
-      _settled = SearchRunner.IsSettled( _figures );
+      if( added )
+      {
+         _settled = _byLevel ? SearchRunner.LevelOf( _windows, _concurrency ) is { Agrees: true } : SearchRunner.IsSettled( _figures );
+      }
    }
 
-   /// <summary>
-   /// The run read as a settle: whether its last windows agreed, how long it ran, its searches,
-   /// its window figures, and why it did not settle.
-   /// </summary>
-   /// <param name="plan">The plan it ran under.</param>
-   /// <returns>The settle.</returns>
-   public SettleResult Result( SustainPlan plan )
-   {
-      bool settled = SearchRunner.IsSettled( _figures ) && !GaveUp;
-      string? why = settled ? null
-         : GaveUp ? $"{_giveUp} searches in a row failed"
-         : _figures.Count < SearchRunner.SETTLE_WINDOWS ? $"only {_figures.Count} full window{( _figures.Count == 1 ? string.Empty : "s" )}, fewer than {SearchRunner.SETTLE_WINDOWS}"
-         : plan.UntilSettled && Capped ? $"the {plan.Cap.TotalSeconds:0} s cap ran out"
-         : $"its last {SearchRunner.SETTLE_WINDOWS} windows differed by more than {SearchRunner.SETTLE_TOLERANCE:0%}";
-      double seconds = Stopwatch.GetElapsedTime( _start ).TotalSeconds;
-      return new SettleResult( settled, seconds, Sent, Errors, FirstError, _figures.ToArray(), why, GaveUp, _concurrency, _windowTime.TotalSeconds );
-   }
-
-   #endregion Public Methods
+   #endregion Private Methods
 }
 
 /// <summary>
@@ -1157,12 +1381,61 @@ public sealed record RehearsalRecord( string Pass, double Seconds, int Searches,
 /// <param name="GaveUp">True when it stopped because the searches kept failing.</param>
 /// <param name="Concurrency">Searchers it ran with (says which figure the windows hold).</param>
 /// <param name="WindowSeconds">Shortest window, seconds.</param>
+/// <param name="Level">An extension's level test (null for a warm-up, or with too few windows for it).</param>
 public sealed record SettleResult( bool Settled, double Seconds, int Searches, int Errors, string? FirstError, IReadOnlyList<double> WindowFigures, string? StoppedBecause,
-   bool GaveUp, int Concurrency, double WindowSeconds );
+   bool GaveUp, int Concurrency, double WindowSeconds, SettleLevel? Level = null );
+
+/// <summary>
+/// One settle window: its figure, its completed searches and its length, and for an extension at
+/// one searcher its latencies, so the level test can read a half of windows as the pass reads it.
+/// </summary>
+/// <param name="Figure">p50 ms with one searcher, QPS with several.</param>
+/// <param name="Searches">Completed searches in it.</param>
+/// <param name="Seconds">Its length (whole buckets).</param>
+/// <param name="Latencies">Every latency in it (ms) for an extension at one searcher; otherwise null.</param>
+public sealed record SettleWindow( double Figure, int Searches, double Seconds, IReadOnlyList<double>? Latencies );
+
+/// <summary>
+/// An extension's level test (see <see cref="SearchRunner.LevelOf"/>): the figure of its older and
+/// of its newer half, each read as the pass reads it, and the window figures of each half.
+/// </summary>
+/// <param name="Older">Figure of the older half.</param>
+/// <param name="Newer">Figure of the newer half: the settled figure.</param>
+/// <param name="OlderWindows">Window figures of the older half, oldest first.</param>
+/// <param name="NewerWindows">Window figures of the newer half, oldest first.</param>
+/// <param name="Concurrency">Searchers (one: the figures are p50s in ms, and <see cref="SearchRunner.P50_FLOOR_MS"/> applies).</param>
+public sealed record SettleLevel( double Older, double Newer, IReadOnlyList<double> OlderWindows, IReadOnlyList<double> NewerWindows, int Concurrency )
+{
+   #region Public Methods
+
+   /// <summary>Windows in each half.</summary>
+   public int HalfWindows => NewerWindows.Count;
+
+   /// <summary>Lowest window figure of the newer half.</summary>
+   public double Low => NewerWindows.Min();
+
+   /// <summary>Highest window figure of the newer half.</summary>
+   public double High => NewerWindows.Max();
+
+   /// <summary>How far apart the halves are, as a share of the lower.</summary>
+   public double Apart => Math.Min( Older, Newer ) > 0 ? Math.Abs( Newer - Older ) / Math.Min( Older, Newer ) : double.PositiveInfinity;
+
+   /// <summary>True when the halves differ by less than <see cref="SearchRunner.SETTLE_TOLERANCE"/>, or, as p50s, by no more than <see cref="SearchRunner.P50_FLOOR_MS"/>.</summary>
+   public bool Agrees => Apart < SearchRunner.SETTLE_TOLERANCE || SearchRunner.WithinFloor( Older, Newer, Concurrency );
+
+   #endregion Public Methods
+}
 
 /// <summary>
 /// One trial of a settle check: the pass's own search at the pass's own concurrency right
 /// before the pass, read as the pass reads it, compared with the warm-up's settled figure.
+/// After an extension it also agrees when it lands inside the range of the extension's newer
+/// half's windows. Why: an engine that swings between two speeds every few seconds gives a 3 s
+/// trial from either side of the swing, and one settled figure then calls the swing a change
+/// (v6, ClickHouse with its system logs off at 8 searchers: second trials of 432, 435 and 526 QPS
+/// while its 2 s windows ran from 434 to 530). A trial outside both is a change: the newer half
+/// is the engine's own settled behaviour, so the range is no wider than what the engine itself
+/// just did.
 /// </summary>
 /// <param name="Concurrency">Searchers (one: the figure is a p50 in ms; several: QPS).</param>
 /// <param name="Settled">The settled figure it was compared with, or null when no window completed.</param>
@@ -1170,15 +1443,23 @@ public sealed record SettleResult( bool Settled, double Seconds, int Searches, i
 /// <param name="Searches">Completed searches.</param>
 /// <param name="Errors">Failed searches.</param>
 /// <param name="Seconds">How long it ran.</param>
-public sealed record TrialRecord( int Concurrency, double? Settled, double? Figure, int Searches, int Errors, double Seconds )
+/// <param name="Low">Lowest window figure of the extension's newer half, or null after a warm-up.</param>
+/// <param name="High">Highest window figure of the extension's newer half, or null after a warm-up.</param>
+public sealed record TrialRecord( int Concurrency, double? Settled, double? Figure, int Searches, int Errors, double Seconds, double? Low = null, double? High = null )
 {
    #region Public Methods
 
    /// <summary>How far apart the two figures are, as a share of the trial's; null when either is missing.</summary>
    public double? Apart => ApartOf( Settled, Figure );
 
-   /// <summary>True when they are within <see cref="SearchRunner.TRIAL_TOLERANCE"/>.</summary>
-   public bool Agrees => Apart is double apart && apart <= SearchRunner.TRIAL_TOLERANCE;
+   /// <summary>True when a range was given and the trial's figure lies inside it.</summary>
+   public bool InRange => Low is double low && High is double high && Figure is double f && f >= low && f <= high;
+
+   /// <summary>True when a range was given and the trial's p50 lies within <see cref="SearchRunner.P50_FLOOR_MS"/> of the settled figure (the floor applies to the second trial only).</summary>
+   public bool InFloor => Low.HasValue && Settled is double s && Figure is double f && SearchRunner.WithinFloor( s, f, Concurrency );
+
+   /// <summary>True when the figures are within <see cref="SearchRunner.TRIAL_TOLERANCE"/>, or (a second trial) the trial lies inside the given range or within the p50 floor.</summary>
+   public bool Agrees => InRange || InFloor || ( Apart is double apart && apart <= SearchRunner.TRIAL_TOLERANCE );
 
    /// <summary>
    /// The difference of a settled figure and a trial figure over the trial figure.
@@ -1192,7 +1473,8 @@ public sealed record TrialRecord( int Concurrency, double? Settled, double? Figu
    }
 
    /// <summary>
-   /// One line: "trial of 4,560 searches in 3.0 s at 8 searchers: 1,520 QPS against the settled 1,524 QPS, 0% apart (limit 10%)".
+   /// One line: "trial of 4,560 searches in 3.0 s at 8 searchers: 1,520 QPS against the settled 1,524 QPS, 0% apart (limit 10%)";
+   /// after an extension also whether it lies inside its newer windows' range.
    /// </summary>
    /// <param name="what">"trial" or "second trial".</param>
    /// <returns>The text.</returns>
@@ -1201,7 +1483,11 @@ public sealed record TrialRecord( int Concurrency, double? Settled, double? Figu
       string trial = Figure is double f ? SearchRunner.FigureText( f, Concurrency ) : "none (no search completed)";
       string settled = Settled is double s ? SearchRunner.FigureText( s, Concurrency ) : "none (no full window)";
       string apart = Apart is double a ? $"{a:0%} apart" : "not comparable";
-      return $"{what} of {Searches:N0} searches in {Seconds:0.0} s at {SearchRunner.Searchers( Concurrency )}{( Errors > 0 ? $" ({Errors} failed)" : string.Empty )}: {trial} against the settled {settled}, {apart} (limit {SearchRunner.TRIAL_TOLERANCE:0%})";
+      string range = Low is double low && High is double high
+         ? $", {( InRange ? "inside" : "outside" )} its newer windows' range {( Concurrency == 1 ? $"{low:0.000} to {high:0.000} ms" : $"{low:N0} to {high:N0} QPS" )}"
+            + ( InFloor && !InRange && Apart > SearchRunner.TRIAL_TOLERANCE ? $", within the {SearchRunner.P50_FLOOR_MS:0.0#} ms floor" : string.Empty )
+         : string.Empty;
+      return $"{what} of {Searches:N0} searches in {Seconds:0.0} s at {SearchRunner.Searchers( Concurrency )}{( Errors > 0 ? $" ({Errors} failed)" : string.Empty )}: {trial} against the settled {settled}, {apart} (limit {SearchRunner.TRIAL_TOLERANCE:0%}){range}";
    }
 
    #endregion Public Methods
@@ -1209,7 +1495,14 @@ public sealed record TrialRecord( int Concurrency, double? Settled, double? Figu
 
 /// <summary>
 /// The settle check before one timed pass: the warm-up read as a settle, the trial, and when it
-/// was needed the one extension and the second trial.
+/// was needed the one extension and the second trial; once the pass has run, its own figure,
+/// held against the settled figure.
+/// Why the pass is held too: a check can confirm an engine on a plateau of a slow drift, and the
+/// pass, far longer than the trial, shows whether the level held. Why the same 10% as the trial:
+/// over the 156 timed passes of the three v6 runs the pass's figure lay a median 0.4% from its
+/// settled figure and more than 7.3% only once (Oracle at 8 searchers, 15%, against the median of
+/// three 2 s windows of its 1.25 s stop-and-go cycle, which the level test now reads over halves of
+/// 10 s or more).
 /// </summary>
 /// <param name="Pass">The timed pass it preceded.</param>
 /// <param name="Settle">The pass's warm-up, read as a settle.</param>
@@ -1217,9 +1510,25 @@ public sealed record TrialRecord( int Concurrency, double? Settled, double? Figu
 /// <param name="Extension">The extension, or null when none ran.</param>
 /// <param name="Retrial">The trial after the extension, or null.</param>
 /// <param name="Confirmed">True when the last settle settled and its trial agreed.</param>
-public sealed record SettleCheck( string Pass, SettleResult Settle, TrialRecord Trial, SettleResult? Extension, TrialRecord? Retrial, bool Confirmed )
+/// <param name="PassFigure">The timed pass's own figure (p50 ms with one searcher, QPS with several), or null before it ran.</param>
+public sealed record SettleCheck( string Pass, SettleResult Settle, TrialRecord Trial, SettleResult? Extension, TrialRecord? Retrial, bool Confirmed, double? PassFigure = null )
 {
    #region Public Methods
+
+   /// <summary>The settled figure the last trial was compared with, which the timed pass is held against.</summary>
+   public double? SettledFigure => ( Retrial ?? Trial ).Settled;
+
+   /// <summary>How far the timed pass's figure lies from the settled figure, as a share of the pass's; null before the pass ran or without a settled figure.</summary>
+   public double? PassApart => TrialRecord.ApartOf( SettledFigure, PassFigure );
+
+   /// <summary>True when the timed pass's p50 lies within <see cref="SearchRunner.P50_FLOOR_MS"/> of the settled figure.</summary>
+   public bool HeldByFloor => PassFigure is double p && SettledFigure is double s && SearchRunner.WithinFloor( s, p, Trial.Concurrency );
+
+   /// <summary>False when the timed pass's figure lies more than <see cref="SearchRunner.TRIAL_TOLERANCE"/> from the settled figure (and, as a p50, more than <see cref="SearchRunner.P50_FLOOR_MS"/>).</summary>
+   public bool Held => PassApart is not double apart || apart <= SearchRunner.TRIAL_TOLERANCE || HeldByFloor;
+
+   /// <summary>True when the check confirmed the warm-up and the timed pass held to it.</summary>
+   public bool Settled => Confirmed && Held;
 
    /// <summary>Searches the check sent (trials and extension, completed and failed); the warm-up is counted with the warm-ups.</summary>
    public int Searches => Trial.Searches + Trial.Errors + ( Extension?.Searches ?? 0 ) + ( Retrial is TrialRecord r ? r.Searches + r.Errors : 0 );

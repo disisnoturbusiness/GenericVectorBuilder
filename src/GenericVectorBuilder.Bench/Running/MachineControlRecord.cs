@@ -248,13 +248,42 @@ public sealed class PassConditions
    /// <summary>Lowest, median and highest MHz of every CPU.</summary>
    public List<CpuMhz> CpuMhz { get; set; } = new();
 
+   /// <summary>
+   /// Average MHz of the engine CPUs over the pass (every reading of every engine CPU), or null
+   /// when the CPUs were not split or no clock was read. Kept out of results.json on purpose:
+   /// it is reported in the target's clock note (see <see cref="MachineFlags.ClockLine"/>).
+   /// </summary>
+   [JsonIgnore]
+   public double? EngineMhzMean { get; set; }
+
+   /// <summary>
+   /// Average MHz of the client CPUs over the pass, or of every CPU when the CPUs were not split
+   /// (the client then shares all of them); null when no clock was read. Kept out of results.json
+   /// like <see cref="EngineMhzMean"/>.
+   /// </summary>
+   [JsonIgnore]
+   public double? ClientMhzMean { get; set; }
+
+   /// <summary>
+   /// The clock every CPU was pinned to for the run (MHz, turbo off), or null when the clock was
+   /// not pinned. Kept out of results.json; the run's summary note states it.
+   /// </summary>
+   [JsonIgnore]
+   public int? PinnedMhz { get; set; }
+
    /// <summary>What the quiet check came right before: "warm-up" (the rule), or the timed pass when no warm-up line was seen.</summary>
    public string? QuietCheckBefore { get; set; }
 
    /// <summary>When the quiet check let the pass go on (UTC).</summary>
    public string? QuietCheckUtc { get; set; }
 
-   /// <summary>Seconds from the quiet check to the start of the timed window (the warm-up, plus the settle trial before a target's first pass).</summary>
+   /// <summary>
+   /// Seconds from the quiet check (made at the pass's latest warm-up line) to the start of the
+   /// timed window: the warm-up plus, in a run with a rehearsal, the settle trial that follows
+   /// every pass's warm-up (about 18 s with the 15 s warm-up and 3 s trial). After a settle
+   /// extension the warm-up is announced, checked and run again, so the lead is that second
+   /// warm-up alone (about 15 s).
+   /// </summary>
    public double? QuietCheckLeadSeconds { get; set; }
 
    /// <summary>Start of the window the quiet check averaged over (UTC): a full window back, or the target's or its engine's start if later.</summary>
@@ -358,6 +387,15 @@ public static class MachineFlags
    /// <summary>Outside load (CPUs) below which the counters are said not to add up: a little under zero is rounding, this much is not.</summary>
    public const double MISMATCH_LIMIT = -0.05;
 
+   /// <summary>
+   /// Most a pass's average clock on a CPU group may differ from the pinned clock, as a share of
+   /// it. Why 1%: the v6 runs differed by up to 2.9% between engines (one turbo step) next to a 3%
+   /// tie band; the pinned clock reads about 0.2% under its nominal value (scaling_cur_freq is
+   /// the kernel's calibrated clock times APERF/MPERF; linus7795 calibrates 3491.8 MHz for a
+   /// nominal 3500, so the base clock reads 3492 and one turbo step 3592).
+   /// </summary>
+   public const double CLOCK_TOLERANCE = 0.01;
+
    private const string DEFAULT_PASS = "default@";
 
    private static readonly JsonSerializerOptions JSON = new()
@@ -384,7 +422,7 @@ public static class MachineFlags
       bool on = c.MachineControl == "on";
       if( !on )
       {
-         flags.Add( $"WARNING: machine control {c.MachineControl}: the governor was {c.Governor}, nothing was pinned, client and engine shared every CPU, and no pass waited for a quiet box." );
+         flags.Add( $"WARNING: machine control {c.MachineControl}: the governor was {c.Governor}, the CPU clock was not pinned (turbo left as found), nothing was pinned, client and engine shared every CPU, and no pass waited for a quiet box." );
       }
       else if( c.Governor != GovernorControl.TARGET || c.GovernorAtEnd is string end && end != GovernorControl.TARGET )
       {
@@ -405,6 +443,7 @@ public static class MachineFlags
       flags.AddRange( c.Engines.Where( e => e.Problems.Count > 0 ).Select( e => $"WARNING: {e.Target} not fully pinned to its CPUs: {string.Join( "; ", e.Problems ).TrimEnd( '.' )}." ) );
       flags.AddRange( c.Engines.Where( e => e.Hosting == "embedded" ).Select( e => $"{e.Target} is embedded: it ran inside the client process on the client CPUs {e.Cpus ?? "(all)"}, sharing them with the client." ) );
       flags.AddRange( c.Passes.Where( p => p.BusyBox ).Select( p => $"WARNING: busy box during {p.Target} {p.Pass}: {p.BusyReason?.TrimEnd( '.' )}." ) );
+      flags.AddRange( ClockWarnings( c.Passes ) );
       flags.AddRange( c.Passes.Where( p => p.AccountingMismatch ).Select( p => $"WARNING: accounting mismatch in {p.Target} {p.Pass}: {p.AccountingMismatchReason}; the kernel's busy time minus this process minus the engine's cgroups came out negative, so the outside-load figures of this pass cannot be trusted." ) );
       flags.AddRange( on ? c.Passes.Where( p => p.ClientCpuMsPerSearch == null ).Select( p => $"WARNING: no client CPU per search for {p.Target} {p.Pass}: {p.ClientCpuProblem ?? "it was never recorded"}." ) : Array.Empty<string>() );
       flags.AddRange( IdleFlags( c ) );
@@ -473,15 +512,47 @@ public static class MachineFlags
    }
 
    /// <summary>
-   /// One line per pass for a target's notes: "default@1 3491/3492 MHz".
+   /// One line per pass for a target's notes: "default@1 3491/3492 MHz, average 3491.8/3491.9".
    /// </summary>
    /// <param name="passes">The target's passes.</param>
    /// <returns>The text, or null when there are none.</returns>
    public static string? ClockLine( IEnumerable<PassConditions> passes )
    {
-      List<string> parts = passes.Select( p => string.Create( CultureInfo.InvariantCulture,
-         $"{p.Pass} {p.EngineMhzMedian?.ToString( CultureInfo.InvariantCulture ) ?? "?"}/{p.ClientMhzMedian?.ToString( CultureInfo.InvariantCulture ) ?? "?"} MHz, {p.Governor ?? "?"}, outside load {Load( p.OutsideLoadAtStart )} before the warm-up{( p.WaitedSeconds > 0 ? $" after waiting {p.WaitedSeconds:0} s" : string.Empty )}, {Load( p.OutsideLoadDuring )} during{( p.BusyBox ? ", BUSY BOX" : string.Empty )}{( p.ClientCpuMsPerSearch is double cpu ? $", client CPU {cpu:0.000} ms per search" : string.Empty )}" ) ).ToList();
-      return parts.Count == 0 ? null : "Clock per pass (median MHz of engine CPUs / client CPUs, governor, CPUs busy outside the benchmark, client CPU per search): " + string.Join( "; ", parts ) + ".";
+      List<PassConditions> list = passes.ToList();
+      List<string> parts = list.Select( p => string.Create( CultureInfo.InvariantCulture,
+         $"{p.Pass} {p.EngineMhzMedian?.ToString( CultureInfo.InvariantCulture ) ?? "?"}/{p.ClientMhzMedian?.ToString( CultureInfo.InvariantCulture ) ?? "?"} MHz, average {Mhz( p.EngineMhzMean )}/{Mhz( p.ClientMhzMean )}, {p.Governor ?? "?"}, outside load {Load( p.OutsideLoadAtStart )} before the warm-up{( p.WaitedSeconds > 0 ? $" after waiting {p.WaitedSeconds:0} s" : string.Empty )}, {Load( p.OutsideLoadDuring )} during{( p.BusyBox ? ", BUSY BOX" : string.Empty )}{( p.ClientCpuMsPerSearch is double cpu ? $", client CPU {cpu:0.000} ms per search" : string.Empty )}" ) ).ToList();
+      int? pinned = list.Select( p => p.PinnedMhz ).FirstOrDefault( m => m != null );
+      string clock = pinned is int mhz ? string.Create( CultureInfo.InvariantCulture, $"; the clock was pinned at {mhz} MHz (turbo off), and a pass whose average on either group is more than {CLOCK_TOLERANCE:0%} off it is flagged" ) : "; the clock was not pinned";
+      return parts.Count == 0 ? null : $"Clock per pass (median MHz of engine CPUs / client CPUs, their average MHz, governor, CPUs busy outside the benchmark, client CPU per search{clock}): " + string.Join( "; ", parts ) + ".";
+   }
+
+   /// <summary>
+   /// Warnings for passes run under a pinned clock whose average clock on the engine CPUs or the
+   /// client CPUs was more than <see cref="CLOCK_TOLERANCE"/> off the pinned clock, or that have no
+   /// clock reading at all (so it is not known). Why both groups: the client's speed is part of
+   /// every latency, and an embedded engine runs on the client CPUs.
+   /// </summary>
+   /// <param name="passes">Passes (a target's, or the run's).</param>
+   /// <returns>One warning per pass that is off or unread.</returns>
+   public static IEnumerable<string> ClockWarnings( IEnumerable<PassConditions> passes )
+   {
+      foreach( PassConditions p in passes.Where( p => p.PinnedMhz is > 0 ) )
+      {
+         int pinned = p.PinnedMhz!.Value;
+         if( p.EngineMhzMean == null && p.ClientMhzMean == null )
+         {
+            yield return $"WARNING: no clock was read during {p.Target} {p.Pass}, so it is not known whether it ran at the pinned {pinned} MHz.";
+            continue;
+         }
+
+         List<string> off = new[] { ( Group: "engine CPUs", Mean: p.EngineMhzMean ), ( Group: "client CPUs", Mean: p.ClientMhzMean ) }
+            .Where( g => g.Mean is double m && Math.Abs( m - pinned ) > pinned * CLOCK_TOLERANCE )
+            .Select( g => string.Create( CultureInfo.InvariantCulture, $"the {g.Group} averaged {g.Mean:0} MHz, {( g.Mean!.Value - pinned ) / pinned:+0.0%;-0.0%} against the pinned {pinned} MHz" ) ).ToList();
+         if( off.Count > 0 )
+         {
+            yield return string.Create( CultureInfo.InvariantCulture, $"WARNING: clock off its pinned value during {p.Target} {p.Pass}: {string.Join( "; ", off )} (limit {CLOCK_TOLERANCE:0%}); this pass is not comparable with passes at the pinned clock." );
+         }
+      }
    }
 
    /// <summary>
@@ -505,6 +576,16 @@ public static class MachineFlags
       }
 
       return byLevel;
+   }
+
+   /// <summary>
+   /// Formats an average clock.
+   /// </summary>
+   /// <param name="mhz">MHz, or null.</param>
+   /// <returns>"3491.8" or "?".</returns>
+   public static string Mhz( double? mhz )
+   {
+      return mhz?.ToString( "0.0", CultureInfo.InvariantCulture ) ?? "?";
    }
 
    /// <summary>
