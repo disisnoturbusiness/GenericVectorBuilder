@@ -1,0 +1,398 @@
+[
+  {
+    "Id": "paymentmethod",
+    "Question": "PaymentMethod",
+    "Category": "identifier",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed.",
+    "Relevant": [
+      {
+        "FilePath": "src/ApplicationCore/Entities/BuyerAggregate/PaymentMethod.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/ApplicationCore/Entities/BuyerAggregate/Buyer.cs",
+        "Grade": 2
+      }
+    ]
+  },
+  {
+    "Id": "how-do-i-send-email",
+    "Question": "how do i send email",
+    "Category": "conceptual",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed.",
+    "Relevant": [
+      {
+        "FilePath": "src/Infrastructure/Services/EmailSender.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/ApplicationCore/Interfaces/IEmailSender.cs",
+        "Grade": 2
+      },
+      {
+        "FilePath": "src/Web/Extensions/EmailSenderExtensions.cs",
+        "Grade": 2
+      },
+      {
+        "FilePath": "src/Web/Areas/Identity/Pages/Account/Register.cshtml.cs",
+        "Grade": 2
+      }
+    ]
+  },
+  {
+    "Id": "what-stops-someone-paying-with-nothing-in-their-",
+    "Question": "what stops someone paying with nothing in their cart",
+    "Category": "conceptual",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed. AUTHOR OVERRIDDEN: Author named EmptyBasketOnCheckoutException.cs as the answer. All three graders put the guard clause (GuardExtensions.EmptyBasketOnCheckout, called from OrderService.CreateOrderAsync) at 3 and the exception at 2.",
+    "Relevant": [
+      {
+        "FilePath": "src/ApplicationCore/Extensions/GuardExtensions.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/ApplicationCore/Exceptions/EmptyBasketOnCheckoutException.cs",
+        "Grade": 2
+      },
+      {
+        "FilePath": "src/ApplicationCore/Services/OrderService.cs",
+        "Grade": 2
+      },
+      {
+        "FilePath": "src/Web/Pages/Basket/Checkout.cshtml.cs",
+        "Grade": 2
+      }
+    ]
+  },
+  {
+    "Id": "what-happens-to-a-guest-s-items-when-they-sign-i",
+    "Question": "what happens to a guest's items when they sign in",
+    "Category": "conceptual",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed. AUTHOR OVERRIDDEN: Author named TransferBasket.cs, which is a unit test. The behaviour is BasketService.TransferBasketAsync, called from Login.cshtml.cs TransferAnonymousBasketToUserAsync. Test graded 1, excluded.",
+    "Relevant": [
+      {
+        "FilePath": "src/ApplicationCore/Services/BasketService.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/Web/Areas/Identity/Pages/Account/Login.cshtml.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/ApplicationCore/Interfaces/IBasketService.cs",
+        "Grade": 2
+      }
+    ]
+  },
+  {
+    "Id": "how-does-the-site-show-a-temporary-popup-message",
+    "Question": "how does the site show a temporary popup message",
+    "Category": "conceptual",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed.",
+    "Relevant": [
+      {
+        "FilePath": "src/BlazorAdmin/Helpers/ToastComponent.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/BlazorAdmin/Services/ToastService.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/BlazorAdmin/Services/HttpService.cs",
+        "Grade": 2
+      }
+    ]
+  },
+  {
+    "Id": "how-does-it-decide-a-picture-upload-is-allowed",
+    "Question": "how does it decide a picture upload is allowed",
+    "Category": "conceptual",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed.",
+    "Relevant": [
+      {
+        "FilePath": "src/BlazorShared/Models/CatalogItem.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/PublicApi/ImageValidators.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/PublicApi/CatalogItemEndpoints/CreateCatalogItemEndpoint.cs",
+        "Grade": 2
+      }
+    ]
+  },
+  {
+    "Id": "what-keeps-repeated-lookups-from-hitting-the-dat",
+    "Question": "what keeps repeated lookups from hitting the database every time",
+    "Category": "conceptual",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed. AUTHOR OVERRIDDEN: Author named CacheHelpers.cs, which only builds cache keys and the 30s duration. The caching is CachedCatalogViewModelService (IMemoryCache.GetOrCreateAsync). CacheHelpers kept at 2.",
+    "Relevant": [
+      {
+        "FilePath": "src/Web/Services/CachedCatalogViewModelService.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/BlazorAdmin/Services/CachedCatalogItemServiceDecorator.cs",
+        "Grade": 2
+      },
+      {
+        "FilePath": "src/BlazorAdmin/Services/CachedCatalogLookupDataServiceDecorator .cs",
+        "Grade": 2
+      },
+      {
+        "FilePath": "src/Web/Configuration/ConfigureWebServices.cs",
+        "Grade": 2
+      },
+      {
+        "FilePath": "src/Web/Extensions/CacheHelpers.cs",
+        "Grade": 2
+      }
+    ]
+  },
+  {
+    "Id": "what-fills-the-store-with-starting-products",
+    "Question": "what fills the store with starting products",
+    "Category": "conceptual",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed.",
+    "Relevant": [
+      {
+        "FilePath": "src/Infrastructure/Data/CatalogContextSeed.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/PublicApi/Program.cs",
+        "Grade": 2
+      },
+      {
+        "FilePath": "src/Web/Program.cs",
+        "Grade": 2
+      }
+    ]
+  },
+  {
+    "Id": "what-tells-us-the-storefront-is-still-reachable",
+    "Question": "what tells us the storefront is still reachable",
+    "Category": "conceptual",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed.",
+    "Relevant": [
+      {
+        "FilePath": "src/Web/HealthChecks/HomePageHealthCheck.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/Web/Program.cs",
+        "Grade": 2
+      }
+    ]
+  },
+  {
+    "Id": "what-turns-an-unhandled-failure-into-a-clean-api",
+    "Question": "what turns an unhandled failure into a clean api response",
+    "Category": "conceptual",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed.",
+    "Relevant": [
+      {
+        "FilePath": "src/PublicApi/Middleware/ExceptionMiddleware.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/BlazorShared/Models/ErrorDetails.cs",
+        "Grade": 2
+      },
+      {
+        "FilePath": "src/PublicApi/Program.cs",
+        "Grade": 2
+      }
+    ]
+  },
+  {
+    "Id": "how-is-a-bearer-credential-produced-after-sign-i",
+    "Question": "how is a bearer credential produced after sign in",
+    "Category": "conceptual",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed.",
+    "Relevant": [
+      {
+        "FilePath": "src/Infrastructure/Identity/IdentityTokenClaimService.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/ApplicationCore/Interfaces/ITokenClaimsService.cs",
+        "Grade": 2
+      },
+      {
+        "FilePath": "src/PublicApi/AuthEndpoints/AuthenticateEndpoint.cs",
+        "Grade": 2
+      },
+      {
+        "FilePath": "src/Web/Controllers/UserController.cs",
+        "Grade": 2
+      }
+    ]
+  },
+  {
+    "Id": "where-does-a-customer-see-everything-they-bought",
+    "Question": "where does a customer see everything they bought before",
+    "Category": "conceptual",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed.",
+    "Relevant": [
+      {
+        "FilePath": "src/Web/Controllers/OrderController.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/Web/Features/MyOrders/GetMyOrdersHandler.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/ApplicationCore/Specifications/CustomerOrdersSpecification.cs",
+        "Grade": 2
+      },
+      {
+        "FilePath": "src/Web/Features/MyOrders/GetMyOrders.cs",
+        "Grade": 2
+      }
+    ]
+  },
+  {
+    "Id": "what-runs-when-a-shopper-ends-their-session",
+    "Question": "what runs when a shopper ends their session",
+    "Category": "conceptual",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed.",
+    "Relevant": [
+      {
+        "FilePath": "src/Web/Areas/Identity/Pages/Account/Logout.cshtml.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/Web/Configuration/RevokeAuthenticationEvents.cs",
+        "Grade": 2
+      },
+      {
+        "FilePath": "src/Web/Controllers/UserController.cs",
+        "Grade": 2
+      }
+    ]
+  },
+  {
+    "Id": "how-is-a-long-product-list-broken-up-for-display",
+    "Question": "how is a long product list broken up for display",
+    "Category": "conceptual",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed.",
+    "Relevant": [
+      {
+        "FilePath": "src/ApplicationCore/Specifications/CatalogFilterPaginatedSpecification.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/Web/Services/CatalogViewModelService.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/PublicApi/CatalogItemEndpoints/CatalogItemListPagedEndpoint.cs",
+        "Grade": 2
+      },
+      {
+        "FilePath": "src/Web/Pages/Index.cshtml.cs",
+        "Grade": 2
+      },
+      {
+        "FilePath": "src/Web/ViewModels/PaginationInfoViewModel.cs",
+        "Grade": 2
+      }
+    ]
+  },
+  {
+    "Id": "where-does-someone-create-a-new-login",
+    "Question": "where does someone create a new login",
+    "Category": "conceptual",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed.",
+    "Relevant": [
+      {
+        "FilePath": "src/Web/Areas/Identity/Pages/Account/Register.cshtml.cs",
+        "Grade": 3
+      }
+    ]
+  },
+  {
+    "Id": "how-does-the-browser-client-know-who-is-currentl",
+    "Question": "how does the browser client know who is currently signed in",
+    "Category": "conceptual",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed.",
+    "Relevant": [
+      {
+        "FilePath": "src/BlazorAdmin/CustomAuthStateProvider.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/Web/Controllers/UserController.cs",
+        "Grade": 2
+      }
+    ]
+  },
+  {
+    "Id": "orderbuilder",
+    "Question": "OrderBuilder",
+    "Category": "identifier",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed.",
+    "Relevant": [
+      {
+        "FilePath": "tests/UnitTests/Builders/OrderBuilder.cs",
+        "Grade": 3
+      }
+    ]
+  },
+  {
+    "Id": "exceptionmiddleware",
+    "Question": "ExceptionMiddleware",
+    "Category": "identifier",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed.",
+    "Relevant": [
+      {
+        "FilePath": "src/PublicApi/Middleware/ExceptionMiddleware.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/PublicApi/Program.cs",
+        "Grade": 2
+      }
+    ]
+  },
+  {
+    "Id": "basketqueryservice",
+    "Question": "BasketQueryService",
+    "Category": "identifier",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed.",
+    "Relevant": [
+      {
+        "FilePath": "src/Infrastructure/Data/Queries/BasketQueryService.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/ApplicationCore/Interfaces/IBasketQueryService.cs",
+        "Grade": 2
+      },
+      {
+        "FilePath": "src/Web/Services/BasketViewModelService.cs",
+        "Grade": 2
+      }
+    ]
+  },
+  {
+    "Id": "cachehelpers",
+    "Question": "CacheHelpers",
+    "Category": "identifier",
+    "Notes": "Labelled 2026-10-02: blind code reads (sonnet, opus) + judge over 252 pooled results from 20 stored runs + author's recorded answer. Grade = median of graders; only grades 2-3 listed.",
+    "Relevant": [
+      {
+        "FilePath": "src/Web/Extensions/CacheHelpers.cs",
+        "Grade": 3
+      },
+      {
+        "FilePath": "src/Web/Services/CachedCatalogViewModelService.cs",
+        "Grade": 2
+      }
+    ]
+  }
+]

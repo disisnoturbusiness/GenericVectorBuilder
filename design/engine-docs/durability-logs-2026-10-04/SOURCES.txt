@@ -1,0 +1,16 @@
+Saved strace logs behind the durability measurements dated 2026-10-04 that the sinks quote in their durability texts.
+Each file is a copy, byte for byte, of the original on the benchmark box (linus7795, taken 2026-10-04 and kept under /home/dan/gvb-work/lanes);
+SHA256SUMS lists the hash of each copy. index.json lists which engine each file belongs to; the consolidate command reads it and
+names the engines with a saved log, and names the engines whose durability text cites a measurement and has none.
+
+What each log reproduces (checked when the logs were saved; the test ConsolidateDryFixTests.DurabilityNumbers_CiteTheSavedLogs repeats the counts):
+  clickhouse-acknowledged-inserts.strace          no fsync, fdatasync or sync_file_range call (0 of each) in the traced server
+  clickhouse-control-fsync-after-insert.strace    61 completed fdatasync calls; the text says 61 for the control table. The 5 inserts it names are not in the log.
+  milvus-acknowledged-upserts.strace              every fdatasync call with a path is on the embedded etcd files (member/wal, member/snap/db)
+  mongodb-acknowledged-inserts.strace             fdatasync calls on /data/db/journal/WiredTigerLog files
+  qdrant-wait-true.strace + marks                 30 msync(MS_SYNC) calls for 30 upserts sent with wait=true
+  qdrant-wait-false.strace + marks                the 30 upserts were acknowledged within 0.26 s (marks.json) and the first WAL msync came 2.7 s after the last reply
+qdrant-hnsw runs the same server, so it shares the qdrant files.
+
+Not saved: the logs or outputs behind the measurements in the durability texts of oracle (V$SYSSTAT counts and open flags), pgvector, sqlitevec, redis
+(kill and reopen counts), weaviate, chroma and duckdb (strace counts). The report names those engines as having no saved log.

@@ -1,0 +1,11 @@
+{
+  "folder": "design/engine-docs/durability-logs-2026-10-04",
+  "hashes": "SHA256SUMS",
+  "logs": [
+    {"target": "clickhouse", "files": ["clickhouse-acknowledged-inserts.strace", "clickhouse-control-fsync-after-insert.strace"]},
+    {"target": "milvus", "files": ["milvus-acknowledged-upserts.strace"]},
+    {"target": "mongodb", "files": ["mongodb-acknowledged-inserts.strace"]},
+    {"target": "qdrant", "files": ["qdrant-wait-true.strace", "qdrant-wait-true.marks.json", "qdrant-wait-false.strace", "qdrant-wait-false.marks.json"]},
+    {"target": "qdrant-hnsw", "files": ["qdrant-wait-true.strace", "qdrant-wait-true.marks.json", "qdrant-wait-false.strace", "qdrant-wait-false.marks.json"]}
+  ]
+}

@@ -168,9 +168,11 @@ public static partial class MachineControlScenarios
    }
 
    /// <summary>
-   /// The clock warnings and the clock note for hand-made passes pinned at 3500 MHz: one at
-   /// 3491.8 (in), one with the engine CPUs at 3540 (+1.1%, out), one with the client CPUs at
-   /// 3464 (-1.0%, in), one with no reading, and one that was not pinned.
+   /// The clock warnings and the clock note for hand-made passes pinned at 3500 MHz, judged on
+   /// their group medians: one at 3492 (in), one with the engine CPUs' median at 3540 (+1.1%,
+   /// out) while its mean is in, one with the client CPUs' median at 3465 (-1.0%, exactly at the
+   /// limit, in), one with no reading, one whose means are 9% low but whose medians are on the
+   /// clock (in: the v7 Oracle shape), and one that was not pinned.
    /// </summary>
    /// <returns>The run's flags, the warnings for the passes, and the clock note.</returns>
    public static string[][] ClockFlags()
@@ -178,14 +180,15 @@ public static partial class MachineControlScenarios
       var passes = new List<PassConditions>
       {
          new() { Target = "a", Pass = "default@1", Governor = "performance", EngineMhzMedian = 3492, ClientMhzMedian = 3492, EngineMhzMean = 3491.8, ClientMhzMean = 3491.8, PinnedMhz = 3500 },
-         new() { Target = "a", Pass = "default@8", Governor = "performance", EngineMhzMedian = 3540, ClientMhzMedian = 3492, EngineMhzMean = 3540, ClientMhzMean = 3491.8, PinnedMhz = 3500 },
-         new() { Target = "b", Pass = "default@1", Governor = "performance", EngineMhzMean = 3500, ClientMhzMean = 3465, PinnedMhz = 3500 },
+         new() { Target = "a", Pass = "default@8", Governor = "performance", EngineMhzMedian = 3540, ClientMhzMedian = 3492, EngineMhzMean = 3500, ClientMhzMean = 3491.8, PinnedMhz = 3500 },
+         new() { Target = "b", Pass = "default@1", Governor = "performance", EngineMhzMedian = 3500, ClientMhzMedian = 3465, EngineMhzMean = 3500, ClientMhzMean = 3465, PinnedMhz = 3500 },
          new() { Target = "b", Pass = "exact", Governor = "performance", PinnedMhz = 3500 },
-         new() { Target = "c", Pass = "default@1", Governor = "performance", EngineMhzMean = 3592, ClientMhzMean = 3592 },
+         new() { Target = "d", Pass = "default@8", Governor = "performance", EngineMhzMedian = 3492, ClientMhzMedian = 3492, EngineMhzMean = 3121.3, ClientMhzMean = 3141.0, PinnedMhz = 3500 },
+         new() { Target = "c", Pass = "default@1", Governor = "performance", EngineMhzMedian = 3592, ClientMhzMedian = 3592, EngineMhzMean = 3592, ClientMhzMean = 3592 },
       };
-      var c = new MachineConditions { BuildConfiguration = "Release", MachineControl = "on", Governor = "performance", GovernorAtEnd = "performance", StateFile = "/s.json" };
+      var c = new MachineConditions { BuildConfiguration = "Release", MachineControl = "on", Governor = "performance", GovernorAtEnd = "performance", StateFile = "/s.json", EngineCpus = "2-3,6-7", ClientCpus = "0-1,4-5" };
       c.Passes.AddRange( passes );
-      return new[] { MachineFlags.Compute( c, new[] { "a", "b", "c" } ).ToArray(), MachineFlags.ClockWarnings( passes ).ToArray(), new[] { MachineFlags.ClockLine( passes.Take( 2 ) ) ?? "null", MachineFlags.ClockLine( passes.Skip( 4 ) ) ?? "null" } };
+      return new[] { MachineFlags.Compute( c, new[] { "a", "b", "c", "d" } ).ToArray(), MachineFlags.ClockWarnings( passes, true ).ToArray(), new[] { MachineFlags.ClockLine( passes.Take( 2 ) ) ?? "null", MachineFlags.ClockLine( passes.Skip( 5 ) ) ?? "null" } };
    }
 
    /// <summary>

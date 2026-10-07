@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using GenericVectorBuilder.Bench.Stats;
 using GenericVectorBuilder.Bench.Targets;
@@ -25,20 +26,69 @@ public static class ResultsWriter
       DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
    };
 
+   private const string TEMPORARY = ".tmp";
+
    #endregion Data Members
 
    #region Public Methods
 
    /// <summary>
-   /// Writes both files.
+   /// Writes both files. Both texts are built first, then each goes to a temporary file in the
+   /// same folder and is moved over its target, so a failure while rendering writes nothing and a
+   /// crash while writing never leaves a half-written results.json or results.md beside a good one.
+   /// Why: a run-all takes hours and rewrites these files after every target; the readers (the
+   /// consolidation, the web page, the heartbeat) must only ever see a whole file.
    /// </summary>
    /// <param name="report">The run.</param>
    /// <param name="folder">The run's folder (created if missing).</param>
    public static void Write( BenchReport report, string folder )
    {
+      string json = JsonSerializer.Serialize( report, JSON );
+      string markdown = Markdown( report );
       Directory.CreateDirectory( folder );
-      File.WriteAllText( Path.Combine( folder, "results.json" ), JsonSerializer.Serialize( report, JSON ) );
-      File.WriteAllText( Path.Combine( folder, "results.md" ), Markdown( report ) );
+      string jsonTemporary = Path.Combine( folder, "results.json" + TEMPORARY );
+      string markdownTemporary = Path.Combine( folder, "results.md" + TEMPORARY );
+      try
+      {
+         File.WriteAllText( jsonTemporary, json );
+         File.WriteAllText( markdownTemporary, markdown );
+         File.Move( jsonTemporary, Path.Combine( folder, "results.json" ), true );
+         File.Move( markdownTemporary, Path.Combine( folder, "results.md" ), true );
+      }
+      finally
+      {
+         DeleteIfPresent( jsonTemporary );
+         DeleteIfPresent( markdownTemporary );
+      }
+   }
+
+   /// <summary>
+   /// Adds one entry to the "conditions" object of a results.json that already holds it (machine
+   /// control writes "conditions" after this writer, replacing it whole each time, so a caller
+   /// that adds an entry must do so after that write). Written to a temporary file and moved.
+   /// Why here: the run's build and boot identity belong in "conditions" beside the clock and the
+   /// governor, and the object is replaced on every rewrite of the file.
+   /// </summary>
+   /// <param name="folder">The run's folder.</param>
+   /// <param name="name">Entry name, e.g. "build" or "boot".</param>
+   /// <param name="entry">The entry's JSON value.</param>
+   /// <exception cref="InvalidDataException">results.json is not a JSON object, or has no "conditions" object to add to.</exception>
+   public static void AddCondition( string folder, string name, JsonNode entry )
+   {
+      string path = Path.Combine( folder, "results.json" );
+      JsonObject root = JsonNode.Parse( File.ReadAllText( path ) ) as JsonObject ?? throw new InvalidDataException( $"{path} is not a JSON object." );
+      JsonObject conditions = root["conditions"] as JsonObject ?? throw new InvalidDataException( $"{path} has no \"conditions\" object to add \"{name}\" to." );
+      conditions[name] = entry;
+      string temporary = path + TEMPORARY;
+      try
+      {
+         File.WriteAllText( temporary, root.ToJsonString( JSON ) );
+         File.Move( temporary, path, true );
+      }
+      finally
+      {
+         DeleteIfPresent( temporary );
+      }
    }
 
    /// <summary>
@@ -160,6 +210,7 @@ public static class ResultsWriter
             md.AppendLine( $"- Search settings: {string.Join( ", ", settings.Select( p => $"{p.Key}={p.Value}" ) )}" );
          }
 
+         AppendEngineRecord( md, t );
          if( t.Load is LoadReport l )
          {
             md.AppendLine( $"- Load: {l.Rows:N0} rows in batches of {l.Batch}, {l.UpsertSeconds:0.0} s of upserts ({l.RowsPerSecond:N0} rows/s); "
@@ -192,6 +243,45 @@ public static class ResultsWriter
    }
 
    /// <summary>
+   /// The engine record of one target: its settings as read or set, its image against the pinned id and its data
+   /// folder, each only when it was recorded. Every figure and word comes from a recorded field, so the page says
+   /// nothing the run did not write down.
+   /// </summary>
+   /// <param name="md">Output.</param>
+   /// <param name="t">The target.</param>
+   private static void AppendEngineRecord( StringBuilder md, TargetReport t )
+   {
+      if( t.EngineSettings is { Count: > 0 } settings )
+      {
+         md.AppendLine( "- Engine settings: " + string.Join( "; ", settings.Select( e => $"{Cell( e.Key )} = {Cell( e.Value )} ({Cell( e.How )})" ) ) );
+      }
+
+      if( t.Image is ImageRecord image )
+      {
+         string pin = image.PinnedId == null ? "no pinned id" : image.PinnedId == image.Id ? "the pinned id" : $"NOT the pinned id {image.PinnedId}";
+         md.AppendLine( $"- Image: {Cell( image.Ref )}, id {image.Id} ({pin}), tagged on this machine at {image.LastTagTimeUtc ?? "an unknown time"}" );
+      }
+
+      if( t.DataFolder is DataFolderRecord folder )
+      {
+         string reset = folder.Reset == null ? string.Empty : $"; reset at the start: {folder.Reset}";
+         string after = folder.BytesAfterReset is long afterReset ? $", {Measurement.Format( afterReset )} after the reset" : string.Empty;
+         string file = folder.BenchFileBytes is long bench ? $"; the benchmark's own database file {Measurement.Format( bench )}" : string.Empty;
+         md.AppendLine( $"- Data folder {Cell( folder.Path )}: {FolderBytes( folder.BytesAtStart )} at the start{after}, {FolderBytes( folder.BytesAtEnd )} at the end{file}{reset}" );
+      }
+   }
+
+   /// <summary>
+   /// A folder size as text, "not read" when it was not.
+   /// </summary>
+   /// <param name="bytes">Bytes, or null.</param>
+   /// <returns>Text.</returns>
+   private static string FolderBytes( long? bytes )
+   {
+      return bytes is long value ? Measurement.Format( value ) : "not read";
+   }
+
+   /// <summary>
    /// Formats a number, "-" when missing or not a number.
    /// </summary>
    /// <param name="value">Value.</param>
@@ -220,6 +310,18 @@ public static class ResultsWriter
    private static string Seconds( double? seconds )
    {
       return seconds.HasValue ? seconds.Value.ToString( "0.0", CultureInfo.InvariantCulture ) + " s" : "n/a";
+   }
+
+   /// <summary>
+   /// Deletes a leftover temporary file; a file that is already gone is the normal case after a move.
+   /// </summary>
+   /// <param name="path">The temporary file.</param>
+   private static void DeleteIfPresent( string path )
+   {
+      if( File.Exists( path ) )
+      {
+         File.Delete( path );
+      }
    }
 
    /// <summary>

@@ -10,6 +10,14 @@
     <PackageReference Include="System.Numerics.Tensors" Version="10.0.12" />
   </ItemGroup>
 
+  <!-- Files the program reads from beside itself (AppContext.BaseDirectory). The frozen build runs from its own folder, so each is copied to the output root.
+       engine-facts.json lies inside this project, so the default None glob already lists it and it is updated, not included again (a duplicate item is an error). -->
+  <ItemGroup>
+    <None Include="..\..\deploy\bench\image-pins.json" Link="image-pins.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Report\engine-facts.json" Link="engine-facts.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\deploy\bench\basis-exclusions.json" Link="basis-exclusions.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\deploy\bench\basis-exclusions.json')" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>

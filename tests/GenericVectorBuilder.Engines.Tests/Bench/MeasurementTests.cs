@@ -29,6 +29,7 @@ namespace GenericVectorBuilder.Engines.Tests.Bench;
 /// project does not reference. Compiling the repository's Bench sources together with
 /// MeasurementScenarios.cs (fakes, built only in this compilation) tests the code the benchmark runs.
 /// </summary>
+[Collection( TimingCollection.NAME )]
 public class MeasurementTests
 {
    #region Data Members

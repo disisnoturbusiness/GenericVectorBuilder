@@ -1,0 +1,630 @@
+using System.Globalization;
+using GenericVectorBuilder.Bench.Report;
+using S = GenericVectorBuilder.Bench.Stats.ConsolidateSources;
+
+namespace GenericVectorBuilder.Bench.Stats;
+
+/// <summary>
+/// Every sentence consolidated.md and the summary page print, from the templates in this file and
+/// nowhere else, each emitted with the sources its numbers and facts come from (contract:
+/// sentences[] of consolidated.json). <see cref="ConsolidateAudit"/> checks every one against the
+/// raw files before anything is written.
+/// Template rules: no provenance, purpose, default or "only" words, no cause words (P5's
+/// <see cref="BannedWords"/>), at most 34 words in the headline and 35 elsewhere, every number
+/// bound to a source. Recorded texts (durability, the method notes, ClickHouse's disk note, the
+/// dropped clock warnings, the dockerd accounting rule) are quoted verbatim as quote sentences,
+/// checked against their raw field and outside the word rules.
+/// Slots, in reading order, by the sections the summary page places (P4's BenchSlots): headline;
+/// stopped.*; subtitle.* (data, machine, scope, sessions, questions or queries); rule.*; basis.* (runs, identity, the largest move,
+/// the moves per metric, splits and split.N.fields, moves and conditions, the exclusions); table.&lt;metric&gt;.*; recall.*;
+/// why.* (framing, costs, settings.TARGET, effort.TARGET as a quote, noeffort.TARGET); drift.* (the medians, unconfirmed, close, onLine);
+/// disclosure.* (disclosure.clock.* first; busy; durability with logs, nologs, TARGET and TARGET.correction; graph.TARGET); method.*;
+/// notinreport.*; runs.* (runs.reuse.SESSION for every session with a blocking verdict, runs.stale.*).
+/// A row's note (row.&lt;metric&gt;.&lt;target&gt;.note) and its flags (flag.&lt;metric&gt;.&lt;target&gt;.&lt;n&gt;) are
+/// audited like every other sentence and then travel on the row itself (rows[].note with noteSources,
+/// flags[].text with sources), which is where the page prints them, so no sentence is printed twice.
+/// Why one file: a reader lens must be able to read every fixed word the report can print.
+/// </summary>
+public static class ConsolidateText
+{
+   #region Data Members
+
+   /// <summary>Headline when one engine is named.</summary>
+   public const string HEADLINE_ONE = "{0} had the lowest p50 latency: every other engine took at least {1} times as long, in each session{2}.";
+
+   /// <summary>Headline when two or more engines are named.</summary>
+   public const string HEADLINE_MANY = "{0} had the lowest p50 latencies, in that order: each engine further down took at least {1} times as long, in each session{2}.";
+
+   /// <summary>Headline when the named list would not fit the word limit.</summary>
+   public const string HEADLINE_COUNT = "The {0} engines at the top of the p50 table had the lowest p50 latencies, in table order: each one further down took at least {1} times as long, in each session.";
+
+   /// <summary>Headline when no engine is ahead of every other.</summary>
+   public const string HEADLINE_NONE = "No engine had a p50 latency at least {0} times lower than every other engine in each session; the p50 table shows which pairs this test separated.";
+
+   /// <summary>Headline in one-session mode.</summary>
+   public const string HEADLINE_ONE_SESSION = "One session of {0} runs: rows are not ranked, and this report names no engine as ahead of another.";
+
+   /// <summary>The in-memory clause added to a headline that names Redis.</summary>
+   public const string HEADLINE_MEMORY = "; {0} holds its data in memory";
+
+   /// <summary>Stop sentence for G2.</summary>
+   public const string STOPPED_G2 = "This report stopped: an order that held in {0} had its medians the other way round in {1}, so it names no engine as ahead of another.";
+
+   /// <summary>One G2 pair.</summary>
+   public const string STOPPED_G2_PAIR = "{0}: {1} was ahead of {2} in {3}, and in {4} the medians were {5} for {1} and {6} for {2}.";
+
+   /// <summary>Stop sentence for G3.</summary>
+   public const string STOPPED_G3 = "This report stopped: {0} targets changed their recorded setup between {1} and {2}, more than {3}, so it names no engine as ahead of another.";
+
+   /// <summary>Subtitle: the data.</summary>
+   public const string SUBTITLE_DATA = "Data: {0}, {1} vectors of {2} dimensions; {3} queries, top {4} hits each.";
+
+   /// <summary>Subtitle: the machine.</summary>
+   public const string SUBTITLE_MACHINE = "Machine: {0}, {1} logical CPUs, {2} GiB of RAM.";
+
+   /// <summary>Subtitle: what a figure is at a small collection (design O14: per-request cost, client library included, not index scaling).</summary>
+   public const string SUBTITLE_SCOPE_SMALL = "At {0} vectors each figure is the cost of one request through the engine's .NET client, and does not show how an index scales.";
+
+   /// <summary>Subtitle: the size a larger collection's order applies to.</summary>
+   public const string SUBTITLE_SCOPE_LARGE = "At {0} vectors each order applies to this size alone.";
+
+   /// <summary>Subtitle: one session's runs.</summary>
+   public const string SUBTITLE_SESSION = "Session {0}: runs {1}, started from {2} to {3}.";
+
+   /// <summary>Subtitle: the question file of the runs that recorded its SHA-256.</summary>
+   public const string SUBTITLE_QUESTIONS = "The runs of {0} read a question file with the same SHA256 hash as {1}.";
+
+   /// <summary>The repository file whose code line computes the question file's hash.</summary>
+   public const string HASH_FILE = "src/GenericVectorBuilder.Bench/Data/GoldenQueries.cs";
+
+   /// <summary>The token on that line.</summary>
+   public const string HASH_TOKEN = "Convert.ToHexString( SHA256.HashData( bytes ) ).ToLowerInvariant()";
+
+   /// <summary>The claim rule.</summary>
+   public const string THRESHOLD_RULE = "An engine is shown ahead of another when, in each session separately, its slowest run beat the other's fastest run by at least {0} times; every other pair is not separated by this test.";
+
+   /// <summary>How the threshold was set.</summary>
+   public const string THRESHOLD_TBP = "The threshold is {0}%: the smallest multiple of {1}% at least {2}% above the largest move in the basis, {3}%, and never below {4}%.";
+
+   /// <summary>What the basis holds.</summary>
+   public const string THRESHOLD_BASIS = "The basis holds the {0} runs of sessions {1}, all with machine control on.";
+
+   /// <summary>The largest move.</summary>
+   public const string THRESHOLD_MAX = "The largest move was {0}%, the {1} of {2} between runs {3} (seed {4}) and {5} (seed {6}).";
+
+   /// <summary>The differences between the two runs of the largest move.</summary>
+   public const string THRESHOLD_MAX_DIFFERENCES = "Those two runs differ in {0}.";
+
+   /// <summary>When the two runs record no difference.</summary>
+   public const string THRESHOLD_MAX_SAME = "Those two runs record no difference in turbo, uncore, warm-up, rehearsal, build or pass clock.";
+
+   /// <summary>What the basis compares: runs of one recorded setup. Why stated: a change of setup hides its moves, and the splits below list them.</summary>
+   public const string THRESHOLD_IDENTITY = "Basis moves are taken between runs in which the engine recorded the same setup: its engine text, index text, search settings, durability text, engine files, engine settings, image id and hosting.";
+
+   /// <summary>A field one run did not record.</summary>
+   public const string THRESHOLD_IDENTITY_MISSING = "A field that one of two runs did not record is not compared.";
+
+   /// <summary>Per metric, basis runs of one recorded setup.</summary>
+   public const string THRESHOLD_ALL = "{0}, between basis runs of one recorded setup: largest moves {1} for one engine and {2} for a pair.";
+
+   /// <summary>Per metric, runs at the same conditions as well.</summary>
+   public const string THRESHOLD_SAME = "{0}, between those runs that also share turbo, uncore, warm-up and rehearsal: largest moves {1} for one engine and {2} for a pair.";
+
+   /// <summary>The setup splits, counted.</summary>
+   public const string THRESHOLD_SPLITS = "Changes of recorded setup left out of the basis moves: {0}, in {1}.";
+
+   /// <summary>What each split is listed with.</summary>
+   public const string THRESHOLD_SPLITS_EACH = "Each is listed with the field that changed, the move it hides and the threshold it would give.";
+
+   /// <summary>No split.</summary>
+   public const string THRESHOLD_SPLITS_NONE = "No engine recorded a different setup in some basis runs than in others.";
+
+   /// <summary>One split: the fields that changed.</summary>
+   public const string SPLIT_FIELDS = "Between its {1} runs and its {2} runs, {0} recorded a different {3}.";
+
+   /// <summary>One split: the conditions the two runs of its one-engine move also differ in, so the move is not read as the change of setup alone.</summary>
+   public const string SPLIT_CONDITIONS = "The two runs of that one-engine move also differ in {0}.";
+
+   /// <summary>One split: the moves it hides and the threshold they would give.</summary>
+   public const string SPLIT_MOVES = "Counted across that change, the largest one-engine move is {0} and the largest pair move {1}, and the threshold would be {2}%.";
+
+   /// <summary>One move inside a sentence.</summary>
+   public const string MOVE = "{0}% ({1})";
+
+   /// <summary>No move.</summary>
+   public const string MOVE_NONE = "none";
+
+   /// <summary>An exclusion row that covers every metric.</summary>
+   public const string EVERY_METRIC = "every metric";
+
+   /// <summary>A one-engine move's noun.</summary>
+   public const string MOVE_VALUE = "{0} value";
+
+   /// <summary>A pair move's noun.</summary>
+   public const string MOVE_RATIO = "{0} ratio";
+
+   /// <summary>The repository file whose code line names the uncore limit MSR.</summary>
+   public const string MSR_FILE = "src/GenericVectorBuilder.Bench/Running/MachineControlSampler.cs";
+
+   /// <summary>The token on that line.</summary>
+   public const string MSR_TOKEN = "LIMIT_MSR = \"0x620\"";
+
+   /// <summary>The index state after the load.</summary>
+   public const string AFTER_LOAD = "after the load";
+
+   /// <summary>The index state after the searches.</summary>
+   public const string AFTER_SEARCH = "after the searches";
+
+   /// <summary>An exclusion row.</summary>
+   public const string THRESHOLD_EXCLUSION = "{0} {1}, seed list {2}, is left out of the basis (kind: {3}); {4}, item {5}, holds the words: {6}.";
+
+   /// <summary>An exclusion kind kept in.</summary>
+   public const string THRESHOLD_KEPT = "With the {0} rows kept in, the largest moves would be {1}% for one engine and {2}% for a pair, and the threshold {3}%.";
+
+   /// <summary>The runs without machine control.</summary>
+   public const string THRESHOLD_NO_CONTROL = "In the {0} runs without machine control, one engine moved up to {1}% and a pair up to {2}%; the threshold rests on runs with machine control on.";
+
+   /// <summary>The left-out runs.</summary>
+   public const string THRESHOLD_LEFT_OUT = "{0} other runs of this pipeline are not in the basis; each is listed with its reason.";
+
+   /// <summary>The p50 table.</summary>
+   public const string TABLE_P50 = "p50 is the median latency of one searcher's searches, in ms; rows are in order of the median of {0} runs.";
+
+   /// <summary>The QPS@1 table.</summary>
+   public const string TABLE_QPS1 = "QPS@1 is searches per second of the same one-searcher pass as p50, so it is no second confirmation of the p50 order.";
+
+   /// <summary>The QPS@8 table.</summary>
+   public const string TABLE_QPS8 = "QPS@8 is searches per second with {0} searchers at once.";
+
+   /// <summary>The exact table.</summary>
+   public const string TABLE_EXACT = "Exact p50 is the median latency of each engine's own exact mode, which is a different operation per engine; the why table's CPU figures come from the other passes.";
+
+   /// <summary>A target without an exact pass whose search fact says exact.</summary>
+   public const string TABLE_EXACT_ABSENT_EXACT = "{0} has no exact pass; its search fact says: {1}.";
+
+   /// <summary>A target without an exact pass whose search fact says approximate.</summary>
+   public const string TABLE_EXACT_ABSENT = "{0} has no exact pass in these runs.";
+
+   /// <summary>The one-session caption in two-session mode.</summary>
+   public const string TABLE_ONE_SESSION_ROWS = "A one-session row shows the {0} runs of {1} and is not separated from any row.";
+
+   /// <summary>The caption in one-session mode.</summary>
+   public const string TABLE_ONE_SESSION_MODE = "With one session, the lists of rows not separated hold for {0} alone, and no row is ranked.";
+
+   /// <summary>
+   /// The Redis row note: the docs quote and what its compose file sets beside it. Worded apart from <see cref="DISCLOSURE_REDIS"/> on purpose: the note is
+   /// printed under every table and the disclosure once, and the page checks that each sentence of the file is printed as often as it is listed.
+   /// </summary>
+   public const string ROW_MEMORY = "{0} holds its data in memory: its saved docs page says '{1}', and its compose file sets {2} and {3}.";
+
+   /// <summary>The Redis row note when the compose settings are not among the facts.</summary>
+   public const string ROW_MEMORY_DOCS = "{0} holds its data in memory: its saved docs page says '{1}'.";
+
+   /// <summary>Flag: busy box.</summary>
+   public const string FLAG_BUSY = "Run {0}: busy box during the {1} pass, with {2} CPUs of outside load.";
+
+   /// <summary>Flag: clock off.</summary>
+   public const string FLAG_CLOCK_OFF = "Run {0}: the {1} pass read {2} MHz on the engine CPUs and {3} MHz on the client CPUs, against a pinned {4} MHz.";
+
+   /// <summary>Flag: clock not read.</summary>
+   public const string FLAG_CLOCK_NOT_READ = "Run {0}: no clock reading on a CPU group during the {1} pass.";
+
+   /// <summary>Flag: governor.</summary>
+   public const string FLAG_GOVERNOR = "Run {0}: the {1} pass ran under the {2} governor.";
+
+   /// <summary>Flag: throttle counters rose.</summary>
+   public const string FLAG_THROTTLE = "Run {0}: the thermal throttle counters rose during {1}, by {2} on the cores and {3} on the package.";
+
+   /// <summary>Flag: unsettled.</summary>
+   public const string FLAG_UNSETTLED = "Run {0}: {1} was recorded as not settled before its timed passes.";
+
+   /// <summary>Flag: index not ready.</summary>
+   public const string FLAG_INDEX = "Run {0}: {1}'s index state {2} read not ready, {3} of {4} vectors indexed.";
+
+   /// <summary>Flag: segment layout.</summary>
+   public const string FLAG_LAYOUT = "Run {0}: {1}'s index state after the searches reads {2}.";
+
+   /// <summary>Flag: search errors.</summary>
+   public const string FLAG_SEARCH_ERRORS = "Run {0}: {1} timed searches of {2} failed.";
+
+   /// <summary>Flag: warm-up errors.</summary>
+   public const string FLAG_WARMUP_ERRORS = "Run {0}: {1} untimed warm-up searches of {2} failed.";
+
+   /// <summary>Flag: one session.</summary>
+   public const string FLAG_ONE_SESSION = "{0}'s recorded setup differs between {1} and {2} in {3}; its row shows {2} figures and is not ranked.";
+
+   /// <summary>Recall caption.</summary>
+   public const string RECALL = "Recall counts hits of the exact top {0} over {1} queries, {2} per run; it is printed, never ranked.";
+
+   /// <summary>Recall differs.</summary>
+   public const string RECALL_DIFFERS = "{0}'s recall hits differ between runs: {1}.";
+
+   /// <summary>Why framing, fixed (design section 3).</summary>
+   public static readonly IReadOnlyList<string> WHY_FRAMING = new[]
+   {
+      "CPU per search is cost summed over every thread.",
+      "It can exceed the time per search, so it is not a split of the latency.",
+      "This test did not isolate causes.",
+   };
+
+   /// <summary>Where the costs come from.</summary>
+   public const string WHY_COSTS = "Costs are medians over the {0} runs of {1}, and a cost is left blank unless every one of them recorded it.";
+
+   /// <summary>A target's recorded search and index settings.</summary>
+   public const string WHY_SETTINGS = "{0} recorded these search and index settings: {1}.";
+
+   /// <summary>An approximate engine that recorded no per-query effort setting.</summary>
+   public const string WHY_NO_EFFORT = "{0} recorded no setting for how hard a query searches.";
+
+   /// <summary>The range sentence.</summary>
+   public const string WHY_RANGE = "At one searcher, client CPU per search ran from {0} ms ({1}) to {2} ms ({3}).";
+
+   /// <summary>The engine range sentence.</summary>
+   public const string WHY_ENGINE_RANGE = "At one searcher, engine CPU per search ran from {0} ms ({1}) to {2} ms ({3}) where measured.";
+
+   /// <summary>When no run recorded engine CPU.</summary>
+   public const string WHY_ENGINE_NONE = "The runs of {0} recorded no engine CPU per search.";
+
+   /// <summary>Embedded engines.</summary>
+   public const string WHY_EMBEDDED = "Hosting {1} is recorded for {0}: each runs inside the test's own process, so its client CPU per search includes the engine's own work.";
+
+   /// <summary>Drift: medians.</summary>
+   public const string DRIFT_MEDIAN = "From {0} to {1}, a ranked engine's session median moved {2}% in the middle case and {3}% at most ({4}, {5}).";
+
+   /// <summary>Drift: unconfirmed orders.</summary>
+   public const string DRIFT_UNCONFIRMED = "{0} orders held in {1} and not in {2}, and {3} the other way; they are listed and not published.";
+
+   /// <summary>Drift: close to the line.</summary>
+   public const string DRIFT_CLOSE = "{0} unordered pairs sat between {1} and {2} times in each session, always in one direction; they are listed as close to the line.";
+
+   /// <summary>Drift: ordered pairs on the line.</summary>
+   public const string DRIFT_ONLINE = "{0} ordered pairs cleared {1} times by {2} bp or less in their lowest session; they are listed as on the line.";
+
+   /// <summary>Drift: no pair on the line.</summary>
+   public const string DRIFT_ONLINE_NONE = "No ordered pair cleared {0} times by {1} bp or less in its lowest session.";
+
+   /// <summary>Drift: scope.</summary>
+   public const string DRIFT_SCOPE = "Both sessions ran with the clock held; drift under other conditions is not measured here.";
+
+   /// <summary>Clock held.</summary>
+   public const string CLOCK_HELD = "In {0}, every run held the clock: turbo off, MSR {1} at {2}, every CPU at {3} MHz; the ceiling before was {4} MHz, so absolute figures are for the held clock.";
+
+   /// <summary>Clock not held.</summary>
+   public const string CLOCK_NOT_HELD = "In {0}, the runs did not all hold the clock.";
+
+   /// <summary>Clock checked.</summary>
+   public const string CLOCK_CHECKED = "In {0}, by the median rule, {1} of {2} passes were off the pinned clock and {3} had a CPU group not read.";
+
+   /// <summary>A dropped mean-based warning.</summary>
+   public const string CLOCK_DROPPED = "Run {0} flagged {1}'s {2} pass as off its clock by a mean; the medians read {3} MHz on engine CPUs and {4} MHz on client CPUs, within {5}%.";
+
+   /// <summary>Governor and partition.</summary>
+   public const string DISCLOSURE_GOVERNOR = "Every claim run used the {0} governor, with engines on CPUs {1} and the client on CPUs {2}.";
+
+   /// <summary>Boot, both sessions on one boot.</summary>
+   public const string DISCLOSURE_BOOT = "Every {0} run recorded boot {1} at {2}, before the first {3} run started at {4}, so {3} ran on that boot too.";
+
+   /// <summary>Boot, a later boot.</summary>
+   public const string DISCLOSURE_BOOT_LATER = "Every {0} run recorded boot {1} at {2}, after the first {3} run started at {4}, so the sessions may have run on different boots.";
+
+   /// <summary>Images.</summary>
+   public const string DISCLOSURE_IMAGES = "Each of the {0} container targets ran one image id, equal to its pin, in every {1} run; the ids are in the images table.";
+
+   /// <summary>Images tagged before the first run of the first session.</summary>
+   public const string DISCLOSURE_IMAGES_BEFORE = "Each of those images was last tagged on this box before the first {0} run started at {1}.";
+
+   /// <summary>Images tagged later.</summary>
+   public const string DISCLOSURE_IMAGES_AFTER = "{0} was last tagged on this box at {1}, after the first {2} run started at {3}.";
+
+   /// <summary>Redis.</summary>
+   public const string DISCLOSURE_REDIS = "{0} holds its data in memory: its saved docs page says '{1}'; its compose file sets {2} and {3}.";
+
+   /// <summary>Durability intro.</summary>
+   public const string DISCLOSURE_DURABILITY = "Each engine's durability, quoted below as run {0} recorded it, is the tool's own text and was not re-checked for this report.";
+
+   /// <summary>The saved logs behind the measurements in those texts.</summary>
+   public const string DISCLOSURE_DURABILITY_LOGS = "Strace logs of measurements cited in those texts are saved for {0}, in {1}, each listed with its hash in {2}.";
+
+   /// <summary>Measurements cited with no saved log.</summary>
+   public const string DISCLOSURE_DURABILITY_NOLOGS = "No log is saved for the measurements cited in the durability texts of {0}.";
+
+   /// <summary>A recorded sentence a repository file contradicts.</summary>
+   public const string DISCLOSURE_CORRECTION = "Correction to the {0} text above: {1} sets {2}, so its words '{3}' do not hold.";
+
+   /// <summary>A search fact that rests on the engine's own report of segments smaller than another engine's graph point.</summary>
+   public const string DISCLOSURE_GRAPH = "{0}'s search fact is the engine's own report; its segments held at most {1} vectors, below the {2} at which {3}'s recorded text says a segment gets a graph, and no graph was checked.";
+
+   /// <summary>How outside load treats dockerd, read from the code.</summary>
+   public const string DISCLOSURE_BUSY = "Outside load is busy CPU less this client's and the followed engine cgroups'; dockerd's cgroup is one of them for a compose engine, so its CPU counts as benchmark work, not outside load.";
+
+   /// <summary>Settings.</summary>
+   public const string DISCLOSURE_SETTINGS = "The engine settings table lists what run {0} read from each running engine or set from a repository file, as each row's how column says.";
+
+   /// <summary>A cap fact.</summary>
+   public const string DISCLOSURE_CAP = "{0}'s recorded index text says: {1}.";
+
+   /// <summary>A measured exact search fact.</summary>
+   public const string DISCLOSURE_SCAN = "{0}'s measured search fact says: {1}.";
+
+   /// <summary>ClickHouse data folder, v8.</summary>
+   public const string DISCLOSURE_DATA_FOLDER = "Run {0}: {1}'s data folder held {2} bytes at its start, {3} bytes after its tables {4} were truncated, and {5} bytes at its end.";
+
+   /// <summary>Data folder without a reset.</summary>
+   public const string DISCLOSURE_DATA_FOLDER_PLAIN = "Run {0}: {1}'s data folder held {2} bytes at its start and {3} bytes at its end.";
+
+   /// <summary>Segment layouts.</summary>
+   public const string DISCLOSURE_LAYOUTS = "Segment layouts differed between runs for {0}; each run's layout is in its row flags.";
+
+   /// <summary>Observer present.</summary>
+   public const string DISCLOSURE_OBSERVER = "An observer process ran beside the {0} runs; its own CPU, at most {1} CPUs in a pass, counts as outside load, and its summary is observer/summary.json beside this report.";
+
+   /// <summary>Observer clock check.</summary>
+   public const string DISCLOSURE_OBSERVER_CLOCK = "By APERF and MPERF, the observer's largest clock deviation in a pass was {0}%, and it read MSR {1} as {2}.";
+
+   /// <summary>Timers.</summary>
+   public const string DISCLOSURE_TIMERS = "The observer saw a systemd timer fire during {0} timed passes of the {1} runs.";
+
+   /// <summary>Timers not covered.</summary>
+   public const string DISCLOSURE_TIMERS_NOT_COVERED = "The observer summary does not cover systemd timers for every {0} run.";
+
+   /// <summary>No observer.</summary>
+   public const string DISCLOSURE_NO_OBSERVER = "No observer summary was given, so this report holds no APERF and MPERF check of the clock.";
+
+   /// <summary>Search settings scope.</summary>
+   public const string DISCLOSURE_SEARCH_SETTINGS = "Every order here was measured at the search settings each run recorded for the engine, listed in the why section; this report makes no claim at other settings.";
+
+   /// <summary>A recorded route.</summary>
+   public const string DISCLOSURE_ROUTE = "A route each run recorded in conditions.connections reads: {0}.";
+
+   /// <summary>C-states.</summary>
+   public const string DISCLOSURE_CSTATES = "CPU idle states were recorded and left as found: driver {0}, governor {1}.";
+
+   /// <summary>dockerd test.</summary>
+   public const string DISCLOSURE_DOCKERD_TEST = "The test {0} holds this outside-load accounting equal to the accounting of v7, bit for bit.";
+
+   /// <summary>dockerd not recorded.</summary>
+   public const string DISCLOSURE_DOCKERD_NONE = "The runs of {0} did not record how dockerd's CPU was counted.";
+
+   /// <summary>Method intro.</summary>
+   public const string METHOD = "The method, quoted from the notes of run {0}:";
+
+   /// <summary>Target left out by --targets.</summary>
+   public const string NOT_IN_REPORT_TARGETS = "{0} has no row: it was left out by --targets.";
+
+   /// <summary>Target whose setup differs inside a session.</summary>
+   public const string NOT_IN_REPORT_SETUP = "{0} has no row: its recorded setup differs within a session, in {1}.";
+
+   /// <summary>Runs used.</summary>
+   public const string RUNS = "Runs used: {0} claim runs and {1} basis runs, listed below with their seeds and start times.";
+
+   /// <summary>Why the page may show runs an unpublished report also used: its verdict's word.</summary>
+   public const string RUNS_REUSE = "The runs of {0} were also used by a report that was not published; its verdict, {1}, holds the word {2}.";
+
+   /// <summary>The same, naming the blocked set found beside the runs.</summary>
+   public const string RUNS_REUSE_SET = "The runs of {0} were also used by the set {3}, which was not published; its verdict, {1}, holds the word {2}.";
+
+   /// <summary>The word a verdict file holds when it blocked the report it judged.</summary>
+   public const string REUSE_TOKEN = "BLOCK";
+
+   /// <summary>A run page with a retired framing sentence (hole H4).</summary>
+   public const string RUNS_STALE = "The results.md of run {0} holds a framing sentence this report retired, on line {1}.";
+
+   #endregion Data Members
+
+   #region Public Methods
+
+   /// <summary>
+   /// Writes every sentence of the report, fills the row notes and flag texts, and returns the
+   /// sentences in reading order.
+   /// </summary>
+   /// <param name="report">The report, figures and why rows filled.</param>
+   /// <param name="sessions">Claim sessions.</param>
+   /// <param name="input">The input.</param>
+   /// <returns>The sentences.</returns>
+   /// <exception cref="ConsolidateRefusal">A fact a sentence needs is missing (the Redis storage fact for a named Redis).</exception>
+   public static List<Sentence> Write( ConsolidatedReport report, IReadOnlyList<ClaimSession> sessions, ConsolidateInput input )
+   {
+      var w = new Writer( report, sessions, input );
+      ConsolidateTextParts.Head( w );
+      ConsolidateTextParts.Threshold( w );
+      ConsolidateTextParts.Tables( w );
+      ConsolidateTextParts.Recall( w );
+      ConsolidateTextParts.Why( w );
+      ConsolidateTextParts.Drift( w );
+      ConsolidateTextParts.Clock( w );
+      ConsolidateTextDisclosures.Write( w );
+      ConsolidateTextParts.Tail( w );
+      return w.Sentences;
+   }
+
+   /// <summary>
+   /// Fills a template.
+   /// </summary>
+   /// <param name="template">The template.</param>
+   /// <param name="args">Its arguments.</param>
+   /// <returns>The text.</returns>
+   public static string Fill( string template, params object[] args )
+   {
+      return string.Format( CultureInfo.InvariantCulture, template, args );
+   }
+
+   /// <summary>
+   /// The label of a metric in text.
+   /// </summary>
+   /// <param name="metric">Metric id.</param>
+   /// <returns>"p50", "QPS@1", "QPS@8" or "exact p50".</returns>
+   public static string Label( string metric )
+   {
+      return ClaimMetrics.Label( metric );
+   }
+
+   /// <summary>
+   /// The label of a pass in text: "one-searcher", "eight-searcher" or "exact".
+   /// Why words and not pass names: the pass names hold the word default, which templates do not use.
+   /// </summary>
+   /// <param name="pass">Pass name.</param>
+   /// <returns>The label.</returns>
+   public static string PassLabel( string pass )
+   {
+      return pass switch
+      {
+         "default@1" => "one-searcher",
+         "default@8" => "eight-searcher",
+         "exact" => "exact",
+         _ => pass.Replace( "default", "standard", StringComparison.Ordinal ),
+      };
+   }
+
+   /// <summary>
+   /// The MSR number as it appears in <see cref="MSR_TOKEN"/>.
+   /// </summary>
+   /// <returns>"0x620".</returns>
+   public static string Msr()
+   {
+      return MSR_TOKEN[( MSR_TOKEN.IndexOf( '"' ) + 1 )..MSR_TOKEN.LastIndexOf( '"' )];
+   }
+
+   /// <summary>
+   /// The decimals a metric's values are printed with: 3 for latency in ms, 0 for searches per second.
+   /// </summary>
+   /// <param name="metric">Metric id.</param>
+   /// <returns>Decimals.</returns>
+   public static int Decimals( string metric )
+   {
+      return ClaimMetrics.LowerIsBetter( metric ) ? 3 : 0;
+   }
+
+   #endregion Public Methods
+}
+
+/// <summary>
+/// The state of one writing pass: the report, the sessions and the sentences so far.
+/// </summary>
+public sealed class Writer
+{
+   #region Constructor
+
+   /// <summary>
+   /// Creates the writer.
+   /// </summary>
+   /// <param name="report">The report.</param>
+   /// <param name="sessions">Claim sessions.</param>
+   /// <param name="input">The input: the repository root where cited files are looked up, the basis sessions and the results folder.</param>
+   public Writer( ConsolidatedReport report, IReadOnlyList<ClaimSession> sessions, ConsolidateInput input )
+   {
+      Report = report;
+      Sessions = sessions;
+      Input = input;
+   }
+
+   #endregion Constructor
+
+   #region Public Methods
+
+   /// <summary>The report.</summary>
+   public ConsolidatedReport Report { get; }
+
+   /// <summary>Claim sessions, oldest first.</summary>
+   public IReadOnlyList<ClaimSession> Sessions { get; }
+
+   /// <summary>The sentences, in reading order.</summary>
+   public List<Sentence> Sentences { get; } = new();
+
+   /// <summary>The input of this consolidation.</summary>
+   public ConsolidateInput Input { get; }
+
+   /// <summary>Repository root.</summary>
+   public string RepoRoot => Input.RepoRoot;
+
+   /// <summary>The newest claim session.</summary>
+   public ClaimSession Newest => Sessions[^1];
+
+   /// <summary>True in two-session mode.</summary>
+   public bool TwoSessions => Sessions.Count == 2;
+
+   /// <summary>
+   /// Adds a sentence.
+   /// </summary>
+   /// <param name="slot">Its slot.</param>
+   /// <param name="text">Its text.</param>
+   /// <param name="sources">Its sources.</param>
+   /// <returns>The text, so a caller can also store it in a field.</returns>
+   public string Add( string slot, string text, params SentenceSource[] sources )
+   {
+      Sentences.Add( new Sentence( slot, text, sources ) );
+      return text;
+   }
+
+   /// <summary>
+   /// Adds a sentence with a list of sources.
+   /// </summary>
+   /// <param name="slot">Its slot.</param>
+   /// <param name="text">Its text.</param>
+   /// <param name="sources">Its sources.</param>
+   /// <returns>The text.</returns>
+   public string Add( string slot, string text, IEnumerable<SentenceSource> sources )
+   {
+      return Add( slot, text, sources.ToArray() );
+   }
+
+   /// <summary>
+   /// The why row of a target.
+   /// </summary>
+   /// <param name="target">Target.</param>
+   /// <returns>The row, or null.</returns>
+   public WhyRow? Why( string target )
+   {
+      return Report.Why.FirstOrDefault( w => w.Target == target );
+   }
+
+   /// <summary>
+   /// The first fact of a kind for a target.
+   /// </summary>
+   /// <param name="target">Target.</param>
+   /// <param name="kind">Fact kind.</param>
+   /// <returns>The fact, or null.</returns>
+   public WhyFact? Fact( string target, string kind )
+   {
+      return Why( target )?.Facts.FirstOrDefault( f => f.Kind == kind );
+   }
+
+   /// <summary>
+   /// The source that binds a run's folder name in a sentence: the run's entry in the report's sessions.
+   /// </summary>
+   /// <param name="folder">Run folder name.</param>
+   /// <returns>The source.</returns>
+   public SentenceSource RunSource( string folder )
+   {
+      foreach( SessionInfo session in Report.Sessions )
+      {
+         RunRef? run = session.Runs.FirstOrDefault( r => Path.GetFileName( r.Folder ) == folder );
+         if( run != null )
+         {
+            return S.Consolidated( $"sessions[name={session.Name}].runs[folder={run.Folder}].folder", run.Folder );
+         }
+      }
+
+      throw new InvalidOperationException( $"{folder} is not a claim run of this report" );
+   }
+
+   /// <summary>
+   /// A move as "29.08% (mongodb/oracle)" with its source, or "none".
+   /// </summary>
+   /// <param name="move">The move, or null.</param>
+   /// <param name="path">Its path in consolidated.json.</param>
+   /// <param name="sources">Receives the sources.</param>
+   /// <returns>The text.</returns>
+   public static string Move( BasisMove? move, string path, List<SentenceSource> sources )
+   {
+      if( move == null )
+      {
+         return ConsolidateText.MOVE_NONE;
+      }
+
+      string pct = S.Percent( move.MoveBp );
+      sources.Add( S.Consolidated( path + ".moveBp", pct, "bp-pct" ) );
+      return ConsolidateText.Fill( ConsolidateText.MOVE, pct, move.Target ?? move.Pair ?? string.Empty );
+   }
+
+   #endregion Public Methods
+}

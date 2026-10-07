@@ -23,6 +23,14 @@ public sealed class PipelineReader
 
    private static readonly Regex PIPELINE_NAME = new( "^[a-z0-9_]{1,100}$", RegexOptions.Compiled );
 
+   /// <summary>
+   /// Longest one of this reader's SQL commands may run, in seconds. Why not unlimited (0, as it was):
+   /// a server that stops answering mid-read would hold the run at its first step forever, with the
+   /// heartbeat seeing a live process and no progress. 120 s is far above the 1 to 2 s the shape and row
+   /// reads take on the 524-row eShopOnWeb set and above the few seconds the largest pipeline took.
+   /// </summary>
+   public const int COMMAND_TIMEOUT_SECONDS = 120;
+
    private readonly string _connectionString;
 
    #endregion Data Members
@@ -99,7 +107,7 @@ public sealed class PipelineReader
    /// <returns>Rows and dimension.</returns>
    private static async Task<(long Rows, int Dimension)> ShapeAsync( SqlConnection connection, string pipeline, CancellationToken ct )
    {
-      await using var shape = new SqlCommand( "SELECT vector_dimensions FROM sys.columns WHERE object_id = OBJECT_ID( @t ) AND name = 'Embedding';", connection );
+      await using var shape = new SqlCommand( "SELECT vector_dimensions FROM sys.columns WHERE object_id = OBJECT_ID( @t ) AND name = 'Embedding';", connection ) { CommandTimeout = COMMAND_TIMEOUT_SECONDS };
       shape.Parameters.Add( "@t", SqlDbType.NVarChar, 300 ).Value = $"dbo.gvb_{pipeline}";
       object? dimension = await shape.ExecuteScalarAsync( ct );
       if( dimension is null or DBNull )
@@ -107,7 +115,7 @@ public sealed class PipelineReader
          throw new InvalidOperationException( $"There is no table dbo.gvb_{pipeline} with an Embedding column. Build the pipeline first." );
       }
 
-      await using var count = new SqlCommand( $"SELECT COUNT_BIG(*) FROM dbo.[gvb_{pipeline}];", connection ) { CommandTimeout = 0 };
+      await using var count = new SqlCommand( $"SELECT COUNT_BIG(*) FROM dbo.[gvb_{pipeline}];", connection ) { CommandTimeout = COMMAND_TIMEOUT_SECONDS };
       long rows = Convert.ToInt64( await count.ExecuteScalarAsync( ct ), CultureInfo.InvariantCulture );
       return ( rows, Convert.ToInt32( dimension, CultureInfo.InvariantCulture ) );
    }
@@ -128,7 +136,7 @@ public sealed class PipelineReader
       string text = withText ? "ChunkText" : "CAST( N'' AS NVARCHAR(MAX) )";
       string vector = native ? "Embedding" : "CAST( Embedding AS NVARCHAR(MAX) )";
       string sql = $"SELECT TOP (@limit) ChunkId, DocKey, TableName, Origin, Ordinal, {text}, Metadata, {vector} FROM dbo.[gvb_{pipeline}] ORDER BY ChunkId;";
-      await using var command = new SqlCommand( sql, connection ) { CommandTimeout = 0 };
+      await using var command = new SqlCommand( sql, connection ) { CommandTimeout = COMMAND_TIMEOUT_SECONDS };
       command.Parameters.Add( "@limit", SqlDbType.Int ).Value = capacity;
       var data = new PipelineData( pipeline, capacity, dimension ) { HasText = withText };
       var interned = new Dictionary<string, string>( StringComparer.Ordinal );

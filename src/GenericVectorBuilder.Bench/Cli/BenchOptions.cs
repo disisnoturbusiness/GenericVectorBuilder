@@ -20,7 +20,7 @@ public sealed class BenchOptions
    public static readonly string[] COMMANDS = { "replicate", "bench", "run-all", "clean", "list", "restore-machine" };
 
    private const string DEFAULT_GOLDEN = "/home/dan/ForClaude/evalkit/questions_golden.json";
-   private static readonly HashSet<string> SWITCHES = new( StringComparer.Ordinal ) { "keep", "no-machine-control" };
+   private static readonly HashSet<string> SWITCHES = new( StringComparer.Ordinal ) { "keep", "no-machine-control", "settings-only" };
    private static readonly HashSet<string> VALUED = new( StringComparer.Ordinal )
    {
       "pipeline", "targets", "limit", "batch", "queries", "top", "concurrency", "seconds", "warmup", "warmup-seconds", "hnsw-ef",
@@ -105,6 +105,15 @@ public sealed class BenchOptions
    public bool Keep { get; private set; }
 
    /// <summary>
+   /// run-all only: start each engine, bind to it, read its settings, its image and the size of
+   /// its data folder, write results.json and stop it again. Nothing is loaded, searched or
+   /// truncated, and machine control is off (no clock, governor or CPU pin is touched).
+   /// Why: the settings readers talk to nineteen different engines, and the way to know each one
+   /// works is to run each one before a four-hour run depends on it.
+   /// </summary>
+   public bool SettingsOnly { get; private set; }
+
+   /// <summary>
    /// bench and run-all: put the machine into a known state for the timed passes (performance
    /// governor, turbo off and the uncore clock held at its top ratio so every pass runs at the
    /// same clocks, engine and client on separate physical cores, passes held while the box is
@@ -166,12 +175,13 @@ public sealed class BenchOptions
   list      [--targets a,b]
   replicate --pipeline P --targets a,b [--limit N] [--batch 1000]
   bench     --pipeline P --targets a,b [--limit N] [--queries random:200|golden] [--top 10] [--concurrency 1,8] [--seconds 20]
-  run-all   --pipeline P [--targets a,b] [same options as replicate and bench] [--keep]
+  run-all   --pipeline P [--targets a,b] [same options as replicate and bench] [--keep] [--settings-only]
   clean     --pipeline P --targets a,b
   restore-machine [--machine-state FILE]   put back what a run that did not finish changed
 
 Other options: --warmup 20, --warmup-seconds 15, --seed N, --hnsw-ef N, --golden-file F, --exact-seconds 60, --search-timeout 120, --out DIR, --repo DIR,
 --no-machine-control, --machine-state FILE (default /home/dan/gvb-work/bench-machine-state.json).
+--settings-only (run-all): start each engine, read its settings, image and data folder, stop it; nothing is loaded or searched and the machine is left alone.
 Every target is loaded under the collection 'gvbbench_' + P, never the live name.
 Targets run in a random order, and each target's timed passes (default search at each concurrency
 level, exact mode) run in a random order, each after its own warm-up. --seed N repeats an order;
@@ -244,6 +254,7 @@ nothing on the machine.";
          case "search-timeout": SearchTimeoutSeconds = Positive( name, value ); break;
          case "seed": Seed = WholeNumber( name, value ); break;
          case "keep": Keep = true; break;
+         case "settings-only": SettingsOnly = true; break;
          case "no-machine-control": MachineControl = false; break;
          case "machine-state": MachineStateFile = value; break;
       }
@@ -273,6 +284,11 @@ nothing on the machine.";
       if( Concurrency.Count == 0 )
       {
          throw new ArgumentException( "--concurrency needs at least one level, e.g. 1,8." );
+      }
+
+      if( SettingsOnly && Command != "run-all" )
+      {
+         throw new ArgumentException( $"--settings-only is only for run-all, which is the one command that starts engines; {Command} does not." );
       }
    }
 

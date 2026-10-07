@@ -237,6 +237,98 @@ public class BenchReportFixTests : IDisposable
       GC.SuppressFinalize( this );
    }
 
+   /// <summary>
+   /// The pipeline reader puts a time limit on every SQL command it runs (120 s), where it had none (0): a server that stopped answering mid-read
+   /// would have held a run at its first step with the heartbeat seeing a live process and no progress. Every SqlCommand in the file gets the limit.
+   /// </summary>
+   [Fact]
+   public void PipelineReader_EverySqlCommandHasATimeLimit()
+   {
+      string text = File.ReadAllText( Path.Combine( RepoRoot(), "src", "GenericVectorBuilder.Bench", "Data", "PipelineReader.cs" ) );
+      Assert.DoesNotContain( "CommandTimeout = 0", text );
+      Assert.Contains( "public const int COMMAND_TIMEOUT_SECONDS = 120;", text );
+      Assert.Equal( System.Text.RegularExpressions.Regex.Matches( text, @"new SqlCommand\(" ).Count, System.Text.RegularExpressions.Regex.Matches( text, @"CommandTimeout = COMMAND_TIMEOUT_SECONDS" ).Count );
+   }
+
+   /// <summary>
+   /// The run-start load average is recorded as an information line and never judged: the session no longer asks MachineFacts.IsBusy about it
+   /// and the note no longer starts with WARNING (the load average counts the benchmark's own earlier work and the engines it started).
+   /// </summary>
+   [Fact]
+   public void SessionLoadAverageAtStart_IsRecordedAndNeverJudged()
+   {
+      string session = File.ReadAllText( Path.Combine( RepoRoot(), "src", "GenericVectorBuilder.Bench", "Running", "BenchSession.cs" ) );
+      Assert.Contains( "Load average at start: {report.Machine.LoadAverage} on {report.Machine.LogicalCpus} logical CPUs (1/5/15 min).", session );
+      Assert.DoesNotContain( "WARNING: load average", session );
+      Assert.DoesNotContain( "MachineFacts.IsBusy", session );
+   }
+
+   /// <summary>
+   /// A real run needs a build that names its commit, and that is checked before machine control changes anything: the stamp is read before
+   /// MachineControl.StartAsync, with the commit required for run-all only.
+   /// </summary>
+   [Fact]
+   public void Session_ReadsTheBuildStampBeforeItTouchesTheMachine()
+   {
+      string session = File.ReadAllText( Path.Combine( RepoRoot(), "src", "GenericVectorBuilder.Bench", "Running", "BenchSession.cs" ) );
+      int stamp = session.IndexOf( "RunStamp.Read( requireCommit: _options.Command == \"run-all\" )", StringComparison.Ordinal );
+      int machine = session.IndexOf( "await MachineControl.StartAsync(", StringComparison.Ordinal );
+      Assert.True( stamp > 0 && machine > stamp, "the build stamp must be read before machine control starts" );
+      Assert.Contains( "Enabled = timed && _options.MachineControl && !_options.SettingsOnly", session );
+   }
+
+   /// <summary>
+   /// The golden questions file's hash is taken from the same bytes the questions are read from, and the queries description (which sessions are
+   /// matched on, and which says "embedded now" when the vector cache was cold) is written exactly as before: the hash travels beside the set and
+   /// never inside its text.
+   /// </summary>
+   [Fact]
+   public void GoldenQueries_HashComesFromTheSameBytesAndTheDescriptionIsUnchanged()
+   {
+      string text = File.ReadAllText( Path.Combine( RepoRoot(), "src", "GenericVectorBuilder.Bench", "Data", "GoldenQueries.cs" ) );
+      Assert.Contains( "byte[] bytes = await File.ReadAllBytesAsync( questionsFile, ct );", text );
+      Assert.Contains( "string hash = Sha256Hex( bytes );", text );
+      Assert.Contains( "JsonSerializer.Deserialize<List<GoldenQuestion>>( Decode( bytes ), JSON )", text );
+      Assert.Contains( "string description = $\"golden: {questions.Count} labelled questions from {questionsFile}, embedded with {GvbServices.ModelFromFingerprint( fingerprint )} ({source})\";", text );
+      Assert.Contains( "string source = $\"cached in {cacheFile}, no embedding calls\";", text );
+      Assert.Contains( "source = $\"embedded now: 1 probe + {questions.Count} query calls to the GPU service\";", text );
+   }
+
+   /// <summary>
+   /// The benchmark project copies the three files the program reads from beside itself (the image pins, the engine facts and the basis exclusions)
+   /// to its output root, with its byte order mark and LF endings kept; engine-facts.json lies inside the project and is updated, not included a
+   /// second time (a duplicate item is a build error).
+   /// </summary>
+   [Fact]
+   public void Csproj_CopiesTheFilesTheProgramReadsBesideItself()
+   {
+      byte[] bytes = File.ReadAllBytes( Path.Combine( RepoRoot(), "src", "GenericVectorBuilder.Bench", "GenericVectorBuilder.Bench.csproj" ) );
+      Assert.Equal( new byte[] { 0xEF, 0xBB, 0xBF }, bytes[..3] );
+      Assert.DoesNotContain( (byte)'\r', bytes );
+      string text = System.Text.Encoding.UTF8.GetString( bytes );
+      Assert.Contains( "<None Include=\"..\\..\\deploy\\bench\\image-pins.json\" Link=\"image-pins.json\" CopyToOutputDirectory=\"PreserveNewest\" />", text );
+      Assert.Contains( "<None Update=\"Report\\engine-facts.json\" Link=\"engine-facts.json\" CopyToOutputDirectory=\"PreserveNewest\" />", text );
+      Assert.Contains( "<None Include=\"..\\..\\deploy\\bench\\basis-exclusions.json\" Link=\"basis-exclusions.json\" CopyToOutputDirectory=\"PreserveNewest\" Condition=\"Exists('..\\..\\deploy\\bench\\basis-exclusions.json')\" />", text );
+      Assert.True( File.Exists( Path.Combine( RepoRoot(), "deploy", "bench", "image-pins.json" ) ), "the pins file the csproj copies must exist or the build fails" );
+   }
+
+   /// <summary>
+   /// No file this piece wrote or changed has an em-dash (U+2014) in it, in code, comments, strings or tests.
+   /// </summary>
+   [Fact]
+   public void OwnedFiles_HaveNoEmDashes()
+   {
+      string root = RepoRoot();
+      string[] files = Directory.EnumerateFiles( Path.Combine( root, "src", "GenericVectorBuilder.Bench" ), "*.cs", SearchOption.AllDirectories )
+         .Where( f => Path.GetRelativePath( root, f ).Split( Path.DirectorySeparatorChar ).All( part => part is not ( "bin" or "obj" ) ) )
+         .Concat( Directory.EnumerateFiles( Path.Combine( root, "tests", "GenericVectorBuilder.Engines.Tests", "Bench" ), "*.cs" ) )
+         .Concat( Directory.EnumerateFiles( Path.Combine( root, "deploy", "bench" ) ) ).ToArray();
+      foreach( string file in files.Where( f => File.ReadAllText( f ).Contains( '\u2014' ) && IsOwnedByThisPiece( Path.GetRelativePath( root, f ) ) ) )
+      {
+         Assert.Fail( $"{Path.GetRelativePath( root, file )} holds an em-dash" );
+      }
+   }
+
    #endregion Public Methods
 
    #region Private Methods
@@ -354,6 +446,29 @@ public class BenchReportFixTests : IDisposable
       }
 
       return extra;
+   }
+
+   /// <summary>
+   /// Whether a repository-relative path is one of the files this piece owns or created (the other pieces' files are checked by their own tests).
+   /// </summary>
+   /// <param name="relative">Path relative to the repository root.</param>
+   /// <returns>True when owned.</returns>
+   private static bool IsOwnedByThisPiece( string relative )
+   {
+      string[] owned =
+      {
+         "src/GenericVectorBuilder.Bench/Running/TargetRunner.cs", "src/GenericVectorBuilder.Bench/Running/BenchSession.cs", "src/GenericVectorBuilder.Bench/Running/RunStamp.cs",
+         "src/GenericVectorBuilder.Bench/Targets/ContainerInspector.cs", "src/GenericVectorBuilder.Bench/Targets/ComposeRunner.cs", "src/GenericVectorBuilder.Bench/Targets/ContainerDescription.cs",
+         "src/GenericVectorBuilder.Bench/Targets/EngineSettingsReader.cs", "src/GenericVectorBuilder.Bench/Targets/ImagePins.cs", "src/GenericVectorBuilder.Bench/Targets/DataFolderState.cs",
+         "src/GenericVectorBuilder.Bench/Targets/ClickHouseStartState.cs", "src/GenericVectorBuilder.Bench/Report/BenchReport.cs", "src/GenericVectorBuilder.Bench/Report/ResultsWriter.cs",
+         "src/GenericVectorBuilder.Bench/Data/PipelineReader.cs", "src/GenericVectorBuilder.Bench/Data/GoldenQueries.cs", "src/GenericVectorBuilder.Bench/Cli/BenchOptions.cs",
+         "deploy/bench/make-image-pins.sh", "deploy/bench/image-pins.json",
+      };
+      string testFolder = "tests/GenericVectorBuilder.Engines.Tests/Bench/";
+      string name = Path.GetFileName( relative );
+      bool ownedTest = relative.StartsWith( testFolder, StringComparison.Ordinal )
+         && ( new[] { "Targets", "Runner", "Compose", "Measurement", "BenchReportFixTests", "EngineSettingsReader", "ImagePins", "DataFolderState", "ClickHouseStartState" }.Any( p => name.StartsWith( p, StringComparison.Ordinal ) ) );
+      return owned.Contains( relative.Replace( '\\', '/' ) ) || ownedTest;
    }
 
    #endregion Private Methods

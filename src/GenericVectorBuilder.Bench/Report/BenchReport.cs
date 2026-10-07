@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using GenericVectorBuilder.Bench.Targets;
 using GenericVectorBuilder.Engines.Common;
 
@@ -44,6 +45,22 @@ public sealed class BenchReport
 
    /// <summary>Number of queries.</summary>
    public int QueryCount { get; set; }
+
+   /// <summary>
+   /// SHA-256 (lower-case hex) of the bytes of the golden questions file this run read, or null
+   /// for random queries. Why: the queries text names the file's path, and a path says nothing
+   /// about what was in it; a later session can only be called "the same questions" when the
+   /// file's hash matches. Absent from results written before v8.
+   /// </summary>
+   public string? QueriesFileSha256 { get; set; }
+
+   /// <summary>
+   /// True for a run-all --settings-only run: each engine was started, bound and read for its
+   /// settings, image and data folder, then stopped, and nothing was loaded or searched. Absent
+   /// (not false) for a real run, so a real run's results.json is unchanged by this field.
+   /// </summary>
+   [JsonIgnore( Condition = JsonIgnoreCondition.WhenWritingDefault )]
+   public bool SettingsOnly { get; set; }
 
    /// <summary>Hits per query.</summary>
    public int Top { get; set; }
@@ -129,6 +146,29 @@ public sealed class TargetReport
    /// <summary>Why the target failed, if it did.</summary>
    public string? Error { get; set; }
 
+   /// <summary>
+   /// The engine's settings as the engine reports them or as this setup sets them, one entry per
+   /// setting with how it was obtained (see <see cref="EngineSetting"/>); null only for a target
+   /// that failed before it was read. Never empty for a target that started: a target with
+   /// nothing to read gets one entry that says so. Why: v7 recorded no engine settings at all,
+   /// so a heap, a buffer pool or a worker count could differ between sessions unseen.
+   /// </summary>
+   public List<EngineSetting>? EngineSettings { get; set; }
+
+   /// <summary>
+   /// The container image the engine ran from, with the id this benchmark pins for it; null for
+   /// a target that is not a container. An id that differs from the pinned one is this target's
+   /// Error, so a run on another image is never taken for the same engine.
+   /// </summary>
+   public ImageRecord? Image { get; set; }
+
+   /// <summary>
+   /// How big the engine's data folder was at the start, after any reset and at the end, so a
+   /// start state (ClickHouse's old log tables) is a recorded condition and not a surprise; null
+   /// for a target with no data folder of its own.
+   /// </summary>
+   public DataFolderRecord? DataFolder { get; set; }
+
    /// <summary>Notes for this target.</summary>
    public List<string> Notes { get; set; } = new();
 
@@ -212,8 +252,39 @@ public sealed class SearchReport
    /// <summary>Mean recall@k against the exact answer (ties counted).</summary>
    public double? Recall { get; set; }
 
+   /// <summary>
+   /// The whole number of hits behind <see cref="Recall"/> (queries x top x recall), so two runs can be told apart by one hit
+   /// and not by a floating-point step; null when the product is not a whole number (some queries went unanswered) or when
+   /// there was no recall. Why: recall is a mean of fractions, and comparing two means with a tolerance hides a one-hit difference.
+   /// </summary>
+   public int? RecallHits { get; set; }
+
    /// <summary>Mean file-level nDCG@k (golden queries only).</summary>
    public double? Ndcg { get; set; }
+
+   /// <summary>Largest distance from a whole number that still counts as one when hits are derived from a mean recall.</summary>
+   public const double HITS_TOLERANCE = 1e-6;
+
+   /// <summary>
+   /// Turns a mean recall into the whole number of hits behind it: recall x queries x top. A recall that is the mean over
+   /// all the queries, each query scoring hits out of top, gives a whole number up to rounding error; a product that is
+   /// not within <see cref="HITS_TOLERANCE"/> of one (a mean over only the queries that were answered) gives null, never a rounded guess.
+   /// </summary>
+   /// <param name="recall">Mean recall, or null.</param>
+   /// <param name="queryCount">Queries in the set.</param>
+   /// <param name="top">Hits per query.</param>
+   /// <returns>The hits, or null.</returns>
+   public static int? HitsFrom( double? recall, int queryCount, int top )
+   {
+      if( recall is not double mean || double.IsNaN( mean ) || double.IsInfinity( mean ) || queryCount <= 0 || top <= 0 )
+      {
+         return null;
+      }
+
+      double product = mean * queryCount * top;
+      double whole = Math.Round( product );
+      return Math.Abs( product - whole ) <= HITS_TOLERANCE && whole >= 0 && whole <= (double)queryCount * top ? (int)whole : null;
+   }
 
    /// <summary>Searches that failed or timed out.</summary>
    public int Errors { get; set; }
@@ -240,6 +311,77 @@ public sealed class SearchReport
    /// speed order partly reflects each engine's .NET client library.
    /// </summary>
    public Dictionary<int, double>? ClientCpuMsPerSearch { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>
+/// One engine setting: its key, its value as text, and how it was obtained. Why a "how" on every
+/// entry: a value read from the running engine and a value this setup's code or compose file
+/// sets are different kinds of evidence, and a reader must be able to tell them apart.
+/// </summary>
+public sealed class EngineSetting
+{
+   #region Public Methods
+
+   /// <summary>The setting's name as the engine or Docker names it, from a fixed list of allowed keys.</summary>
+   public string Key { get; set; } = string.Empty;
+
+   /// <summary>The value, as text.</summary>
+   public string Value { get; set; } = string.Empty;
+
+   /// <summary>"read: ..." (asked of the running engine or of Docker) or "set: path#token" (set by this setup's code, the token found in that file).</summary>
+   public string How { get; set; } = string.Empty;
+
+   #endregion Public Methods
+}
+
+/// <summary>
+/// The container image one target's engine ran from.
+/// </summary>
+public sealed class ImageRecord
+{
+   #region Public Methods
+
+   /// <summary>The image reference the container was created from (Config.Image), digest included when the compose file pins one.</summary>
+   public string Ref { get; set; } = string.Empty;
+
+   /// <summary>The id of the image the container is running (the container's own Image field).</summary>
+   public string Id { get; set; } = string.Empty;
+
+   /// <summary>The id deploy/bench/image-pins.json pins for this target; null when no pin exists.</summary>
+   public string? PinnedId { get; set; }
+
+   /// <summary>When Docker last tagged the image on this machine (ISO 8601 UTC, as Docker prints it); null when Docker has none.</summary>
+   public string? LastTagTimeUtc { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>
+/// Sizes of one engine's data folder at the points that matter to a measurement.
+/// </summary>
+public sealed class DataFolderRecord
+{
+   #region Public Methods
+
+   /// <summary>The folder on the host.</summary>
+   public string Path { get; set; } = string.Empty;
+
+   /// <summary>Bytes (du -sb) after the engine was bound, before any reset or load: the start state.</summary>
+   public long? BytesAtStart { get; set; }
+
+   /// <summary>What the benchmark reset at the start (ClickHouse's system log tables), or null when nothing was reset.</summary>
+   public string? Reset { get; set; }
+
+   /// <summary>Bytes after the reset once the folder stopped changing; null when nothing was reset.</summary>
+   public long? BytesAfterReset { get; set; }
+
+   /// <summary>Bytes after the searches, before the benchmark copy was dropped.</summary>
+   public long? BytesAtEnd { get; set; }
+
+   /// <summary>For an embedded engine: the bench database file and its write-ahead sidecars only, because the folder also holds other collections.</summary>
+   public long? BenchFileBytes { get; set; }
 
    #endregion Public Methods
 }

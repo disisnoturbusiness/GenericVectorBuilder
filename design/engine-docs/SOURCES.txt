@@ -1,0 +1,8 @@
+Saved documentation pages. Each is the raw bytes the server returned, never a summary.
+Fetched 2026-10-07 with: curl -sS -m 30 --retry 2 -o design/engine-docs/<file> <url>
+A fact row quotes one text node of a page (tags, scripts and styles removed, entities decoded, white space collapsed).
+The SHA-256 of every page here is listed in design/verdicts/SHA256SUMS.
+The folder durability-logs-2026-10-04 holds saved strace logs, not pages: it lists its own hashes (SHA256SUMS) and says where each log came from (its own SOURCES.txt).
+
+redis-faq-2026-10-07.html  https://redis.io/docs/latest/develop/get-started/faq/  HTTP 200, 132767 bytes
+  quoted by engine-facts.json (redis, storage): "Redis is an in-memory but persistent on disk database"

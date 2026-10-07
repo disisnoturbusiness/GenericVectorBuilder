@@ -1,105 +1,157 @@
+using System.Globalization;
 using GenericVectorBuilder.Bench.Report;
 
 namespace GenericVectorBuilder.Bench.Stats;
 
 /// <summary>
-/// Folds several benchmark runs into one <see cref="ConsolidatedReport"/>.
-/// Rules, each from a hole found in the first published draft:
-/// only runs where every listed target has a result are used, and every other run is listed
-/// with its reason; runs whose settings differ (queries, machine, levels) are not mixed;
-/// comparisons between two targets, and between a target's exact and default search, are
-/// computed inside each run and only then summarized, never as a ratio of separate medians;
-/// ranks are taken per run and their median reported, not the rank of the medians.
-/// Rules added after the second review: runs measured under different build configurations,
-/// CPU governors, CPU partitions, warm-up counts, exact-mode budgets or per-engine search
-/// settings are never mixed (a number measured at 2.1 GHz and one at 3.5 GHz are not repeats of
-/// one experiment); load rows/s is reported but never ranked; there is no default pair, because
-/// the two targets of an obvious pair hold separate copies of the data; and the flags (spread,
-/// p50 against mean, unsettled engine, busy box, governor, shared cores) are computed here once
-/// so the markdown and the web page show the same warnings.
-/// Rules added after the third review: targets whose min-max ranges overlap on a speed metric
-/// share a tie band and no strict rank is shown; runs of different commands (run-all against
-/// bench) or different engine hosting (container against native) are refused, not merged; and each
-/// target carries notes a reader needs next to its speed (a CPU cap, an exact-by-design search, a
-/// scan where an index was meant).
-/// Rules changed after the v5 review: a segment layout that differs between runs is no longer a
-/// refusal but a flag on the target, which stays in every table; and the report always names every
-/// target the runs hold that it does not show (<see cref="ConsolidateWithheld"/>), so an engine can
-/// no longer vanish from a published report without a line saying why.
-/// Rules added after the v6 review: the warm-up method (time based warm-up, settle trial, extension, rehearsal, as the
-/// runs recorded it) is part of the settings runs must share and is printed in full, not as a bare count; and a target
-/// whose engine setup differs between runs is refused (<see cref="ConsolidateIdentity"/>).
-/// Rules added after the v4 review: neighbours whose medians are less than 3% apart share a band
-/// even when their ranges do not overlap (the repeatability of one engine is about 2%), and the
-/// client's CPU per search is carried through where a run recorded it.
+/// Builds the v8 "big gaps only" report from its input: checks that the claim runs are one
+/// experiment, computes the threshold basis, applies the claim rule per metric, runs guards G2 and
+/// G3, the drift, the recall, the clock, the machine, image and settings blocks and the why table,
+/// then has <see cref="ConsolidateText"/> write every sentence and <see cref="ConsolidateAudit"/>
+/// check every sentence and fact against the raw files.
+/// Refusals (<see cref="ConsolidateRefusal"/>), each naming the runs, targets and fields: a claim
+/// session without exactly <see cref="RUNS_PER_SESSION"/> runs; more than <see cref="MAX_SESSIONS"/>
+/// claim sessions; sessions out of time order; a folder in two sessions; a settings-only run; runs of
+/// another pipeline; claim runs whose run-level or session-level identity differs; a listed target
+/// missing, failed or without a value in a claim run; an exact pass in some runs of a target and not
+/// in others; a basis run without machine control; an exclusion row that matches no cell; a fact or
+/// a sentence that does not hold.
+/// Why refuse instead of using "the largest group": the v7 code dropped mismatched runs and printed
+/// "median of 6" over fewer; a reader could not tell. A mismatch now stops the report and says why.
 /// </summary>
 public static class Consolidator
 {
    #region Data Members
 
-   /// <summary>
-   /// Pairs compared run by run when --pairs is not given: none. Why none: the obvious pairs
-   /// (sql-diskann against sql) write to different databases, so a difference between them mixes
-   /// the search method with a different copy of the data; an exact scan against the default
-   /// search inside one target is compared in the exact-versus-default tables instead.
-   /// </summary>
-   public static readonly IReadOnlyList<(string A, string B)> DEFAULT_PAIRS = Array.Empty<(string A, string B)>();
+   /// <summary>Runs every claim session must hold.</summary>
+   public const int RUNS_PER_SESSION = 3;
 
-   private const int MAX_ERROR_TEXT = 120;
+   /// <summary>Most claim sessions.</summary>
+   public const int MAX_SESSIONS = 2;
+
+   /// <summary>Most targets whose setup may change between the sessions before G3 stops the report.</summary>
+   public const int MAX_SETUP_CHANGES = 3;
+
+   /// <summary>Status of a report no guard stopped.</summary>
+   public const string COMPLETE = "complete";
+
+   /// <summary>Status of a report a guard stopped.</summary>
+   public const string STOPPED = "stopped";
+
+   /// <summary>Repository path of the copied golden question file (P5 copies it byte for byte).</summary>
+   public const string QUESTIONS_COPY = "design/bench-inputs/questions_golden.json";
 
    #endregion Data Members
 
    #region Public Methods
 
    /// <summary>
-   /// Consolidates the runs.
+   /// Builds the whole report: figures, sentences and the audit.
    /// </summary>
-   /// <param name="runs">Runs that loaded, in any order.</param>
-   /// <param name="targets">Targets every used run must have, in report order.</param>
-   /// <param name="pairs">Target pairs to compare run by run (pairs naming an unlisted target are skipped).</param>
-   /// <param name="alreadyDropped">Folders that could not be read, carried into the report's dropped list.</param>
-   /// <returns>The consolidated report.</returns>
-   /// <exception cref="ArgumentException">No targets, or a target listed twice.</exception>
-   /// <exception cref="InvalidOperationException">No run qualifies; the message lists every run's reason.</exception>
-   public static ConsolidatedReport Consolidate( IReadOnlyList<RunResult> runs, IReadOnlyList<string> targets, IReadOnlyList<(string A, string B)> pairs, IReadOnlyList<RunDropped> alreadyDropped )
+   /// <param name="input">The loaded input.</param>
+   /// <returns>The report, ready to write.</returns>
+   /// <exception cref="ConsolidateRefusal">The input is not one experiment, a value is missing, or a fact or sentence does not hold; the message says which.</exception>
+   public static ConsolidatedReport Build( ConsolidateInput input )
    {
-      if( targets.Count == 0 || targets.Distinct( StringComparer.Ordinal ).Count() != targets.Count )
-      {
-         throw new ArgumentException( "List each target once, e.g. --targets sql,sql-diskann,qdrant." );
-      }
-
-      var report = new ConsolidatedReport { Targets = targets.ToList() };
-      report.Dropped.AddRange( alreadyDropped );
-      List<RunResult> used = SelectRuns( runs, targets, report.Dropped );
-      if( used.Count == 0 )
-      {
-         throw new InvalidOperationException( "No run has a result for every listed target. "
-            + string.Join( " ", report.Dropped.Select( d => $"[{d.Name}: {d.Reason}]" ) ) );
-      }
-
-      string? refusal = ConsolidateIdentity.Refusal( used, targets );
-      if( refusal != null )
-      {
-         throw new InvalidOperationException( refusal );
-      }
-
-      IReadOnlyList<RefusedTarget> refused = ConsolidateIdentity.RefusedTargets( used, targets );
-      IReadOnlyList<string> shown = targets.Where( t => refused.All( r => r.Target != t ) ).ToList();
-      report.Targets = shown.ToList();
-      report.Settings = SettingsOf( used[0], shown );
-      report.Runs = used.Select( ToRunUsed ).ToList();
-      report.Withheld = ConsolidateWithheld.Build( used, targets, refused );
-      IReadOnlyList<int> levels = Levels( used, shown );
-      report.TargetSummaries = shown.Select( t => Summarize( t, used, levels ) ).ToList();
-      AddRanks( report.TargetSummaries, used, levels );
-      report.Bands = ConsolidateBands.Build( report.TargetSummaries, levels, used.Count );
-      report.TargetSummaries.ForEach( t => t.EngineNotes = ConsolidateEngineNotes.For( t, used ) );
-      report.Pairs = pairs.Where( p => shown.Contains( p.A ) && shown.Contains( p.B ) && p.A != p.B )
-         .Select( p => Pair( p.A, p.B, used, levels ) ).ToList();
-      report.ExactVsDefault = shown.Select( t => Exact( t, used ) ).OfType<ExactVsDefault>().ToList();
-      report.Flags = ConsolidateFlags.Build( report.TargetSummaries, used );
-      report.Notes = Notes( report );
+      List<ClaimSession> sessions = CheckSessions( input );
+      ConsolidatedReport report = Figures( input, sessions );
+      using var raw = RawRuns.Load( sessions, input );
+      IReadOnlyList<ResolvedFact> facts = ConsolidateAudit.ValidateFacts( input, raw.Claim, report.Targets );
+      report.Why = ConsolidateWhy.Build( sessions, report, facts );
+      ConsolidateWhy.MarkSearchModes( report );
+      report.Audit = new AuditInfo { FactsSha256 = input.FactsSha256, ExclusionsSha256 = input.ExclusionsSha256, ObserverSha256 = report.Observer?.Sha256, FactsChecked = facts.Count };
+      List<Sentence> sentences = ConsolidateText.Write( report, sessions, input );
+      ConsolidateAudit.CheckSentences( report, sentences, raw, input.RepoRoot );
       return report;
+   }
+
+   /// <summary>
+   /// The figures of the report, everything but the why table, the sentences and the audit.
+   /// Why public: tests check the rule, the basis and the guards without the fact sheet.
+   /// </summary>
+   /// <param name="input">The loaded input.</param>
+   /// <param name="sessions">The checked claim sessions, from <see cref="CheckSessions"/>.</param>
+   /// <returns>The report without why rows and sentences.</returns>
+   /// <exception cref="ConsolidateRefusal">A refusal.</exception>
+   public static ConsolidatedReport Figures( ConsolidateInput input, List<ClaimSession> sessions )
+   {
+      List<RunResult> claimRuns = sessions.SelectMany( s => s.Runs ).ToList();
+      var report = new ConsolidatedReport
+      {
+         CreatedUtc = input.CreatedUtc,
+         CommandLine = input.CommandLine,
+         Mode = sessions.Count == 2 ? "two-session" : "one-session",
+         Sessions = sessions.Select( s => new SessionInfo { Name = s.Name, Runs = s.Runs.Select( r => Ref( r, input.ResultsRoot ) ).ToList() } ).ToList(),
+      };
+      CheckRunIdentity( claimRuns, report );
+      List<string> targets = CheckTargets( input, sessions, report );
+      List<string> changed = SetupChanges( sessions, targets, report );
+      report.Basis = Basis( input, sessions );
+      report.Threshold = new ThresholdInfo { TBp = report.Basis.TBp, Ratio = 1 + report.Basis.TBp / 10000.0, Rule = ClaimRule.RULE_TEXT };
+      List<MetricOutcome> outcomes = Tables( sessions, targets, changed, report );
+      report.Guards.G2 = ClaimDrift.G2( outcomes, sessions, report.Threshold.TBp );
+      report.Drift = sessions.Count == 2 ? ClaimDrift.Drift( outcomes, sessions, report.Threshold.TBp ) : null;
+      report.Recall = Recall( sessions, targets );
+      report.Clock = Clock( sessions );
+      report.Machine = Machine( claimRuns, report.Machine.Differences );
+      report.Images = Images( sessions, targets );
+      report.EngineSettings = Settings( sessions, targets );
+      report.SearchSettings = ConsolidateSettings.Build( sessions, targets );
+      report.Observer = ConsolidateObserver.Read( input.ObserverPath, sessions[^1] );
+      report.Queries = Queries( claimRuns, input.RepoRoot );
+      Counts( report, sessions );
+      Status( report );
+      return report;
+   }
+
+   /// <summary>
+   /// Checks the claim and basis sessions: one or two claim sessions of exactly 3 runs, names unique,
+   /// no folder twice, no settings-only run, one pipeline, the first session's runs all started before
+   /// the second's, and every claim run's own runSeed and startedUtc recorded.
+   /// </summary>
+   /// <param name="input">Input.</param>
+   /// <returns>The claim sessions, runs oldest first.</returns>
+   /// <exception cref="ConsolidateRefusal">Any check fails.</exception>
+   public static List<ClaimSession> CheckSessions( ConsolidateInput input )
+   {
+      if( input.Sessions.Count is 0 or > MAX_SESSIONS )
+      {
+         throw new ConsolidateRefusal( $"give one or two --session, not {input.Sessions.Count}" );
+      }
+
+      List<string> names = input.Sessions.Select( s => s.Name ).Concat( input.BasisSessions.Select( s => s.Name ) ).ToList();
+      if( names.Distinct( StringComparer.Ordinal ).Count() != names.Count )
+      {
+         throw new ConsolidateRefusal( $"session names must be unique: {string.Join( ", ", names )}" );
+      }
+
+      foreach( (string name, List<RunResult> runs) in input.Sessions )
+      {
+         CheckClaimSession( name, runs );
+      }
+
+      CheckOverlaps( input );
+      CheckPipeline( input );
+      List<ClaimSession> sessions = input.Sessions.Select( s => new ClaimSession( s.Name, s.Runs.OrderBy( r => r.StartedUtc, StringComparer.Ordinal ).ThenBy( r => r.Name, StringComparer.Ordinal ).ToList() ) ).ToList();
+      if( sessions.Count == 2 && string.CompareOrdinal( sessions[0].Runs[^1].StartedUtc, sessions[1].Runs[0].StartedUtc ) >= 0 )
+      {
+         throw new ConsolidateRefusal( $"session {sessions[0].Name} must be the earlier one: its last run {sessions[0].Runs[^1].Name} started at {sessions[0].Runs[^1].StartedUtc}, not before {sessions[1].Name}'s first run {sessions[1].Runs[0].Name} at {sessions[1].Runs[0].StartedUtc}" );
+      }
+
+      return sessions;
+   }
+
+   /// <summary>
+   /// True when the first UTC time is before the second (both ISO text).
+   /// </summary>
+   /// <param name="a">First time, or null.</param>
+   /// <param name="b">Second time, or null.</param>
+   /// <returns>True, false, or null when either is missing or unreadable.</returns>
+   public static bool? Before( string? a, string? b )
+   {
+      return DateTime.TryParse( a, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out DateTime x )
+         && DateTime.TryParse( b, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out DateTime y )
+         ? x < y : null;
    }
 
    #endregion Public Methods
@@ -107,574 +159,612 @@ public static class Consolidator
    #region Private Methods
 
    /// <summary>
-   /// Picks the runs to use: every listed target present, not failed and searched; then the
-   /// largest group of runs with identical settings (ties go to the group with the newest run).
-   /// Every other run is added to <paramref name="dropped"/> with its reason.
+   /// One claim session's own checks: exactly 3 runs, no folder twice, no settings-only run, a start time and a seed on each.
    /// </summary>
-   /// <param name="runs">Candidate runs.</param>
-   /// <param name="targets">Required targets.</param>
-   /// <param name="dropped">Receives the runs left out.</param>
-   /// <returns>Runs used, oldest first.</returns>
-   private static List<RunResult> SelectRuns( IReadOnlyList<RunResult> runs, IReadOnlyList<string> targets, List<RunDropped> dropped )
+   /// <param name="name">Session name.</param>
+   /// <param name="runs">Its runs.</param>
+   /// <exception cref="ConsolidateRefusal">A check fails.</exception>
+   private static void CheckClaimSession( string name, List<RunResult> runs )
    {
-      var complete = new List<RunResult>();
-      var seen = new HashSet<string>( StringComparer.Ordinal );
-      foreach( RunResult run in runs.OrderBy( r => r.StartedUtc ?? string.Empty, StringComparer.Ordinal ).ThenBy( r => r.Name, StringComparer.Ordinal ) )
+      if( runs.Count != RUNS_PER_SESSION )
       {
-         string? problem = !seen.Add( run.Folder ) ? "listed twice; used once" : TargetProblems( run, targets );
-         if( problem != null )
+         throw new ConsolidateRefusal( $"session {name} has {runs.Count} run(s) ({string.Join( ", ", runs.Select( r => r.Name ) )}); a claim session needs exactly {RUNS_PER_SESSION}" );
+      }
+
+      if( runs.Select( r => r.Name ).Distinct( StringComparer.Ordinal ).Count() != runs.Count )
+      {
+         throw new ConsolidateRefusal( $"session {name} lists one folder twice: {string.Join( ", ", runs.Select( r => r.Name ) )}" );
+      }
+
+      foreach( RunResult run in runs )
+      {
+         if( run.SettingsOnly )
          {
-            dropped.Add( new RunDropped { Name = run.Name, Folder = run.Folder, Reason = problem } );
+            throw new ConsolidateRefusal( $"{run.Name} (session {name}) is a settings-only run (settingsOnly true): it searched nothing" );
+         }
+
+         if( run.StartedUtc == null || run.RunSeed == null )
+         {
+            throw new ConsolidateRefusal( $"{run.Name} (session {name}) has no {( run.StartedUtc == null ? "startedUtc" : "runSeed" )}" );
+         }
+      }
+   }
+
+   /// <summary>
+   /// Refuses a folder that sits in two sessions of any kind.
+   /// </summary>
+   /// <param name="input">Input.</param>
+   /// <exception cref="ConsolidateRefusal">An overlap.</exception>
+   private static void CheckOverlaps( ConsolidateInput input )
+   {
+      var seen = new Dictionary<string, string>( StringComparer.Ordinal );
+      foreach( (string name, List<RunResult> runs) in input.Sessions.Concat( input.BasisSessions ) )
+      {
+         foreach( RunResult run in runs )
+         {
+            if( seen.TryGetValue( run.Name, out string? other ) && other != name )
+            {
+               throw new ConsolidateRefusal( $"{run.Name} is in session {other} and in session {name}; a run belongs to one session (claim runs join the basis by themselves)" );
+            }
+
+            seen[run.Name] = name;
+         }
+      }
+   }
+
+   /// <summary>
+   /// Refuses sessions of more than one pipeline.
+   /// </summary>
+   /// <param name="input">Input.</param>
+   /// <exception cref="ConsolidateRefusal">Two pipelines.</exception>
+   private static void CheckPipeline( ConsolidateInput input )
+   {
+      var pipelines = input.Sessions.Concat( input.BasisSessions ).SelectMany( s => s.Runs ).GroupBy( r => r.Pipeline ?? ConsolidateIdentity.NOT_RECORDED, StringComparer.Ordinal ).ToList();
+      if( pipelines.Count > 1 )
+      {
+         throw new ConsolidateRefusal( "the sessions hold runs of more than one pipeline: " + string.Join( "; ", pipelines.Select( g => $"{g.Key} ({string.Join( ", ", g.Select( r => r.Name ) )})" ) ) );
+      }
+   }
+
+   /// <summary>
+   /// Refuses claim runs whose run-level or session-level identity differs; keeps the differences that do not refuse (os, .NET).
+   /// </summary>
+   /// <param name="claimRuns">Every claim run.</param>
+   /// <param name="report">Receives the non-refusing differences.</param>
+   /// <exception cref="ConsolidateRefusal">A difference that refuses.</exception>
+   private static void CheckRunIdentity( List<RunResult> claimRuns, ConsolidatedReport report )
+   {
+      RunResult first = claimRuns[0];
+      List<string> problems = claimRuns.Skip( 1 ).Where( r => ConsolidateIdentity.RunKey( r ) != ConsolidateIdentity.RunKey( first ) )
+         .Select( r => $"{r.Name} against {first.Name}: {string.Join( "; ", ConsolidateIdentity.RunDifferences( r, first ) )}" ).ToList();
+      IReadOnlyList<(string Field, bool Refuses, string Values)> session = ConsolidateIdentity.SessionDifferences( claimRuns );
+      problems.AddRange( session.Where( d => d.Refuses ).Select( d => $"{d.Field} differs: {d.Values}" ) );
+      if( problems.Count > 0 )
+      {
+         throw new ConsolidateRefusal( "the claim runs are not one experiment: " + string.Join( " | ", problems ) );
+      }
+
+      report.Machine.Differences = session.Where( d => !d.Refuses ).Select( d => $"{d.Field}: {d.Values}" ).ToList();
+   }
+
+   /// <summary>
+   /// The targets with rows: the listed ones (or every target of the claim runs), each present, not
+   /// failed and with p50, QPS@1 and QPS@8 in every claim run. A target whose setup differs inside a
+   /// session is left out with the reason; every target the runs hold that has no row is listed.
+   /// </summary>
+   /// <param name="input">Input.</param>
+   /// <param name="sessions">Claim sessions.</param>
+   /// <param name="report">Receives the not-in-report list and the targets.</param>
+   /// <returns>The targets with rows.</returns>
+   /// <exception cref="ConsolidateRefusal">A listed target is missing, failed or lacks a value, or no target is left.</exception>
+   private static List<string> CheckTargets( ConsolidateInput input, List<ClaimSession> sessions, ConsolidatedReport report )
+   {
+      List<RunResult> runs = sessions.SelectMany( s => s.Runs ).ToList();
+      List<string> all = runs.SelectMany( r => r.Targets.Select( t => t.Name ) ).Distinct( StringComparer.Ordinal ).ToList();
+      List<string> listed = input.Targets.Count > 0 ? input.Targets : all;
+      if( listed.Distinct( StringComparer.Ordinal ).Count() != listed.Count )
+      {
+         throw new ConsolidateRefusal( $"--targets lists a target twice: {string.Join( ",", listed )}" );
+      }
+
+      List<string> problems = listed.SelectMany( t => runs.Select( r => TargetProblem( r, t ) ).OfType<string>() ).ToList();
+      if( problems.Count > 0 )
+      {
+         throw new ConsolidateRefusal( "a listed target lacks a result: " + string.Join( "; ", problems ) + ". Leave it out with --targets to report the others." );
+      }
+
+      report.NotInReport.AddRange( all.Where( t => !listed.Contains( t ) ).Select( t => new NotInReport { Target = t, Code = "left out by --targets", Detail = "not in --targets" } ) );
+      var kept = new List<string>();
+      foreach( string target in listed )
+      {
+         (string Detail, List<string> Fields)? within = WithinSessionDifference( sessions, target );
+         if( within == null )
+         {
+            kept.Add( target );
          }
          else
          {
-            complete.Add( run );
+            report.NotInReport.Add( new NotInReport { Target = target, Code = "setup differs within a session", Detail = within.Value.Detail, Fields = within.Value.Fields } );
          }
       }
 
-      if( complete.Count == 0 )
+      if( kept.Count == 0 )
       {
-         return complete;
+         throw new ConsolidateRefusal( "no listed target has one setup in every run of a session: " + string.Join( "; ", report.NotInReport.Select( n => $"{n.Target}: {n.Detail}" ) ) );
       }
 
-      IGrouping<string, RunResult> chosen = complete.GroupBy( r => Signature( r, targets ) )
-         .OrderByDescending( g => g.Count() )
-         .ThenByDescending( g => g.Select( r => r.StartedUtc ?? string.Empty ).Max( StringComparer.Ordinal ), StringComparer.Ordinal )
-         .First();
-      foreach( RunResult run in complete.Where( r => Signature( r, targets ) != chosen.Key ) )
-      {
-         dropped.Add( new RunDropped { Name = run.Name, Folder = run.Folder, Reason = "settings differ from the runs used: " + SettingsDifference( run, chosen.First(), targets ) } );
-      }
-
-      return chosen.ToList();
+      report.Targets = kept;
+      return kept;
    }
 
    /// <summary>
-   /// Why a run cannot be used for these targets, or null when it can.
+   /// Why a run cannot serve a target, or null when it can.
    /// </summary>
    /// <param name="run">The run.</param>
-   /// <param name="targets">Required targets.</param>
-   /// <returns>The reason, or null.</returns>
-   private static string? TargetProblems( RunResult run, IReadOnlyList<string> targets )
+   /// <param name="target">Target.</param>
+   /// <returns>The problem, or null.</returns>
+   private static string? TargetProblem( RunResult run, string target )
    {
-      var parts = new List<string>();
-      string[] missing = targets.Where( t => run.Find( t ) == null ).ToArray();
-      if( missing.Length > 0 )
+      TargetResult? t = run.Find( target );
+      if( t == null )
       {
-         parts.Add( $"no result for {string.Join( ", ", missing )}" );
+         return $"{run.Name} has no result for {target}";
       }
 
-      TargetResult[] present = targets.Select( run.Find ).OfType<TargetResult>().ToArray();
-      foreach( TargetResult failed in present.Where( t => t.Error != null ) )
+      if( t.Error != null )
       {
-         string error = failed.Error!.Length > MAX_ERROR_TEXT ? failed.Error[..MAX_ERROR_TEXT] + "..." : failed.Error;
-         parts.Add( $"{failed.Name} failed ({error.Replace( '\n', ' ' )})" );
+         return $"{run.Name}: {target} failed ({t.Error.Replace( '\n', ' ' )})";
       }
 
-      string[] unsearched = present.Where( t => t.Error == null && ( !t.Searched || t.P50Ms == null ) ).Select( t => t.Name ).ToArray();
-      if( unsearched.Length > 0 )
+      try
       {
-         parts.Add( $"no search result for {string.Join( ", ", unsearched )}" );
+         string[] missing = new[] { ClaimMetrics.P50, ClaimMetrics.QPS1, ClaimMetrics.QPS8 }.Where( m => ClaimMetrics.Value( t, m ) == null ).Select( ClaimMetrics.FieldOf ).ToArray();
+         return missing.Length == 0 ? null : $"{run.Name}: {target} has no {string.Join( ", ", missing )}";
       }
-
-      return parts.Count == 0 ? null : string.Join( "; ", parts );
+      catch( InvalidDataException ex )
+      {
+         return $"{run.Name}: {ex.Message}";
+      }
    }
 
    /// <summary>
-   /// The settings that must match between runs, as one comparable string.
+   /// The differing fields when a target's setup is not the same in every run of one session.
    /// </summary>
-   /// <param name="run">The run.</param>
-   /// <param name="targets">The listed targets (their search settings are part of the signature).</param>
-   /// <returns>The signature.</returns>
-   private static string Signature( RunResult run, IReadOnlyList<string> targets )
+   /// <param name="sessions">Claim sessions.</param>
+   /// <param name="target">Target.</param>
+   /// <returns>"session v7: field, field (run against run)" with the field names, or null when every session is uniform.</returns>
+   private static (string Detail, List<string> Fields)? WithinSessionDifference( List<ClaimSession> sessions, string target )
    {
-      return string.Join( "|", SettingFields( run, targets ).Select( f => f.Value ) );
+      foreach( ClaimSession session in sessions )
+      {
+         TargetResult first = session.Runs[0].Find( target )!;
+         foreach( RunResult run in session.Runs.Skip( 1 ) )
+         {
+            IReadOnlyList<string> fields = ConsolidateIdentity.TargetDifferences( first, run.Find( target )! );
+            if( fields.Count > 0 )
+            {
+               return ( $"session {session.Name}: {string.Join( ", ", fields )} ({run.Name} against {session.Runs[0].Name})", fields.ToList() );
+            }
+         }
+      }
+
+      return null;
    }
 
    /// <summary>
-   /// Names and values of the settings that must match.
+   /// Guard G3: targets whose setup differs between the two claim sessions (compared only where both
+   /// recorded a field). Each becomes a one-session row; more than <see cref="MAX_SETUP_CHANGES"/> stops the report.
    /// </summary>
-   /// <param name="run">The run.</param>
-   /// <param name="targets">The listed targets.</param>
-   /// <returns>(name, value) pairs; "missing" for a field the run did not write.</returns>
-   private static IEnumerable<(string Name, string Value)> SettingFields( RunResult run, IReadOnlyList<string> targets )
+   /// <param name="sessions">Claim sessions.</param>
+   /// <param name="targets">Targets with rows.</param>
+   /// <param name="report">Receives G3.</param>
+   /// <returns>The changed targets.</returns>
+   private static List<string> SetupChanges( List<ClaimSession> sessions, List<string> targets, ConsolidatedReport report )
    {
-      yield return ( "pipeline", run.Pipeline ?? "missing" );
-      yield return ( "host", run.Host ?? "missing" );
-      yield return ( "rows", run.Rows?.ToString() ?? "missing" );
-      yield return ( "dimension", run.Dimension?.ToString() ?? "missing" );
-      yield return ( "queryKind", run.QueryKind ?? "missing" );
-      yield return ( "queryCount", run.QueryCount?.ToString() ?? "missing" );
-      yield return ( "top", run.Top?.ToString() ?? "missing" );
-      yield return ( "concurrency", string.Join( ",", run.Concurrency ) );
-      yield return ( "secondsPerLevel", run.SecondsPerLevel?.ToString() ?? "missing" );
-      RunConditions c = run.Conditions;
-      yield return ( "buildConfiguration", c.BuildConfiguration ?? "missing" );
-      yield return ( "machineControl", c.MachineControlState ?? "missing" );
-      yield return ( "governor", c.Governor ?? "missing" );
-      yield return ( "cpuPartition", c.Partition ?? "missing" );
-      yield return ( "warmupSearches", c.WarmupSearches?.ToString() ?? "missing" );
-      yield return ( "warmupMethod", c.WarmupMethod?.Description ?? "missing" );
-      yield return ( "exactSeconds", c.ExactSeconds?.ToString() ?? "missing" );
+      if( sessions.Count != 2 )
+      {
+         return new List<string>();
+      }
+
       foreach( string target in targets )
       {
-         yield return ( $"searchSettings[{target}]", run.Find( target )?.SearchSettings ?? "missing" );
-         yield return ( $"index[{target}]", run.Find( target )?.Index ?? "missing" );
-      }
-   }
-
-   /// <summary>
-   /// The settings that differ between a run and the runs used, e.g. "queryCount 200 vs 20".
-   /// </summary>
-   /// <param name="run">The dropped run.</param>
-   /// <param name="reference">A run that was used.</param>
-   /// <param name="targets">The listed targets.</param>
-   /// <returns>The differences.</returns>
-   private static string SettingsDifference( RunResult run, RunResult reference, IReadOnlyList<string> targets )
-   {
-      return string.Join( ", ", SettingFields( run, targets ).Zip( SettingFields( reference, targets ) )
-         .Where( p => p.First.Value != p.Second.Value )
-         .Select( p => $"{p.First.Name} {p.First.Value} vs {p.Second.Value}" ) );
-   }
-
-   /// <summary>
-   /// The shared settings, from one used run (all used runs match).
-   /// </summary>
-   /// <param name="run">A used run.</param>
-   /// <param name="targets">The listed targets.</param>
-   /// <returns>The settings.</returns>
-   private static RunSettings SettingsOf( RunResult run, IReadOnlyList<string> targets )
-   {
-      RunConditions c = run.Conditions;
-      return new RunSettings
-      {
-         Pipeline = run.Pipeline,
-         Command = run.Command,
-         Host = run.Host,
-         Rows = run.Rows,
-         Dimension = run.Dimension,
-         QueryKind = run.QueryKind,
-         QueryCount = run.QueryCount,
-         Top = run.Top,
-         Concurrency = run.Concurrency.ToList(),
-         SecondsPerLevel = run.SecondsPerLevel,
-         BuildConfiguration = c.BuildConfiguration,
-         MachineControl = c.MachineControl,
-         Governor = c.Governor,
-         CpuPartition = c.Partition,
-         WarmupSearches = c.WarmupSearches,
-         WarmupMethod = c.WarmupMethod,
-         ExactSeconds = c.ExactSeconds,
-         SearchSettings = targets.ToDictionary( t => t, t => run.Find( t )?.SearchSettings, StringComparer.Ordinal ),
-         Derived = c.Derived.ToDictionary( d => d.Key, d => d.Value, StringComparer.Ordinal ),
-      };
-   }
-
-   /// <summary>
-   /// The run-level facts carried into the report.
-   /// </summary>
-   /// <param name="run">A used run.</param>
-   /// <returns>The facts.</returns>
-   private static RunUsed ToRunUsed( RunResult run )
-   {
-      return new RunUsed
-      {
-         Name = run.Name,
-         Folder = run.Folder,
-         StartedUtc = run.StartedUtc,
-         RunSeed = run.RunSeed,
-         TargetOrder = run.TargetOrder?.ToList(),
-         LoadAverage = run.LoadAverage,
-      };
-   }
-
-   /// <summary>
-   /// Concurrency levels, lowest first: the runs' setting, or every level any target measured
-   /// when the setting is absent.
-   /// </summary>
-   /// <param name="used">Runs used.</param>
-   /// <param name="targets">Targets.</param>
-   /// <returns>The levels.</returns>
-   private static IReadOnlyList<int> Levels( IReadOnlyList<RunResult> used, IReadOnlyList<string> targets )
-   {
-      IEnumerable<int> levels = used[0].Concurrency.Count > 0
-         ? used[0].Concurrency
-         : used.SelectMany( r => targets.Select( r.Find ).OfType<TargetResult>() ).SelectMany( t => t.Qps.Keys );
-      return levels.Distinct().OrderBy( l => l ).ToList();
-   }
-
-   /// <summary>
-   /// Summarizes one target over the runs used.
-   /// </summary>
-   /// <param name="name">Target name.</param>
-   /// <param name="used">Runs used (each has the target).</param>
-   /// <param name="levels">Concurrency levels, lowest first.</param>
-   /// <returns>The summary (ranks are added afterwards).</returns>
-   private static TargetSummary Summarize( string name, IReadOnlyList<RunResult> used, IReadOnlyList<int> levels )
-   {
-      List<TargetResult> results = used.Select( r => r.Find( name )! ).ToList();
-      var summary = new TargetSummary
-      {
-         Name = name,
-         Engines = Distinct( results.Select( t => t.Engine ) ),
-         Indexes = Distinct( results.Select( t => t.Index ) ),
-         Hosting = Distinct( results.Select( t => t.Hosting ) ),
-         EngineSettings = Distinct( results.Select( t => t.EngineSettings ) ),
-         EngineFiles = Distinct( results.Select( t => t.EngineFiles ) ),
-         Durabilities = Distinct( results.Select( t => t.Durability ) ),
-         P50Ms = Spread.Of( results.Select( t => t.P50Ms ) ),
-         P95Ms = Spread.Of( results.Select( t => t.P95Ms ) ),
-         LoadRowsPerSecond = Spread.Of( results.Select( t => t.LoadRowsPerSecond ) ),
-         Recall = Spread.Of( results.Select( t => t.Recall ) ),
-         Ndcg = Spread.Of( results.Select( t => t.Ndcg ) ),
-         ExactP50Ms = Spread.Of( results.Select( t => t.ExactP50Ms ) ),
-         Errors = SumOrNull( results.Select( t => t.Errors ) ),
-         WarmupErrors = SumOrNull( results.Select( t => t.WarmupErrors ) ),
-         PerRun = used.Zip( results ).Select( p => ToFacts( p.First, p.Second, levels ) ).ToList(),
-      };
-
-      foreach( int level in levels )
-      {
-         summary.Qps[Key( level )] = Spread.Of( results.Select( t => Qps( t, level ) ) );
-         Spread clientCpu = Spread.Of( results.Select( t => t.ClientCpuMsPerSearch.TryGetValue( level, out double ms ) ? ms : (double?)null ) );
-         if( clientCpu.N > 0 )
+         List<string> fields = sessions[0].Runs.SelectMany( a => sessions[1].Runs.SelectMany( b => ConsolidateIdentity.TargetDifferences( a.Find( target )!, b.Find( target )! ) ) )
+            .Distinct( StringComparer.Ordinal ).ToList();
+         if( fields.Count > 0 )
          {
-            summary.ClientCpuMsPerSearch[Key( level )] = clientCpu;
-         }
-
-         if( level != levels[0] )
-         {
-            summary.QpsRatio[$"{level}/{levels[0]}"] = Spread.Of( results.Select( t => ConsolidateMath.Ratio( Qps( t, level ), Qps( t, levels[0] ) ) ) );
+            report.Guards.G3.Targets.Add( new SetupChange { Target = target, Fields = fields } );
          }
       }
 
-      return summary;
+      report.Guards.G3.Stopped = report.Guards.G3.Targets.Count > MAX_SETUP_CHANGES;
+      return report.Guards.G3.Targets.Select( t => t.Target ).ToList();
    }
 
    /// <summary>
-   /// The carry-through facts of one target in one run.
+   /// The threshold basis over the claim sessions and the basis sessions; every basis run must have
+   /// machine control on. The other runs of the pipeline give the disclosed no-machine-control maxima.
    /// </summary>
-   /// <param name="run">The run.</param>
-   /// <param name="target">The target's result in that run.</param>
-   /// <param name="levels">Concurrency levels, lowest first.</param>
-   /// <returns>The facts.</returns>
-   private static TargetRunFacts ToFacts( RunResult run, TargetResult target, IReadOnlyList<int> levels )
+   /// <param name="input">Input.</param>
+   /// <param name="sessions">Claim sessions.</param>
+   /// <returns>The basis.</returns>
+   /// <exception cref="ConsolidateRefusal">A basis run without machine control, or the basis cannot be computed.</exception>
+   private static BasisInfo Basis( ConsolidateInput input, List<ClaimSession> sessions )
    {
-      ( double? mean, string? meanSource ) = MeanLatency( target, levels );
-      return new TargetRunFacts
+      var basisRuns = new List<BasisRun>();
+      foreach( (string name, IReadOnlyList<RunResult> runs) in sessions.Select( s => ( s.Name, s.Runs ) ).Concat( input.BasisSessions.Select( b => ( b.Name, (IReadOnlyList<RunResult>)b.Runs ) ) ) )
       {
-         Run = run.Name,
-         OrderInRun = OrderOf( run, target.Name ),
-         PassOrder = target.PassOrder?.ToList(),
-         WarmupErrors = target.WarmupErrors,
-         Errors = target.Errors,
-         ExactRecall = target.ExactRecall,
-         AfterLoad = ToFacts( target.AfterLoad ),
-         AfterSearch = ToFacts( target.AfterSearch ),
-         SegmentLayoutAfterLoad = target.AfterLoad?.Layout,
-         SegmentLayoutAfterSearch = target.AfterSearch?.Layout,
-         Durability = target.Durability,
-         LoadIndexNote = target.LoadIndexNote,
-         SearchSettings = target.SearchSettings,
-         Settled = target.Settled,
-         SettleDetail = target.SettleDetail,
-         MeanMs = mean,
-         MeanSource = meanSource,
-      };
-   }
-
-   /// <summary>
-   /// The mean latency of one search at a time: the recorded mean, else 1000 divided by the QPS
-   /// measured with one searcher (one searcher going back to back finishes one search per mean
-   /// latency).
-   /// </summary>
-   /// <param name="target">The target's result.</param>
-   /// <param name="levels">Concurrency levels, lowest first.</param>
-   /// <returns>The mean in ms and where it came from, or nulls when neither exists.</returns>
-   private static (double? Mean, string? Source) MeanLatency( TargetResult target, IReadOnlyList<int> levels )
-   {
-      if( ConsolidateMath.IsNumber( target.MeanMs ) )
-      {
-         return ( target.MeanMs, "recorded" );
-      }
-
-      double? one = levels.Count > 0 && levels[0] == 1 ? Qps( target, 1 ) : null;
-      return ConsolidateMath.IsNumber( one ) && one > 0 ? ( 1000.0 / one, "1000 / QPS@1" ) : ( null, null );
-   }
-
-   /// <summary>
-   /// Copies an index state into the report's shape.
-   /// </summary>
-   /// <param name="state">The state, or null.</param>
-   /// <returns>The copy, or null.</returns>
-   private static IndexStateFacts? ToFacts( IndexStateValue? state )
-   {
-      return state == null ? null : new IndexStateFacts { Ready = state.Ready, IndexedVectors = state.IndexedVectors, TotalVectors = state.TotalVectors, Detail = state.Detail };
-   }
-
-   /// <summary>
-   /// Ranks every target inside each run, for each metric, then takes the median rank.
-   /// Load rows/s is deliberately not ranked: the loads are a few hundred rows, so they time
-   /// connection and first-call costs more than the engine.
-   /// </summary>
-   /// <param name="summaries">Target summaries, in target order.</param>
-   /// <param name="used">Runs used.</param>
-   /// <param name="levels">Concurrency levels.</param>
-   private static void AddRanks( IReadOnlyList<TargetSummary> summaries, IReadOnlyList<RunResult> used, IReadOnlyList<int> levels )
-   {
-      var metrics = new List<(string Name, Func<TargetResult, double?> Value, bool HigherIsBetter)>
-      {
-         ( "p50Ms", t => t.P50Ms, false ),
-         ( "p95Ms", t => t.P95Ms, false ),
-      };
-      metrics.AddRange( levels.Select( l => ( $"qps@{l}", (Func<TargetResult, double?>)( t => Qps( t, l ) ), true ) ) );
-      metrics.Add( ( "recall", t => t.Recall, true ) );
-      metrics.Add( ( "ndcg", t => t.Ndcg, true ) );
-      foreach( (string name, Func<TargetResult, double?> value, bool higher) in metrics )
-      {
-         var perTarget = summaries.Select( _ => new RankSpread() ).ToList();
-         foreach( RunResult run in used )
+         foreach( RunResult run in runs )
          {
-            int?[] ranks = ConsolidateMath.CompetitionRanks( summaries.Select( s => value( run.Find( s.Name )! ) ).ToList(), higher );
-            for( int i = 0; i < summaries.Count; i++ )
+            if( run.Conditions.MachineControlState != "on" )
             {
-               perTarget[i].PerRun.Add( ranks[i] );
+               throw new ConsolidateRefusal( $"{run.Name} (session {name}) has machineControl {run.Conditions.MachineControl ?? ConsolidateIdentity.NOT_RECORDED}; the basis holds runs with machine control on" );
+            }
+
+            basisRuns.Add( new BasisRun( run, name ) );
+         }
+      }
+
+      List<BasisRun> other = input.OtherRuns.Where( r => r.Conditions.MachineControlState != "on" ).Select( r => new BasisRun( r, "other" ) ).ToList();
+      BasisInfo basis;
+      try
+      {
+         basis = ThresholdBasis.Compute( basisRuns, other, input.Exclusions );
+      }
+      catch( InvalidDataException ex )
+      {
+         throw new ConsolidateRefusal( "the threshold basis cannot be computed: " + ex.Message );
+      }
+
+      basis.Runs = basisRuns.OrderBy( b => b.Folder, StringComparer.Ordinal ).Select( b => new BasisRunInfo
+      {
+         Folder = b.Folder,
+         Seed = b.Seed,
+         Session = b.Session,
+         StartedUtc = b.Run.StartedUtc,
+         Conditions = b.Conditions.ToInfo(),
+         StaleLines = StaleLines( b.Run ),
+      } ).ToList();
+      basis.LeftOut = LeftOut( input );
+      basis.NoMachineControlCount = other.Count;
+      return basis;
+   }
+
+   /// <summary>
+   /// Every other run of the pipeline with the reason it is not in the basis.
+   /// </summary>
+   /// <param name="input">Input.</param>
+   /// <returns>The list, in folder order.</returns>
+   private static List<LeftOutRun> LeftOut( ConsolidateInput input )
+   {
+      List<LeftOutRun> list = input.OtherRuns.Select( r => new LeftOutRun
+      {
+         Folder = r.Name,
+         Reason = r.Conditions.MachineControlState == "on" ? "machineControl on, not in any session given" : $"machineControl {r.Conditions.MachineControl ?? ConsolidateIdentity.NOT_RECORDED}",
+      } ).ToList();
+      list.AddRange( input.Unreadable );
+      return list.OrderBy( l => l.Folder, StringComparer.Ordinal ).ToList();
+   }
+
+   /// <summary>
+   /// The four tables: each metric over the targets that hold it (exact: the targets with an exact pass in every claim run).
+   /// </summary>
+   /// <param name="sessions">Claim sessions.</param>
+   /// <param name="targets">Targets with rows.</param>
+   /// <param name="changed">G3 targets.</param>
+   /// <param name="report">Receives the tables.</param>
+   /// <returns>The per-metric outcomes.</returns>
+   /// <exception cref="ConsolidateRefusal">A target has a metric in some claim runs and not in others.</exception>
+   private static List<MetricOutcome> Tables( List<ClaimSession> sessions, List<string> targets, List<string> changed, ConsolidatedReport report )
+   {
+      List<RunResult> runs = sessions.SelectMany( s => s.Runs ).ToList();
+      var outcomes = new List<MetricOutcome>();
+      foreach( string metric in ClaimMetrics.ALL )
+      {
+         List<string> holding = targets.Where( t => runs.All( r => ClaimMetrics.Value( r.Find( t )!, metric ) != null ) ).ToList();
+         List<string> partial = targets.Where( t => !holding.Contains( t ) && runs.Any( r => ClaimMetrics.Value( r.Find( t )!, metric ) != null ) ).ToList();
+         if( partial.Count > 0 )
+         {
+            throw new ConsolidateRefusal( $"{string.Join( ", ", partial )} has {ClaimMetrics.FieldOf( metric )} in some claim runs and not in others" );
+         }
+
+         MetricOutcome outcome = ClaimRule.Build( metric, sessions, holding.Where( t => !changed.Contains( t ) ).ToList(), holding.Where( changed.Contains ).ToList(), report.Basis.TBp );
+         foreach( MetricRow row in outcome.Table.Rows )
+         {
+            IReadOnlyList<RunResult> shown = row.Status == ClaimRule.ONE_SESSION && sessions.Count == 2 ? sessions[1].Runs : runs;
+            row.Flags = ConsolidateFlags.For( row.Target, metric, shown ).Select( f => new RowFlag { Code = f.Code } ).ToList();
+            if( row.Status == ClaimRule.ONE_SESSION && sessions.Count == 2 )
+            {
+               row.Flags.Insert( 0, new RowFlag { Code = ConsolidateFlags.ONE_SESSION } );
             }
          }
 
-         for( int i = 0; i < summaries.Count; i++ )
+         if( metric == ClaimMetrics.EXACT )
          {
-            perTarget[i].Median = ConsolidateMath.Median( perTarget[i].PerRun.Select( r => (double?)r ) );
-            summaries[i].Ranks[name] = perTarget[i];
-         }
-      }
-   }
-
-   /// <summary>
-   /// Compares target A with target B inside each run, then summarizes the per-run values.
-   /// </summary>
-   /// <param name="a">Target A (numerator).</param>
-   /// <param name="b">Target B (denominator).</param>
-   /// <param name="used">Runs used (each has both).</param>
-   /// <param name="levels">Concurrency levels.</param>
-   /// <returns>The pair.</returns>
-   private static PairSummary Pair( string a, string b, IReadOnlyList<RunResult> used, IReadOnlyList<int> levels )
-   {
-      var pair = new PairSummary { A = a, B = b };
-      foreach( RunResult run in used )
-      {
-         TargetResult ta = run.Find( a )!;
-         TargetResult tb = run.Find( b )!;
-         var row = new PairRun
-         {
-            Run = run.Name,
-            AP50Ms = ta.P50Ms,
-            BP50Ms = tb.P50Ms,
-            P50Ratio = ConsolidateMath.Ratio( ta.P50Ms, tb.P50Ms ),
-            P95Ratio = ConsolidateMath.Ratio( ta.P95Ms, tb.P95Ms ),
-            RecallDifference = ConsolidateMath.Difference( ta.Recall, tb.Recall ),
-            NdcgDifference = ConsolidateMath.Difference( ta.Ndcg, tb.Ndcg ),
-            AOrder = OrderOf( run, a ),
-            BOrder = OrderOf( run, b ),
-         };
-         foreach( int level in levels )
-         {
-            row.AQps[Key( level )] = Qps( ta, level );
-            row.BQps[Key( level )] = Qps( tb, level );
-            row.QpsRatio[Key( level )] = ConsolidateMath.Ratio( Qps( ta, level ), Qps( tb, level ) );
+            outcome.Table.NoExactPass = targets.Where( t => !holding.Contains( t ) ).Select( t => new NoExactPass { Target = t } ).ToList();
          }
 
-         pair.Runs.Add( row );
+         report.Metrics.Add( outcome.Table );
+         outcomes.Add( outcome );
       }
 
-      SummarizePair( pair, levels );
-      return pair;
+      return outcomes;
    }
 
    /// <summary>
-   /// Fills a pair's summaries from its per-run rows.
+   /// Recall per target as whole hits per run.
    /// </summary>
-   /// <param name="pair">The pair, rows filled.</param>
-   /// <param name="levels">Concurrency levels.</param>
-   private static void SummarizePair( PairSummary pair, IReadOnlyList<int> levels )
+   /// <param name="sessions">Claim sessions.</param>
+   /// <param name="targets">Targets.</param>
+   /// <returns>The rows.</returns>
+   /// <exception cref="ConsolidateRefusal">A recall that is not a whole number of hits, or runs that disagree on queryCount x top.</exception>
+   private static List<RecallRow> Recall( List<ClaimSession> sessions, List<string> targets )
    {
-      pair.P50Ratio = Spread.Of( pair.Runs.Select( r => r.P50Ratio ) );
-      pair.P95Ratio = Spread.Of( pair.Runs.Select( r => r.P95Ratio ) );
-      pair.RecallDifference = Spread.Of( pair.Runs.Select( r => r.RecallDifference ) );
-      pair.NdcgDifference = Spread.Of( pair.Runs.Select( r => r.NdcgDifference ) );
-      pair.RunsALowerP50 = pair.Runs.Count( r => r.AP50Ms < r.BP50Ms );
-      foreach( string key in levels.Select( Key ) )
+      var rows = new List<RecallRow>();
+      RunResult first = sessions[0].Runs[0];
+      foreach( string target in targets )
       {
-         pair.QpsRatio[key] = Spread.Of( pair.Runs.Select( r => r.QpsRatio[key] ) );
-         pair.RunsAHigherQps[key] = pair.Runs.Count( r => r.AQps[key] > r.BQps[key] );
-      }
-
-      bool ordered = pair.Runs.Any( r => r.AOrder.HasValue && r.BOrder.HasValue );
-      pair.RunsARanFirst = ordered ? pair.Runs.Count( r => r.AOrder < r.BOrder ) : null;
-   }
-
-   /// <summary>
-   /// A target's exact mode against its default search in each run that timed the exact mode.
-   /// </summary>
-   /// <param name="name">Target name.</param>
-   /// <param name="used">Runs used.</param>
-   /// <returns>The comparison, or null when no run timed an exact mode.</returns>
-   private static ExactVsDefault? Exact( string name, IReadOnlyList<RunResult> used )
-   {
-      var rows = new List<ExactRun>();
-      foreach( RunResult run in used )
-      {
-         TargetResult t = run.Find( name )!;
-         if( t.ExactP50Ms == null )
+         var row = new RecallRow { Target = target, Of = ( first.QueryCount ?? 0 ) * ( first.Top ?? 0 ) };
+         foreach( ClaimSession session in sessions )
          {
-            continue;
+            row.Hits[session.Name] = session.Runs.Select( r => Hits( r, target ) ).ToList();
          }
 
-         rows.Add( new ExactRun
+         if( row.Hits.Values.SelectMany( h => h ).Any( h => h < 0 || h > row.Of ) )
          {
-            Run = run.Name,
-            DefaultP50Ms = t.P50Ms,
-            ExactP50Ms = t.ExactP50Ms,
-            DifferenceMs = ConsolidateMath.Difference( t.ExactP50Ms, t.P50Ms ),
-            Ratio = ConsolidateMath.Ratio( t.ExactP50Ms, t.P50Ms ),
-            ExactRecall = t.ExactRecall,
-            ExactRanFirst = ExactRanFirst( t.PassOrder ),
-         } );
+            throw new ConsolidateRefusal( $"{target} has a hit count outside 0 to {row.Of}: {string.Join( ", ", row.Hits.Values.SelectMany( h => h ) )}" );
+         }
+
+         row.Differs = row.Hits.Values.SelectMany( h => h ).Distinct().Count() > 1;
+         rows.Add( row );
       }
 
-      PairHintValue? hint = used.Select( r => r.Find( name )!.PairHint ).FirstOrDefault( h => h != null );
-      return rows.Count == 0 ? null : new ExactVsDefault
-      {
-         Target = name,
-         Runs = rows,
-         Ratio = Spread.Of( rows.Select( r => r.Ratio ) ),
-         DifferenceMs = Spread.Of( rows.Select( r => r.DifferenceMs ) ),
-         RunsExactSlower = rows.Count( r => r.ExactP50Ms > r.DefaultP50Ms ),
-         DeclaredPair = hint == null ? null : $"{hint.PassA ?? "?"} vs {hint.PassB ?? "?"}",
-         Note = hint?.Note,
-      };
+      return rows;
    }
 
    /// <summary>
-   /// Whether the exact pass ran before the default latency pass, from the recorded pass order.
-   /// </summary>
-   /// <param name="passOrder">Pass names in run order, or null.</param>
-   /// <returns>True or false, or null when either pass is not in the recorded order.</returns>
-   private static bool? ExactRanFirst( IReadOnlyList<string>? passOrder )
-   {
-      if( passOrder == null )
-      {
-         return null;
-      }
-
-      int exact = IndexWhere( passOrder, p => p.StartsWith( "exact", StringComparison.OrdinalIgnoreCase ) );
-      int latency = IndexWhere( passOrder, p => p.Equals( "default@1", StringComparison.OrdinalIgnoreCase ) );
-      latency = latency >= 0 ? latency : IndexWhere( passOrder, p => p.StartsWith( "default", StringComparison.OrdinalIgnoreCase ) );
-      return exact < 0 || latency < 0 ? null : exact < latency;
-   }
-
-   /// <summary>
-   /// The rules the numbers follow, printed next to them.
-   /// </summary>
-   /// <param name="report">The consolidated report (settings and pairs filled).</param>
-   /// <returns>One sentence per rule.</returns>
-   private static List<string> Notes( ConsolidatedReport report )
-   {
-      string rows = report.Settings.Rows.HasValue ? $"{report.Settings.Rows.Value.ToString( "N0", System.Globalization.CultureInfo.InvariantCulture )} rows" : "a few hundred rows";
-      var notes = new List<string>
-      {
-         $"Load rows/s is reported but not ranked and does not feed any comparison: each load wrote {rows}, which is too few to separate engines from connection set-up and first-call cost.",
-         $"Runs were used together only when their build configuration, CPU governor, CPU partition, warm-up method (the warm-up time and count, the settle trial, the extension and the rehearsal as the runs recorded them), exact-mode seconds, seconds per level and every listed target's index description and search settings matched; runs that differed are listed under Runs dropped. Spread is flagged when the largest value is more than {ConsolidateFlags.SPREAD_RATIO.ToString( "0.00", System.Globalization.CultureInfo.InvariantCulture )} times the smallest across runs.",
-      };
-      notes.Add( ConsolidateFraming.BANDS_LINE + " Bands are drawn only from two runs or more." );
-      notes.Add( "Runs of different commands (run-all against bench) are refused, never merged, and nothing is written. A target whose engine hosting differs between the runs (container against native) is refused for that target alone, never merged: it has no row and is named under \"Targets not in this report\" with the reason. The largest-group rule does not apply to either." );
-      notes.Add( "A target whose engine description, recorded engine settings, configuration files (compose file and read-only mounted config, by SHA-256) or durability statement differs between the runs is refused for that target alone, like a different hosting: it has no row and is named under \"Targets not in this report\" with the differing values. A setting no run recorded cannot be compared and shows as missing." );
-      notes.Add( "A segment layout that differs between the runs (the engine's own count after the load or after the searches) does not refuse or drop anything: the target stays in every table and carries the segment-layout-differs-between-runs flag, which names each layout and the runs that had it." );
-      notes.Add( $"Every target the runs hold that has no row in this report (left out of --targets, or refused for a different hosting or engine setup) is named under \"Targets not in this report\" with its reason ({report.Withheld.Count} in this report), so no measured engine is left out unsaid." );
-      if( report.Pairs.Count > 0 )
-      {
-         notes.Add( "Each pair compares two targets that hold their own copy of the data (a separate database, table or collection), so a difference mixes the engine setting with the copy. The exact-versus-default tables compare the two search methods inside one target." );
-      }
-
-      return notes;
-   }
-
-   /// <summary>
-   /// QPS at a level, or null when not measured.
-   /// </summary>
-   /// <param name="t">Target result.</param>
-   /// <param name="level">Concurrency level.</param>
-   /// <returns>QPS or null.</returns>
-   private static double? Qps( TargetResult t, int level )
-   {
-      return t.Qps.TryGetValue( level, out double q ) ? q : null;
-   }
-
-   /// <summary>
-   /// Position (1 = first) of a target in a run's recorded target order, or null.
+   /// A target's recall hits in a run: search.recallHits when recorded (it must then agree with
+   /// recall x queryCount x top), else that product, which must be within 1e-6 of a whole number.
    /// </summary>
    /// <param name="run">The run.</param>
-   /// <param name="name">Target name.</param>
-   /// <returns>The position, or null when the order was not recorded or lacks the target.</returns>
-   private static int? OrderOf( RunResult run, string name )
+   /// <param name="target">Target.</param>
+   /// <returns>The hits.</returns>
+   /// <exception cref="ConsolidateRefusal">No recall, not a whole number of hits, or a recorded count that disagrees.</exception>
+   private static int Hits( RunResult run, string target )
    {
-      if( run.TargetOrder == null )
+      TargetResult t = run.Find( target )!;
+      if( t.Recall is not double recall || run.QueryCount is not int queries || run.Top is not int top )
       {
-         return null;
+         throw new ConsolidateRefusal( $"{run.Name}: {target} has no recall, queryCount or top, so no hit count" );
       }
 
-      int index = IndexWhere( run.TargetOrder, t => string.Equals( t, name, StringComparison.Ordinal ) );
-      return index < 0 ? null : index + 1;
+      double raw = recall * queries * top;
+      double rounded = Math.Round( raw );
+      if( Math.Abs( raw - rounded ) > 1e-6 )
+      {
+         throw new ConsolidateRefusal( $"{run.Name}: {target} recall {recall.ToString( "R", CultureInfo.InvariantCulture )} x {queries} x {top} = {raw.ToString( "R", CultureInfo.InvariantCulture )} is not a whole number of hits" );
+      }
+
+      if( t.RecallHits is int hits && hits != (int)rounded )
+      {
+         throw new ConsolidateRefusal( $"{run.Name}: {target} recallHits {hits} disagrees with recall x queryCount x top = {(int)rounded}" );
+      }
+
+      return (int)rounded;
    }
 
    /// <summary>
-   /// Index of the first item matching, or -1.
+   /// The clock per session and the dropped warnings.
    /// </summary>
-   /// <param name="items">Items.</param>
-   /// <param name="match">Condition.</param>
-   /// <returns>The index or -1.</returns>
-   private static int IndexWhere( IReadOnlyList<string> items, Func<string, bool> match )
+   /// <param name="sessions">Claim sessions.</param>
+   /// <returns>The clock block.</returns>
+   /// <exception cref="ConsolidateRefusal">A recorded clock disagrees with the recomputed one.</exception>
+   private static ClockInfo Clock( List<ClaimSession> sessions )
    {
-      for( int i = 0; i < items.Count; i++ )
+      try
       {
-         if( match( items[i] ) )
+         var clock = new ClockInfo();
+         foreach( ClaimSession session in sessions )
          {
-            return i;
+            clock.PerSession[session.Name] = ConsolidateClock.ForSession( session.Runs );
+         }
+
+         clock.DroppedWarnings = ConsolidateClock.Dropped( sessions.SelectMany( s => s.Runs ) );
+         return clock;
+      }
+      catch( InvalidDataException ex )
+      {
+         throw new ConsolidateRefusal( "clock check: " + ex.Message );
+      }
+   }
+
+   /// <summary>
+   /// The machine block: the refusing fields agree in every claim run by now, so they come from the newest run.
+   /// </summary>
+   /// <param name="claimRuns">Claim runs.</param>
+   /// <param name="differences">The non-refusing differences found earlier.</param>
+   /// <returns>The block.</returns>
+   private static MachineInfo Machine( List<RunResult> claimRuns, List<string> differences )
+   {
+      RunResult last = claimRuns[^1];
+      return new MachineInfo
+      {
+         Cpu = last.MachineCpu,
+         LogicalCpus = last.MachineLogicalCpus,
+         RamGiB = last.MachineRamGiB,
+         Os = last.MachineOs,
+         DotNet = last.MachineDotNet,
+         Governor = last.Conditions.Governor,
+         Partition = last.Conditions.Partition,
+         Differences = differences,
+      };
+   }
+
+   /// <summary>
+   /// Image ids from the newest session that recorded them; they must agree over its runs and equal the recorded pin.
+   /// </summary>
+   /// <param name="sessions">Claim sessions.</param>
+   /// <param name="targets">Targets with rows.</param>
+   /// <returns>One entry per target with an image, in target order.</returns>
+   /// <exception cref="ConsolidateRefusal">A target's image id differs between runs of the session, or from its pin.</exception>
+   private static List<ImageInfo> Images( List<ClaimSession> sessions, List<string> targets )
+   {
+      ClaimSession newest = sessions[^1];
+      string? firstStart = sessions[0].Runs[0].StartedUtc;
+      var images = new List<ImageInfo>();
+      foreach( string target in targets )
+      {
+         List<TargetResult> results = newest.Runs.Select( r => r.Find( target )! ).ToList();
+         List<string> ids = results.Select( t => t.ImageId ).OfType<string>().Distinct( StringComparer.Ordinal ).ToList();
+         if( ids.Count > 1 || ( ids.Count == 1 && results.Any( t => t.ImageId == null ) ) )
+         {
+            throw new ConsolidateRefusal( $"{target} recorded image ids {string.Join( ", ", results.Select( t => t.ImageId ?? ConsolidateIdentity.NOT_RECORDED ) )} in the runs of session {newest.Name}" );
+         }
+
+         if( results.FirstOrDefault( t => t.ImagePinnedId != null && t.ImagePinnedId != t.ImageId ) is TargetResult unpinned )
+         {
+            throw new ConsolidateRefusal( $"{target} ran image {unpinned.ImageId} against its pin {unpinned.ImagePinnedId} in session {newest.Name}" );
+         }
+
+         if( ids.Count == 1 )
+         {
+            string? tagged = results[0].ImageLastTagTimeUtc;
+            images.Add( new ImageInfo { Target = target, Ref = results[0].ImageRef, Id = ids[0], LastTagTimeUtc = tagged, BeforeFirstV7Start = Before( tagged, firstStart ) } );
          }
       }
 
-      return -1;
+      return images;
    }
 
    /// <summary>
-   /// Sum of the values present, or null when none is present.
+   /// Engine settings per target from the newest session's first run.
    /// </summary>
-   /// <param name="values">Values.</param>
-   /// <returns>The sum, or null.</returns>
-   private static int? SumOrNull( IEnumerable<int?> values )
+   /// <param name="sessions">Claim sessions.</param>
+   /// <param name="targets">Targets.</param>
+   /// <returns>The rows (targets that recorded none are left out).</returns>
+   private static List<EngineSettingsRow> Settings( List<ClaimSession> sessions, List<string> targets )
    {
-      int[] present = values.OfType<int>().ToArray();
-      return present.Length == 0 ? null : present.Sum();
+      ClaimSession newest = sessions[^1];
+      return targets.Select( t => ( Target: t, List: newest.Runs[0].Find( t )!.EngineSettingsList ) ).Where( x => x.List.Count > 0 )
+         .Select( x => new EngineSettingsRow { Target = x.Target, Session = newest.Name, Settings = x.List.Select( s => new EngineSettingEntry { Key = s.Key, Value = s.Value, How = s.How } ).ToList() } ).ToList();
    }
 
    /// <summary>
-   /// Distinct non-null texts, in first-seen order.
+   /// The queries block: the first claim run's queries line, and the copied question file checked
+   /// against every claim run that recorded queriesFileSha256.
+   /// Why refuse on a mismatch: the page names the copied file as the list the runs read; a run that
+   /// read another file would make that sentence false.
    /// </summary>
-   /// <param name="values">Texts.</param>
-   /// <returns>The distinct texts.</returns>
-   private static List<string> Distinct( IEnumerable<string?> values )
+   /// <param name="claimRuns">Claim runs.</param>
+   /// <param name="repoRoot">Repository root.</param>
+   /// <returns>The block.</returns>
+   /// <exception cref="ConsolidateRefusal">A run recorded a SHA-256 that differs from the copy's, or the copy is missing while a run recorded one.</exception>
+   private static QueriesInfo Queries( List<RunResult> claimRuns, string repoRoot )
    {
-      return values.OfType<string>().Distinct( StringComparer.Ordinal ).ToList();
+      var info = new QueriesInfo { Recorded = claimRuns[0].Queries, CopyPath = QUESTIONS_COPY };
+      string copy = Path.Combine( repoRoot, QUESTIONS_COPY );
+      info.CopySha256 = File.Exists( copy ) ? EngineFactSheet.FileSha256( copy ) : null;
+      foreach( RunResult run in claimRuns )
+      {
+         if( run.QueriesFileSha256 == null )
+         {
+            info.UnrecordedRuns.Add( run.Name );
+         }
+         else if( string.Equals( run.QueriesFileSha256, info.CopySha256, StringComparison.OrdinalIgnoreCase ) )
+         {
+            info.MatchingRuns.Add( run.Name );
+         }
+         else
+         {
+            throw new ConsolidateRefusal( $"{run.Name} recorded queriesFileSha256 {run.QueriesFileSha256}, but {QUESTIONS_COPY} in {repoRoot} has {info.CopySha256 ?? "no file"}" );
+         }
+      }
+
+      return info;
    }
 
    /// <summary>
-   /// Dictionary key for a concurrency level ("8").
+   /// Fills the counts that sentences cite, so every number a sentence prints is a field of the report.
    /// </summary>
-   /// <param name="level">Level.</param>
-   /// <returns>The key.</returns>
-   private static string Key( int level )
+   /// <param name="report">The report.</param>
+   /// <param name="sessions">Claim sessions.</param>
+   private static void Counts( ConsolidatedReport report, List<ClaimSession> sessions )
    {
-      return level.ToString( System.Globalization.CultureInfo.InvariantCulture );
+      report.RunsPerSession = RUNS_PER_SESSION;
+      report.RunsShown = RUNS_PER_SESSION * sessions.Count;
+      report.ClaimRunCount = sessions.Sum( s => s.Runs.Count );
+      report.ImageTargets = report.Images.Count;
+      report.Basis.RunCount = report.Basis.Runs.Count;
+      report.Basis.LeftOutCount = report.Basis.LeftOut.Count;
+      report.Basis.SetupSplitCount = report.Basis.SetupSplits.Count;
+      report.Guards.G3.ChangedCount = report.Guards.G3.Targets.Count;
+      report.Guards.G3.Limit = MAX_SETUP_CHANGES;
+      if( report.Drift != null )
+      {
+         report.Drift.LargestAbsMoveBp = Math.Abs( report.Drift.Largest?.MoveBp ?? 0 );
+         report.Drift.CloseFromBp = report.Threshold.TBp - ClaimRule.CLOSE_BELOW_BP;
+         report.Drift.CloseCount = report.Drift.CloseToLine.Count;
+         report.Drift.OnLineBp = ClaimRule.ON_LINE_BP;
+         report.Drift.OnLineCount = report.Drift.OnLine.Count;
+      }
+   }
+
+   /// <summary>
+   /// Sets the status and the stop reasons from the guards.
+   /// </summary>
+   /// <param name="report">The report.</param>
+   private static void Status( ConsolidatedReport report )
+   {
+      if( report.Guards.G2.Stopped )
+      {
+         report.StopReasons.Add( "G2: " + string.Join( "; ", report.Guards.G2.Pairs.Select( p => $"{p.Metric} {p.A} ahead of {p.B} in {p.OrderedIn}, medians reversed in {p.ReversedIn}" ) ) );
+      }
+
+      if( report.Guards.G3.Stopped )
+      {
+         report.StopReasons.Add( $"G3: {report.Guards.G3.Targets.Count} targets changed setup between the sessions, more than {MAX_SETUP_CHANGES}: " + string.Join( "; ", report.Guards.G3.Targets.Select( t => $"{t.Target} ({string.Join( ", ", t.Fields )})" ) ) );
+      }
+
+      report.Status = report.StopReasons.Count > 0 ? STOPPED : COMPLETE;
+   }
+
+   /// <summary>
+   /// A run's reference for the report.
+   /// </summary>
+   /// <param name="run">The run.</param>
+   /// <param name="root">The results folder.</param>
+   /// <returns>The reference.</returns>
+   private static RunRef Ref( RunResult run, string root )
+   {
+      string relative = Path.GetRelativePath( root, run.Folder );
+      if( relative.StartsWith( "..", StringComparison.Ordinal ) || Path.IsPathRooted( relative ) || relative.Contains( '.' ) )
+      {
+         throw new ConsolidateRefusal( $"claim run {run.Folder} must lie inside the results folder {root} (give --results-dir), and its folder name may not hold a dot" );
+      }
+
+      return new RunRef { Folder = Path.GetRelativePath( root, run.Folder ), Seed = run.RunSeed, StartedUtc = run.StartedUtc, StaleLines = StaleLines( run ) };
+   }
+
+   /// <summary>
+   /// Lines of a run's results.md that hold a retired framing sentence (hole H4).
+   /// </summary>
+   /// <param name="run">The run.</param>
+   /// <returns>The lines; empty when there is no results.md or no such line.</returns>
+   private static List<StaleLine> StaleLines( RunResult run )
+   {
+      string path = Path.Combine( run.Folder, "results.md" );
+      if( !File.Exists( path ) )
+      {
+         return new List<StaleLine>();
+      }
+
+      string[] lines = File.ReadAllLines( path );
+      var found = new List<StaleLine>();
+      for( int i = 0; i < lines.Length; i++ )
+      {
+         found.AddRange( ConsolidateFraming.RETIRED.Where( r => lines[i].Contains( r, StringComparison.Ordinal ) ).Select( r => new StaleLine { Line = i + 1, Retired = r } ) );
+      }
+
+      return found;
    }
 
    #endregion Private Methods

@@ -1,0 +1,135 @@
+630155 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+630645 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+629323 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+632635 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+632635 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+632590 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+629323 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632635 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632590 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632634 fsync(1<pipe:[2515489]>)         = -1 EINVAL (Invalid argument)
+630645 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632590 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+630155 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632926 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+630155 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+630155 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+633808 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+632926 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+632926 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634024 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+634024 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+634025 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+629323 +++ exited with 0 +++
+632926 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634024 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+634025 fdatasync(11</var/lib/milvus/etcd/member/snap/db> <unfinished ...>
+634058 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632926 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+634024 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+634025 <... fdatasync resumed>)         = 0
+630645 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+634025 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+634025 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632926 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+634025 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632634 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632634 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632634 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632634 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+634024 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634025 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+632634 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+632634 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634025 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+634025 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+632926 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+630155 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+630155 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+632926 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634024 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+634058 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+634058 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+632634 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634058 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634025 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+634025 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+632635 +++ exited with 0 +++
+630645 +++ exited with 0 +++
+634024 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632590 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+634025 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634058 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+634058 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+633808 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632634 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+632634 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+633808 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+633808 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+632634 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+632634 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+632634 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+632590 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632590 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632926 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+634024 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+634024 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+634024 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+634025 fsync(1<pipe:[2515489]>)         = -1 EINVAL (Invalid argument)
+634058 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634025 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634025 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634025 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634024 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+634024 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+632926 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+630155 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+632926 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+632926 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+632926 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+632590 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+632590 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634025 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+632590 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+632590 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634058 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634058 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634058 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+632590 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+632590 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+633808 +++ exited with 0 +++
+630155 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634370 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+634370 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+634369 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+634369 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632590 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632926 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+634369 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632926 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632590 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634370 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+632590 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634370 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+630155 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634369 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+634369 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+630155 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634370 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+634370 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+630155 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632634 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+630155 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+634058 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+634025 fsync(1<pipe:[2515489]>)         = -1 EINVAL (Invalid argument)
+632926 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+634369 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634370 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+634370 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+632590 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632634 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632926 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+634369 --- SIGURG {si_signo=SIGURG, si_code=SI_TKILL, si_pid=8, si_uid=0} ---
+632634 fdatasync(13</var/lib/milvus/etcd/member/wal/0000000000000000-0000000000000000.wal>) = 0
+634058 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0
+634058 fdatasync(11</var/lib/milvus/etcd/member/snap/db>) = 0

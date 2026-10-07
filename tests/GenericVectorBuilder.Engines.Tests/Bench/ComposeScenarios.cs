@@ -234,6 +234,45 @@ public static class ComposeScenarios
       return new DockerComposeCommands( "x.compose.yaml", null, true ).RemoveDescription + "|" + new DockerComposeCommands( "x.compose.yaml", null, false ).RemoveDescription;
    }
 
+   /// <summary>
+   /// Asks "is this engine running" through a fake command runner that answers "docker compose ps" as told.
+   /// </summary>
+   /// <param name="answer">"exit|stdout|stderr", "timeout" for a command that outlives its limit, or "missing" for a sudo that cannot be started.</param>
+   /// <returns>"running|True", "running|False", or "error|" and the message, then "call|" and the command line as run.</returns>
+   public static string[] IsRunning( string answer )
+   {
+      var lines = new List<string>();
+      var calls = new List<string>();
+      Task<ShellResult> Fake( IEnumerable<string> arguments, TimeSpan limit, CancellationToken ct )
+      {
+         calls.Add( $"sudo {string.Join( ' ', arguments )} (limit {limit.TotalMinutes:0} min)" );
+         if( answer == "timeout" )
+         {
+            throw new TimeoutException( "sudo docker compose ps did not finish within 2 minutes." );
+         }
+
+         if( answer == "missing" )
+         {
+            throw new System.ComponentModel.Win32Exception( "No such file or directory" );
+         }
+
+         string[] parts = answer.Split( '|' );
+         return Task.FromResult( new ShellResult( int.Parse( parts[0] ), parts[1].Replace( "\\n", "\n" ), parts.Length > 2 ? parts[2] : string.Empty ) );
+      }
+
+      try
+      {
+         lines.Add( "running|" + ComposeRunner.IsRunningAsync( "/x/deploy/engines/redis.compose.yaml", Fake, CancellationToken.None ).GetAwaiter().GetResult() );
+      }
+      catch( InvalidOperationException ex )
+      {
+         lines.Add( "error|" + ex.Message );
+      }
+
+      lines.AddRange( calls.Select( c => "call|" + c ) );
+      return lines.ToArray();
+   }
+
    #endregion Public Methods
 
    #region Private Methods

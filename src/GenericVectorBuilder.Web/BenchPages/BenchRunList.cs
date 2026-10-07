@@ -14,7 +14,8 @@ namespace GenericVectorBuilder.Web.BenchPages;
 /// <param name="Data">What was searched, e.g. "eShopOnWeb, 524 vectors".</param>
 /// <param name="Engines">How many engines, as text ("19"), or "-" when unknown.</param>
 /// <param name="Queries">What was asked, e.g. "20 labelled questions", or "-".</param>
-public sealed record BenchRunInfo( string Folder, string When, string Data, string Engines, string Queries );
+/// <param name="Marks">The consolidated folders that use this run, each as "folder (role)", best first; empty for a run no folder uses.</param>
+public sealed record BenchRunInfo( string Folder, string When, string Data, string Engines, string Queries, IReadOnlyList<( string Folder, string Role )>? Marks = null );
 
 /// <summary>
 /// Builds the "All runs" list from the results folders.
@@ -42,50 +43,71 @@ public static class BenchRunList
    #region Public Methods
 
    /// <summary>
-   /// Describes one folder from its results.json, or its consolidated.json, or its file names.
+   /// Describes one folder from its results.json, or its consolidated.json, or its file names, and marks it with
+   /// the consolidated folders that use it.
    /// </summary>
    /// <param name="folder">The folder.</param>
+   /// <param name="facts">Every consolidated folder's facts (see <see cref="BenchRunUse.Scan"/>); null for none.</param>
    /// <returns>The row.</returns>
-   public static BenchRunInfo Describe( DirectoryInfo folder )
+   public static BenchRunInfo Describe( DirectoryInfo folder, IReadOnlyList<BenchFolderFacts>? facts = null )
    {
       string results = Path.Combine( folder.FullName, "results.json" );
       string consolidated = Path.Combine( folder.FullName, "consolidated.json" );
+      IReadOnlyList<( string Folder, string Role )> marks = facts == null ? Array.Empty<( string, string )>() : BenchRunUse.MarksFor( facts, folder.Name ).Select( m => ( m.Folder.Folder, m.Role ) ).ToList();
       try
       {
          if( File.Exists( results ) )
          {
-            return FromResults( folder.Name, ReadCapped( results ) );
+            return FromResults( folder.Name, ReadCapped( results ) ) with { Marks = marks };
          }
 
          if( File.Exists( consolidated ) )
          {
-            return FromConsolidated( folder.Name, ReadCapped( consolidated ) );
+            BenchFolderFacts own = facts?.FirstOrDefault( f => f.Folder == folder.Name ) ?? throw new InvalidDataException( "consolidated.json was not scanned." );
+            return own.Error != null ? throw new InvalidDataException( own.Error ) : FromConsolidated( own );
          }
       }
       catch( Exception ex ) when( ex is JsonException or IOException or InvalidDataException or UnauthorizedAccessException )
       {
-         return new BenchRunInfo( folder.Name, WhenFromName( folder.Name ), $"unreadable: {ex.Message}", "-", "-" );
+         return new BenchRunInfo( folder.Name, WhenFromName( folder.Name ), $"unreadable: {ex.Message}", "-", "-", marks );
       }
 
       string[] files = folder.GetFiles().Select( f => f.Name ).OrderBy( f => f, StringComparer.Ordinal ).ToArray();
-      return new BenchRunInfo( folder.Name, WhenFromName( folder.Name ), files.Length == 0 ? "empty folder" : string.Join( ", ", files ), "-", "-" );
+      return new BenchRunInfo( folder.Name, WhenFromName( folder.Name ), files.Length == 0 ? "empty folder" : string.Join( ", ", files ), "-", "-", marks );
    }
 
    /// <summary>
-   /// Renders the rows as a table styled like the run pages' tables, each date linking to its run.
+   /// Renders the rows as a table styled like the run pages' tables, each date linking to its run, with the
+   /// folders that use a run in the last column.
    /// </summary>
    /// <param name="runs">Rows, already in display order.</param>
    /// <returns>HTML fragment.</returns>
    public static string Html( IEnumerable<BenchRunInfo> runs )
    {
-      var html = new StringBuilder( "<div class=\"preview\"><table class=\"bench-table bench-runs\"><thead><tr><th>When (UTC)</th><th>Data</th><th class=\"n\">Engines</th><th>Queries</th></tr></thead><tbody>" );
+      var html = new StringBuilder( "<div class=\"preview\"><table class=\"bench-table bench-runs\"><thead><tr><th>When (UTC)</th><th>Data</th><th class=\"n\">Engines</th><th>Queries</th><th>" + BenchLegends.USED_BY + "</th></tr></thead><tbody>" );
       foreach( BenchRunInfo run in runs )
       {
          html.Append( $"<tr><td><a href=\"/bench-results/{Enc( run.Folder )}\" title=\"{Enc( run.Folder )}\">{Enc( run.When )}</a></td>" );
-         html.Append( $"<td>{Enc( run.Data )}</td><td class=\"n\">{Enc( run.Engines )}</td><td>{Enc( run.Queries )}</td></tr>" );
+         html.Append( $"<td>{Enc( run.Data )}</td><td class=\"n\">{Enc( run.Engines )}</td><td>{Enc( run.Queries )}</td><td>{MarkLinks( run.Marks )}</td></tr>" );
       }
 
       return html.Append( "</tbody></table></div>" ).ToString();
+   }
+
+   /// <summary>
+   /// The folders that use a run as links, each folder once with the roles the run plays there ("v7, basis").
+   /// </summary>
+   /// <param name="marks">The marks, or null.</param>
+   /// <returns>HTML fragment; "-" when no folder uses the run.</returns>
+   public static string MarkLinks( IReadOnlyList<( string Folder, string Role )>? marks )
+   {
+      if( marks is not { Count: > 0 } )
+      {
+         return "-";
+      }
+
+      return string.Join( ", ", marks.GroupBy( m => m.Folder, StringComparer.Ordinal )
+         .Select( g => $"<a href=\"/bench-results/{Enc( g.Key )}\">{Enc( g.Key )}</a> ({Enc( string.Join( ", ", g.Select( m => m.Role ).Distinct( StringComparer.Ordinal ) ) )})" ) );
    }
 
    /// <summary>
@@ -134,31 +156,36 @@ public static class BenchRunList
    }
 
    /// <summary>
-   /// A row from consolidated.json: medians across runs, one engine per top-level key.
+   /// A row from a consolidated folder's facts: its label by kind, how many runs it uses and how many engines.
    /// </summary>
-   /// <param name="folder">Folder name.</param>
-   /// <param name="json">consolidated.json text.</param>
+   /// <param name="facts">The folder's facts.</param>
    /// <returns>The row.</returns>
-   private static BenchRunInfo FromConsolidated( string folder, string json )
+   private static BenchRunInfo FromConsolidated( BenchFolderFacts facts )
    {
-      BenchSummary summary = BenchSummaryReader.FromConsolidated( json );
-      int engines = summary.Ranked.Count + summary.NoResult.Count;
-      return new BenchRunInfo( folder, WhenFromName( folder ), ConsolidatedLabel( folder, summary.Runs ), engines.ToString( CultureInfo.InvariantCulture ), "-" );
+      return new BenchRunInfo( facts.Folder, WhenFromName( facts.Folder ), ConsolidatedLabel( facts ), facts.EngineCount.ToString( CultureInfo.InvariantCulture ), "-" );
    }
 
    /// <summary>
-   /// What a folder of medians is, by its name: only an exact "published-yyyy-mm-dd" is called published, a
-   /// "blocked-" folder says it was blocked, and any other name says it is not a published set.
-   /// Why not "Published" for all of them: a blocked set listed as published medians reads as the result.
+   /// What a folder of medians is, by its name and the shape of its file: only an exact "published-yyyy-mm-dd" is
+   /// called published, and every other kind says what it is. A file in a shape older than v8 says so.
+   /// Why not "Published" for all of them: a blocked set listed as published medians reads as the result. A folder named "published-" whose file is in an
+   /// older shape is not called published either: the page draws no result from it, and the label says so.
    /// </summary>
-   /// <param name="folder">Folder name.</param>
-   /// <param name="runs">How many runs the medians are over.</param>
+   /// <param name="facts">The folder's facts.</param>
    /// <returns>The text for the Data column.</returns>
-   private static string ConsolidatedLabel( string folder, int runs )
+   private static string ConsolidatedLabel( BenchFolderFacts facts )
    {
-      return BenchFolderNames.PublishedDate( folder ) != null ? $"Published medians of {runs} runs"
-         : BenchFolderNames.IsBlocked( folder ) ? $"Blocked medians of {runs} runs (an independent review blocked them; not published)"
-         : $"Medians of {runs} runs (not a published set)";
+      int runs = facts.Runs.Where( r => !r.IsBasis ).Select( r => r.Run ).Distinct( StringComparer.Ordinal ).Count();
+      string what = facts.Shape == BenchShape.Consolidated ? $"medians of {runs} runs" : "medians, older format";
+      return facts.Kind switch
+      {
+         BenchFolderKind.Published when facts.Shape != BenchShape.Consolidated => $"{char.ToUpperInvariant( what[0] )}{what[1..]} (not shown as a result)",
+         BenchFolderKind.Published => $"Published {what}",
+         BenchFolderKind.Candidate => $"Candidate {what} (not published)",
+         BenchFolderKind.Withdrawn => $"Withdrawn {what} (not the current result)",
+         BenchFolderKind.Blocked => $"Blocked {what} (marked blocked; not published)",
+         _ => $"{char.ToUpperInvariant( what[0] )}{what[1..]} (not a published set)",
+      };
    }
 
    /// <summary>

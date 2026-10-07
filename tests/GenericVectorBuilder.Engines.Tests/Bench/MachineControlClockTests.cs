@@ -7,13 +7,14 @@ namespace GenericVectorBuilder.Engines.Tests.Bench;
 /// turbo off and the uncore limit pinned for the run (recorded before the change), every CPU's
 /// ceiling the same, the clock put back exactly by the run's own restore, by the next start after
 /// a crash and by restore-machine, a refusal that changes nothing when the clock cannot be
-/// pinned, each pass's average clock per CPU group in the notes, and a pass more than 1% off the
-/// pinned clock flagged.
+/// pinned, each pass's median and average clock per CPU group in the notes, and a pass whose
+/// median on a group is more than 1% off the pinned clock flagged.
 /// Why these get tests: the v6 runs ran some engines about 2.9% faster than others, next to a 3%
 /// tie band, because the turbo clock followed the code the cores ran (AVX2 code on any core held
 /// every core at the base clock); with turbo off the uncore clock then followed the load instead.
 /// A clock change left behind after a crash would skew every later run on the box.
 /// </summary>
+[Collection( TimingCollection.NAME )]
 public class MachineControlClockTests
 {
    #region Data Members
@@ -32,8 +33,8 @@ public class MachineControlClockTests
    /// 3600000 kHz ceiling before the write), every CPU's ceiling reads 3500 MHz, and afterwards
    /// every value reads exactly as before with no file left and no ceiling written by hand (the
    /// kernel moves them back). The pass timed at the base clock is not flagged; the pass timed at
-   /// 3592 MHz is, in its notes and in the run's; the summary note states the pinned clock; no
-   /// new field reaches results.json.
+   /// 3592 MHz is, in its notes and in the run's; the summary note states the pinned clock; the
+   /// passes' means and the pinned clock stay out of results.json.
    /// </summary>
    [Fact]
    public async Task Run_PinsTheClockAndPutsItBack()
@@ -54,7 +55,7 @@ public class MachineControlClockTests
       Assert.Contains( "default@1 3491/3491 MHz, average 3491.0/3491.0, performance", steadyClock );
       Assert.Contains( "the clock was pinned at 3500 MHz (turbo off)", steadyClock );
       Assert.DoesNotContain( (string[])r.SteadyNotes, n => n.Contains( "clock off", StringComparison.Ordinal ) );
-      const string TURBO_WARNING = "WARNING: clock off its pinned value during turbo default@1: the engine CPUs averaged 3592 MHz, +2.6% against the pinned 3500 MHz; the client CPUs averaged 3592 MHz, +2.6% against the pinned 3500 MHz (limit 1%)";
+      const string TURBO_WARNING = "WARNING: clock off its pinned value during turbo default@1: the median on the engine CPUs was 3592 MHz, +2.6% against the pinned 3500 MHz; the median on the client CPUs was 3592 MHz, +2.6% against the pinned 3500 MHz (limit 100 bp, 1%)";
       Assert.Contains( (string[])r.TurboNotes, n => n.StartsWith( TURBO_WARNING, StringComparison.Ordinal ) );
       string[] runNotes = r.RunNotes;
       Assert.Contains( runNotes, n => n.StartsWith( TURBO_WARNING, StringComparison.Ordinal ) );
@@ -257,9 +258,11 @@ public class MachineControlClockTests
    }
 
    /// <summary>
-   /// Only a pinned pass whose average on a CPU group is more than 1% off the pinned clock, or
-   /// that has no clock reading, is flagged (1.1% off is, exactly 1.0% is not); an unpinned pass
-   /// never is. The clock note gives the averages and the pinned clock, or says it was not pinned.
+   /// Only a pinned pass whose median on a CPU group is more than 100 bp (1%) off the pinned
+   /// clock, or that has no reading on a group, is flagged (1.1% off is, exactly 1.0% is not); a
+   /// pass whose means are 9% low but whose medians are on the clock is not; an unpinned pass
+   /// never is. The unread warning carries both the contract's flag words ("clock not read") and
+   /// "no clock was read during". The clock note gives the medians, the averages and the rule.
    /// </summary>
    [Fact]
    public void Flags_OnlyPassesMoreThanOnePercentOff()
@@ -267,13 +270,13 @@ public class MachineControlClockTests
       string[][] r = (string[][])MachineControlCompiler.Call( "ClockFlags" );
       string[] warnings = r[1];
       Assert.Equal( 2, warnings.Length );
-      Assert.StartsWith( "WARNING: clock off its pinned value during a default@8: the engine CPUs averaged 3540 MHz, +1.1% against the pinned 3500 MHz (limit 1%)", warnings[0] );
-      Assert.Equal( "WARNING: no clock was read during b exact, so it is not known whether it ran at the pinned 3500 MHz.", warnings[1] );
+      Assert.Equal( "WARNING: clock off its pinned value during a default@8: the median on the engine CPUs was 3540 MHz, +1.1% against the pinned 3500 MHz (limit 100 bp, 1%); this pass is not comparable with passes at the pinned clock.", warnings[0] );
+      Assert.Equal( "WARNING: clock not read during b exact: no clock was read during it on the engine CPUs and the client CPUs, so it is not known whether it ran at the pinned 3500 MHz.", warnings[1] );
       Assert.Contains( warnings[0], r[0] );
       Assert.Contains( warnings[1], r[0] );
-      Assert.DoesNotContain( r[0], f => f.Contains( "during c ", StringComparison.Ordinal ) || f.Contains( "during b default@1", StringComparison.Ordinal ) );
+      Assert.DoesNotContain( r[0], f => f.Contains( "during c ", StringComparison.Ordinal ) || f.Contains( "during b default@1", StringComparison.Ordinal ) || f.Contains( "during d ", StringComparison.Ordinal ) );
       Assert.Contains( "default@1 3492/3492 MHz, average 3491.8/3491.8, performance", r[2][0] );
-      Assert.Contains( "the clock was pinned at 3500 MHz (turbo off), and a pass whose average on either group is more than 1% off it is flagged", r[2][0] );
+      Assert.Contains( "the clock was pinned at 3500 MHz (turbo off), and a pass whose median on either group is more than 100 bp (1%) off it, or that has no reading on a group, is flagged", r[2][0] );
       Assert.Contains( "the clock was not pinned", r[2][1] );
    }
 

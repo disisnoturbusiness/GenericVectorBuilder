@@ -24,8 +24,8 @@ public sealed class MachineControlOptions
 
    /// <summary>
    /// CPUs of outside work above which the box counts as busy. Why 0.3: the review of
-   /// 2026-10-04 found passes within about 2% of a quiet box only at 0.3 CPUs of outside work
-   /// or less, while the old limit of 1.5 let 5-16% slowdowns through unflagged.
+   /// 2026-10-04 found passes that matched a quiet box only at 0.3 CPUs of outside work or less,
+   /// while the old limit of 1.5 let 5-16% slowdowns through unflagged.
    /// </summary>
    public double BusyThreshold { get; init; } = 0.3;
 
@@ -57,8 +57,10 @@ public sealed class MachineControlOptions
 /// under test on two physical cores and the client on the other two, and no pass's warm-up
 /// started while other work keeps the box busy. It records the
 /// governor, the split, each engine's pinning, the CPU idle settings, how each target was
-/// reached, and every CPU's clock per pass in results.json; each pass's average clock per CPU
-/// group, and any pass more than 1% off the pinned clock, are in the notes.
+/// reached, the clock as fields (conditions.clock), the thermal throttle counters, every CPU's
+/// clock per pass and each pass's engine CPU per search in results.json; each pass's median clock
+/// per CPU group, and any pass more than 1% off the pinned clock or with no reading, are in the
+/// notes (the rule is <see cref="ClockRule"/>).
 /// Every change is written to a state file (the clock to its clock record beside it, see
 /// <see cref="ClockStore"/>) before it is made and put back in a finally block; a run that dies
 /// without its finally leaves the files, and the next start (or the restore-machine command)
@@ -107,6 +109,8 @@ public sealed class MachineControl : IDisposable
    private ClockSettings? _clockAfterRestore;
    private ( UncoreLimit? Limit, string Text ) _uncoreAtEnd = ( null, "not read" );
    private ( UncoreLimit? Limit, string Text ) _uncoreAfterRestore = ( null, "not read" );
+   private readonly Dictionary<string, ThrottleCounts> _throttleAtTargetStart = new( StringComparer.Ordinal );
+   private readonly Dictionary<string, ThrottleCounts> _throttleAtFirstWarmup = new( StringComparer.Ordinal );
 
    #endregion Data Members
 
@@ -166,10 +170,13 @@ public sealed class MachineControl : IDisposable
       conditions.StateFile = Path.GetFullPath( options.StateFile );
       if( !options.Enabled )
       {
+         IReadOnlyList<int> all = AllCpus( system );
+         ClockSettings found = ClockControl.Read( system, all );
          conditions.MachineControl = "off (" + options.DisabledReason + ")";
-         conditions.Governor = GovernorControl.Summarize( GovernorControl.Read( system, AllCpus( system ) ) );
-         conditions.CpuIdle = CpuIdleReader.Read( system, AllCpus( system ) );
-         return new MachineControl( conditions, options, system, log, null, null ) { _ct = ct, _clockFound = ClockControl.Read( system, AllCpus( system ) ) };
+         conditions.Governor = GovernorControl.Summarize( GovernorControl.Read( system, all ) );
+         conditions.CpuIdle = CpuIdleReader.Read( system, all );
+         conditions.Clock = ClockRecord.ForUnpinned( found, ThermalThrottle.Read( system, all ), ClockRule.RuleText( null, options.SampleInterval ) );
+         return new MachineControl( conditions, options, system, log, null, null ) { _ct = ct, _clockFound = found };
       }
 
       var store = new MachineStateStore( options.StateFile );
@@ -310,14 +317,17 @@ public sealed class MachineControl : IDisposable
          return;
       }
 
+      ThrottleCounts start = ThermalThrottle.Read( _system, _partition!.OnlineCpus );
       _current = _pinner != null
          ? await _pinner.PinTargetAsync( name, hosting, composePath, ct )
-         : new TargetPinning { Target = name, Hosting = hosting, Method = "none: the CPUs were not split" };
-      _sampler?.SetEngineGroups( _pinner?.EngineGroups ?? new List<string>() );
+         : new TargetPinning { Target = name, Hosting = hosting, Method = "none: the CPUs were not split", Kind = "none" };
+      SwitchEngineGroups( _pinner?.EngineGroups ?? new List<string>(), _pinner?.DockerdGroup );
       lock( _passLock )
       {
          Conditions.Engines.Add( _current );
          _outsideFrom = DateTime.UtcNow;
+         _throttleAtTargetStart[name] = start;
+         _throttleAtFirstWarmup.Remove( name );
       }
 
       _log( $"  machine: {name}: {_current.Method}{( _current.Changes.Count > 0 ? "; " + string.Join( "; ", _current.Changes ) : string.Empty )}{( _current.Problems.Count > 0 ? "; PROBLEM: " + string.Join( "; ", _current.Problems ) : string.Empty )}" );
@@ -336,11 +346,13 @@ public sealed class MachineControl : IDisposable
          return;
       }
 
+      RecordTargetThrottle( name, ThermalThrottle.Read( _system, _partition!.OnlineCpus ) );
       TargetPinning? pinning = _current;
       List<string> problems = await MachineRestorer.RestorePinsAsync( _system, _keeper, name, line => Restored( line, pinning ), CancellationToken.None );
       pinning?.Problems.AddRange( problems.Select( p => "could not put back yet (retried at the end): " + p ) );
-      _sampler?.SetEngineGroups( Array.Empty<string>() );
+      SwitchEngineGroups( Array.Empty<string>(), null );
       _current = null;
+      RefreshEngineCpuRule();
    }
 
    /// <summary>
@@ -366,6 +378,7 @@ public sealed class MachineControl : IDisposable
          ClosePass( now, "the next warm-up" );
          string target = warmup.Groups["target"].Value;
          string pass = warmup.Groups["pass"].Value;
+         SnapshotFirstWarmup( target );
          double already;
          lock( _passLock )
          {
@@ -454,6 +467,7 @@ public sealed class MachineControl : IDisposable
       }
 
       _sampler?.AttachClientCpu( passes, result.Notes, DateTime.UtcNow );
+      _sampler?.AttachEngineCpu( passes, result.Notes, EngineCpuNullReason( pinning ) );
       Dictionary<int, double> clientCpu = MachineFlags.ClientCpuByLevel( passes );
       if( result.Search != null && clientCpu.Count > 0 )
       {
@@ -473,7 +487,7 @@ public sealed class MachineControl : IDisposable
          result.Notes.Add( clock );
       }
 
-      result.Notes.AddRange( MachineFlags.ClockWarnings( passes ) );
+      result.Notes.AddRange( MachineFlags.ClockWarnings( passes, _partition is { IsSplit: true } ) );
       result.Notes.AddRange( passes.Where( p => p.BusyBox ).Select( p => $"WARNING: busy box during {p.Pass}: {p.BusyReason}." ) );
    }
 
@@ -495,15 +509,28 @@ public sealed class MachineControl : IDisposable
       Conditions.SamplingError ??= _sampler?.LastError;
       Conditions.CpuAccounting = _sampler?.Accounting.Description;
       Conditions.LoadAverageEnd = MachineFacts.ReadLoadAverage();
-      Conditions.CpuIdleAtEnd = CpuIdleReader.Read( _system, _partition?.OnlineCpus ?? AllCpus( _system ) );
+      IReadOnlyList<int> cpus = _partition?.OnlineCpus ?? AllCpus( _system );
+      Conditions.CpuIdleAtEnd = CpuIdleReader.Read( _system, cpus );
+      _clockAtEnd = ClockControl.Read( _system, cpus );
+      if( Conditions.Clock != null )
+      {
+         Conditions.Clock.Throttle.AtEnd = ThermalThrottle.Read( _system, cpus );
+         Conditions.Clock.NoTurbo.AtEnd = ClockRecord.NoTurboValue( _clockAtEnd );
+      }
+
       if( _keeper == null )
       {
          return;
       }
 
       Conditions.GovernorAtEnd = GovernorControl.Summarize( GovernorControl.Read( _system, _partition!.OnlineCpus ) );
-      _clockAtEnd = ClockControl.Read( _system, _partition.OnlineCpus );
       _uncoreAtEnd = await ReadUncoreAsync();
+      if( Conditions.Clock != null )
+      {
+         Conditions.Clock.UncoreMsr620.AtEnd = ClockRecord.Msr( _uncoreAtEnd.Limit );
+      }
+
+      RefreshEngineCpuRule();
       await RestoreClientAsync();
       Conditions.RestoreProblems.AddRange( await MachineRestorer.RestoreAllAsync( _system, _keeper, line => Restored( line, null ), CancellationToken.None ) );
       Conditions.RestoreProblems.AddRange( await RestoreClockAsync() );
@@ -528,6 +555,7 @@ public sealed class MachineControl : IDisposable
    private async Task TakeOverAsync( CancellationToken ct )
    {
       CpuPartition partition = _partition!;
+      ThrottleCounts throttleAtStart = ThermalThrottle.Read( _system, partition.OnlineCpus );
       Conditions.MachineControl = "on";
       Conditions.ThreadSiblings = partition.ThreadSiblings.ToList();
       Conditions.PartitionProblem = partition.Problem;
@@ -539,6 +567,9 @@ public sealed class MachineControl : IDisposable
       Conditions.GovernorBefore = GovernorControl.Summarize( before );
       Conditions.Governor = GovernorControl.Summarize( GovernorControl.Read( _system, partition.OnlineCpus ) );
       _clock = await ClockControl.ApplyAsync( _system, _clockStore!, _keeper!.State, partition.OnlineCpus, ct );
+      Conditions.Clock = ClockRecord.ForPinned( _clock, throttleAtStart, ClockRule.RuleText( partition, _options.SampleInterval ) );
+      Conditions.EngineCpu = FindEngineCpuCgroups( new EngineCpuRecord() );
+      RefreshEngineCpuRule();
       _sampler = new MachineSampler( _system, partition.OnlineCpus, await ClockTicksAsync( ct ), _options.SampleInterval );
       _sampler.Start();
       _outsideFrom = DateTime.UtcNow;
@@ -560,7 +591,8 @@ public sealed class MachineControl : IDisposable
       try
       {
          await _pinner.PinContainersAsync( pinning, composePath, ct );
-         _sampler?.SetEngineGroups( _pinner.EngineGroups );
+         pinning.Cgroups = _pinner.EngineGroups.ToList();
+         SwitchEngineGroups( _pinner.EngineGroups, _pinner.DockerdGroup );
          lock( _passLock )
          {
             _outsideFrom = DateTime.UtcNow;
@@ -571,8 +603,11 @@ public sealed class MachineControl : IDisposable
       catch( Exception ex ) when( ex is InvalidOperationException or TimeoutException or IOException or FormatException )
       {
          pinning.Problems.Add( ex.Message );
+         EnginePinner.MarkIncompleteCgroups( pinning, ex.Message );
          _log( $"  machine: {pinning.Target} could not be pinned after its start: {ex.Message}" );
       }
+
+      Conditions.EngineCpu = FindEngineCpuCgroups( Conditions.EngineCpu ?? new EngineCpuRecord() );
    }
 
    /// <summary>
@@ -725,6 +760,7 @@ public sealed class MachineControl : IDisposable
 
       DateTime end = open.LastResult ?? now;
       ( List<CpuMhz> cpus, int samples, bool nearest ) = _sampler.Frequencies( open.Start, end );
+      bool split = _partition is { IsSplit: true };
       double? during = _sampler.OutsideLoadBetween( open.Start, end );
       bool busyDuring = during > _options.BusyThreshold;
       PassGate gate = open.Gate;
@@ -739,8 +775,8 @@ public sealed class MachineControl : IDisposable
          Governor = GovernorControl.Summarize( GovernorControl.Read( _system, _sampler.Cpus ) ),
          FrequencySamples = samples,
          NearestSample = nearest,
-         EngineMhzMedian = MedianOf( cpus, _partition?.EngineCpus ),
-         ClientMhzMedian = MedianOf( cpus, _partition?.ClientCpus ),
+         EngineMhzMedian = split ? ClockRule.GroupMedian( cpus, _partition!.EngineCpus ) : null,
+         ClientMhzMedian = ClockRule.GroupMedian( cpus, split ? _partition!.ClientCpus : _sampler.Cpus ),
          EngineMhzMean = _partition is { IsSplit: true } ? _sampler.MeanMhz( open.Start, end, _partition.EngineCpus ) : null,
          ClientMhzMean = _sampler.MeanMhz( open.Start, end, _partition is { IsSplit: true } ? _partition.ClientCpus : _sampler.Cpus ),
          PinnedMhz = _clock?.PinnedMhz,
@@ -756,6 +792,9 @@ public sealed class MachineControl : IDisposable
          BusyBox = gate.BusyReason != null || busyDuring,
          BusyReason = gate.BusyReason ?? ( busyDuring ? string.Create( CultureInfo.InvariantCulture, $"processes outside the benchmark used {during:0.00} CPUs on average during the pass, above the limit of {_options.BusyThreshold:0.0#}" ) : null ),
       };
+      ClockVerdict verdict = ClockRule.Judge( pass, split );
+      pass.ClockRead = verdict.Read;
+      pass.ClockOff = verdict.Off;
       lock( _passLock )
       {
          Conditions.Passes.Add( pass );
@@ -783,15 +822,119 @@ public sealed class MachineControl : IDisposable
    }
 
    /// <summary>
-   /// The median of the per-CPU medians of a set of CPUs.
+   /// Takes one sample with the cgroups followed so far, then hands the sampler the new set. Why
+   /// the sample: a pass's engine CPU is interpolated between the ledger samples either side of its
+   /// window's end, and both must belong to the set that was followed during the pass; without it,
+   /// a target whose last pass ends less than one sample interval before the target is left (an
+   /// always-on engine whose table drop is quick) would find only a sample of the next set after
+   /// its window and get no figure. Called only at a target's start and end and after an engine
+   /// started, never inside a timed pass, so what the timed passes see is unchanged.
    /// </summary>
-   /// <param name="cpus">Per CPU figures.</param>
-   /// <param name="set">The CPUs to take, or null.</param>
-   /// <returns>MHz, or null when none of the CPUs was sampled.</returns>
-   private static int? MedianOf( List<CpuMhz> cpus, IReadOnlyList<int>? set )
+   /// <param name="groups">The cgroup folders to follow from now on.</param>
+   /// <param name="dockerdGroup">dockerd's folder when it is one of them, else null.</param>
+   private void SwitchEngineGroups( IEnumerable<string> groups, string? dockerdGroup )
    {
-      List<int> medians = cpus.Where( c => set != null && set.Contains( c.Cpu ) ).Select( c => c.Median ).OrderBy( m => m ).ToList();
-      return medians.Count == 0 ? null : MachineSampler.Median( medians );
+      if( _sampler == null )
+      {
+         return;
+      }
+
+      _sampler.Tick( DateTime.UtcNow );
+      _sampler.SetEngineGroups( groups, dockerdGroup );
+   }
+
+   /// <summary>
+   /// Reads the thermal throttle counters at a target's first warm-up line, once per target: a
+   /// second warm-up line of the same target (a later pass, or the same pass again after a settle
+   /// extension) never replaces it. Why there: it is the last moment before the target's first
+   /// timed pass that is outside every timed window (the previous pass was just closed).
+   /// </summary>
+   /// <param name="target">Target name from the warm-up line.</param>
+   private void SnapshotFirstWarmup( string target )
+   {
+      CpuPartition? partition = _partition;
+      lock( _passLock )
+      {
+         if( partition == null || !_throttleAtTargetStart.ContainsKey( target ) || _throttleAtFirstWarmup.ContainsKey( target ) )
+         {
+            return;
+         }
+      }
+
+      ThrottleCounts counts = ThermalThrottle.Read( _system, partition.OnlineCpus );
+      lock( _passLock )
+      {
+         _throttleAtFirstWarmup.TryAdd( target, counts );
+      }
+   }
+
+   /// <summary>
+   /// Records a target's thermal throttle rise from its start (and from its first warm-up line) to
+   /// its end in conditions.throttleByTarget.
+   /// </summary>
+   /// <param name="name">Target name.</param>
+   /// <param name="end">The counters at the target's end.</param>
+   private void RecordTargetThrottle( string name, ThrottleCounts end )
+   {
+      lock( _passLock )
+      {
+         Conditions.ThrottleByTarget[name] = ThrottleRise.ForTarget( _throttleAtTargetStart.GetValueOrDefault( name ), _throttleAtFirstWarmup.GetValueOrDefault( name ), end );
+      }
+   }
+
+   /// <summary>
+   /// Why a target can have no engine CPU per search at all, from how it was pinned; null when its
+   /// cgroups were followed and its figures come from the ledger.
+   /// </summary>
+   /// <param name="pinning">The target's pinning, or null.</param>
+   /// <returns>The reason, or null.</returns>
+   private static string? EngineCpuNullReason( TargetPinning? pinning )
+   {
+      return pinning switch
+      {
+         null => "no pinning record was kept for this target, so no cgroup of its engine was followed",
+         { Kind: "embedded" } => "embedded engine: it runs inside this client process (its CPU is part of clientCpuMsPerSearch), so it has no cgroup of its own",
+         { Kind: "compose" or "sql" or "qdrant", EngineCpuProblem: string problem } => $"the engine's containers could not all be found and pinned ({problem}), so its followed cgroups may be incomplete",
+         { Kind: "compose" or "sql" or "qdrant" } => null,
+         _ => $"no cgroup of this target's engine was followed ({pinning.Method})",
+      };
+   }
+
+   /// <summary>
+   /// Finds dockerd's cgroup and the processes in it, and the cgroups of the containerd-shim
+   /// processes running now, for the engine CPU record. Read at the start of the run and after each
+   /// compose engine started (when its shim exists), never by the sampler.
+   /// </summary>
+   /// <param name="record">The record to fill (shim cgroups seen earlier are kept).</param>
+   /// <returns>The record.</returns>
+   private EngineCpuRecord FindEngineCpuCgroups( EngineCpuRecord record )
+   {
+      if( ProcessInfo.FindByName( _system, "dockerd" ).FirstOrDefault() is int dockerd and > 0 && ProcessInfo.CgroupFolder( _system, dockerd ) is string folder )
+      {
+         record.DockerdCgroup = folder;
+         string[] pids = _system.ReadFile( folder + "/cgroup.procs" )?.Split( '\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries ) ?? Array.Empty<string>();
+         record.DockerdCgroupProcesses = pids.Select( p => int.TryParse( p, NumberStyles.None, CultureInfo.InvariantCulture, out int pid ) ? ProcessInfo.Name( _system, pid ) : null )
+            .OfType<string>().Distinct( StringComparer.Ordinal ).Order( StringComparer.Ordinal ).ToList();
+      }
+
+      record.ContainerdShimCgroups = record.ContainerdShimCgroups.Concat( ProcessInfo.FindByName( _system, "containerd-shim" ).Select( pid => ProcessInfo.CgroupFolder( _system, pid ) ).OfType<string>() )
+         .Distinct( StringComparer.Ordinal ).Order( StringComparer.Ordinal ).ToList();
+      return record;
+   }
+
+   /// <summary>
+   /// Generates the engine CPU rule text again from what the run has done so far (which targets'
+   /// turns subtracted dockerd's cgroup), so every results write carries a text true to it.
+   /// </summary>
+   private void RefreshEngineCpuRule()
+   {
+      lock( _passLock )
+      {
+         if( Conditions.EngineCpu != null )
+         {
+            Conditions.EngineCpu.Rule = Conditions.EngineCpu.Describe( Conditions.Engines, _options.SampleInterval );
+         }
+      }
    }
 
    /// <summary>
@@ -892,7 +1035,7 @@ public sealed class MachineControl : IDisposable
       return $"Machine control on: governor {c.Governor} on every CPU during the run (before: {c.GovernorBefore}; at the end: {c.GovernorAtEnd ?? "not read"}; after putting it back: {c.GovernorAfterRestore ?? "not read"}). "
          + $"{ClockSummary()} "
          + $"{split}; the client process{( c.ClientPinning != null ? " was pinned" : " was NOT pinned" )}; each engine was pinned to the engine CPUs for its turn and put back after (conditions.engines); an engine run-all started (and stopped) was asked to be created on them, and its notes say whether the host did so or it was moved there after the start. "
-         + $"Busy box: {c.BusyRule}. Outside load counts {c.CpuAccounting ?? "(not read)"} (conditions.cpuAccounting); each pass also records this client's own CPU time per search (conditions.passes[].clientCpuMsPerSearch). CPU clocks were sampled every {_options.SampleInterval.TotalMilliseconds:0} ms; each pass's min/median/max per CPU is in conditions.passes. "
+         + $"Busy box: {c.BusyRule}. Outside load counts {c.CpuAccounting ?? "(not read)"} (conditions.cpuAccounting); each pass also records this client's own CPU time per search and the engine's (conditions.passes[].clientCpuMsPerSearch and engineCpuMsPerSearch; how in conditions.engineCpu.rule). CPU clocks were sampled every {_options.SampleInterval.TotalMilliseconds:0} ms; each pass's min/median/max per CPU is in conditions.passes. "
          + $"CPU idle states, recorded and left as found: {c.CpuIdle?.Describe() ?? "not read"} (conditions.cpuIdle). How each target was reached: conditions.connections. {build}";
    }
 
@@ -952,7 +1095,7 @@ public sealed class MachineControl : IDisposable
 
       return string.Create( CultureInfo.InvariantCulture, $"CPU clock pinned for the run: {_clock.Describe()} (before: {_clock.Before.Describe()}; while pinned: {_clock.Pinned.Describe()}; at the end: {_clockAtEnd?.Describe() ?? "not read"}; after putting it back: {_clockAfterRestore?.Describe() ?? "not read"}). " )
          + ( _clock.Uncore != null ? $"Uncore limit at the end: {_uncoreAtEnd.Text}; after putting it back: {_uncoreAfterRestore.Text}. " : string.Empty )
-         + string.Create( CultureInfo.InvariantCulture, $"Each target's clock note gives every pass's average MHz on the engine CPUs and on the client CPUs; a pass whose average on either is more than {MachineFlags.CLOCK_TOLERANCE:0%} off the pinned {_clock.PinnedMhz} MHz is flagged. " )
+         + string.Create( CultureInfo.InvariantCulture, $"Each target's clock note gives every pass's median MHz on the engine CPUs and on the client CPUs (the median of each CPU's median); a pass whose median on either is more than {ClockRule.TOLERANCE_BP} bp ({ClockRule.TolerancePercent()}) off the pinned {_clock.PinnedMhz} MHz, or that has no reading on one, is flagged (conditions.clock.rule). " )
          + "Figures from runs made with turbo on are not comparable with these in absolute terms.";
    }
 

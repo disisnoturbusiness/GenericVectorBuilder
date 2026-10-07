@@ -1,0 +1,933 @@
+{
+ "sql": {
+  "engine": "Microsoft SQL Server 2025 (RTM-CU9) (KB5122048) - 17.0.5005.3 (X64)",
+  "index": "exact VECTOR_DISTANCE cosine, no vector index (full scan)",
+  "hosting": "always-on",
+  "runs": 3,
+  "p50": {
+   "median": 6.719150000000001,
+   "min": 6.5200499999999995,
+   "max": 6.812250000000001,
+   "n": 3
+  },
+  "p95": {
+   "median": 9.422304999999998,
+   "min": 9.179259999999982,
+   "max": 9.979455,
+   "n": 3
+  },
+  "qps1": {
+   "median": 191.61057995538576,
+   "min": 177.72471510478204,
+   "max": 195.97215235715004,
+   "n": 3
+  },
+  "qps8": {
+   "median": 806.2282066203587,
+   "min": 764.6824961807607,
+   "max": 913.992386629377,
+   "n": 3
+  },
+  "load": {
+   "median": 550.0767745513489,
+   "min": 547.2173943283005,
+   "max": 565.4867670161066,
+   "n": 3
+  },
+  "recall": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5181699774768911,
+   "min": 0.5181699774768911,
+   "max": 0.5181699774768911,
+   "n": 3
+  },
+  "errors": 0
+ },
+ "qdrant": {
+  "engine": "Qdrant 1.17.0 (systemd, local)",
+  "index": "exact search (the builder's setting), HNSW m=16 ef_construct=100 built but not used",
+  "hosting": "always-on",
+  "runs": 3,
+  "p50": {
+   "median": 2.3032000000000004,
+   "min": 1.5626,
+   "max": 2.79415,
+   "n": 3
+  },
+  "p95": {
+   "median": 3.107584999999999,
+   "min": 2.1049499999999997,
+   "max": 3.3174199999999994,
+   "n": 3
+  },
+  "qps1": {
+   "median": 425.07193037507767,
+   "min": 407.6832605253228,
+   "max": 436.17381866653454,
+   "n": 3
+  },
+  "qps8": {
+   "median": 3213.0703779254413,
+   "min": 3051.3978601487543,
+   "max": 3443.7710682064203,
+   "n": 3
+  },
+  "load": {
+   "median": 2720.6970799755136,
+   "min": 2354.779956148964,
+   "max": 2741.7386809097547,
+   "n": 3
+  },
+  "recall": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5181699774768911,
+   "min": 0.5181699774768911,
+   "max": 0.5181699774768911,
+   "n": 3
+  },
+  "errors": 0
+ },
+ "qdrant-hnsw": {
+  "engine": "Qdrant 1.17.0 (systemd, local)",
+  "index": "HNSW m=16 ef_construct=100, hnsw_ef=server default, cosine",
+  "hosting": "always-on",
+  "runs": 3,
+  "p50": {
+   "median": 2.4246999999999996,
+   "min": 2.2582500000000003,
+   "max": 2.5731,
+   "n": 3
+  },
+  "p95": {
+   "median": 2.85694,
+   "min": 2.723255,
+   "max": 3.492469999999997,
+   "n": 3
+  },
+  "qps1": {
+   "median": 412.0971588418075,
+   "min": 407.85319680640043,
+   "max": 428.67304075246705,
+   "n": 3
+  },
+  "qps8": {
+   "median": 3355.332250035922,
+   "min": 3040.5178511978093,
+   "max": 3432.3362008932595,
+   "n": 3
+  },
+  "load": {
+   "median": 5964.8212147290105,
+   "min": 4967.672209476498,
+   "max": 6627.433273509365,
+   "n": 3
+  },
+  "recall": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5181699774768911,
+   "min": 0.5181699774768911,
+   "max": 0.5181699774768911,
+   "n": 3
+  },
+  "errors": 0
+ },
+ "pgvector": {
+  "engine": "PostgreSQL 17 + pgvector 0.8.7",
+  "index": "HNSW vector_cosine_ops m=16 ef_construction=128, hnsw.ef_search=100 per query, float32 vector(n), cosine; exact mode = same query with index scans off (sequential scan)",
+  "hosting": "compose",
+  "runs": 3,
+  "p50": {
+   "median": 2.86555,
+   "min": 1.97495,
+   "max": 3.03105,
+   "n": 3
+  },
+  "p95": {
+   "median": 3.682155,
+   "min": 3.1536899999999997,
+   "max": 4.114714999999994,
+   "n": 3
+  },
+  "qps1": {
+   "median": 403.1245346231479,
+   "min": 399.12596662991933,
+   "max": 468.29815724675126,
+   "n": 3
+  },
+  "qps8": {
+   "median": 3822.735122683349,
+   "min": 3312.103836857679,
+   "max": 3830.9419477503993,
+   "n": 3
+  },
+  "load": {
+   "median": 528.2736812539765,
+   "min": 471.0424835373349,
+   "max": 537.4765251486189,
+   "n": 3
+  },
+  "recall": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5181699774768911,
+   "min": 0.5181699774768911,
+   "max": 0.5181699774768911,
+   "n": 3
+  },
+  "errors": 0
+ },
+ "mariadb": {
+  "engine": "MariaDB 11.8.9 (InnoDB + VECTOR INDEX)",
+  "index": "VECTOR INDEX (HNSW variant) DISTANCE=cosine, M=16 (no ef_construction setting exists), mhnsw_ef_search=3200, mhnsw_max_cache_size 4G; exact mode = IGNORE INDEX full scan",
+  "hosting": "compose",
+  "runs": 3,
+  "p50": {
+   "median": 1.9786000000000001,
+   "min": 1.69235,
+   "max": 2.33645,
+   "n": 3
+  },
+  "p95": {
+   "median": 2.724595,
+   "min": 2.4321349999999997,
+   "max": 2.8309799999999994,
+   "n": 3
+  },
+  "qps1": {
+   "median": 457.78305744904384,
+   "min": 435.29140081837687,
+   "max": 501.7387786122163,
+   "n": 3
+  },
+  "qps8": {
+   "median": 4558.368320930089,
+   "min": 4131.692394408857,
+   "max": 4559.299998060128,
+   "n": 3
+  },
+  "load": {
+   "median": 680.6199824571498,
+   "min": 668.1519872357468,
+   "max": 715.192378560607,
+   "n": 3
+  },
+  "recall": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5181699774768911,
+   "min": 0.5181699774768911,
+   "max": 0.5181699774768911,
+   "n": 3
+  },
+  "errors": 0
+ },
+ "oracle": {
+  "engine": "Oracle AI Database Free 23.26 (23ai line, VECTOR FLOAT32)",
+  "index": "HNSW in-memory neighbor graph NEIGHBORS=16 EFCONSTRUCTION=128, EFSEARCH=100 per query, cosine; exact mode = FETCH EXACT FIRST (full scan)",
+  "hosting": "compose",
+  "runs": 3,
+  "p50": {
+   "median": 5.55785,
+   "min": 4.8459,
+   "max": 5.596550000000001,
+   "n": 3
+  },
+  "p95": {
+   "median": 6.854059999999999,
+   "min": 6.6818399999999984,
+   "max": 7.599035,
+   "n": 3
+  },
+  "qps1": {
+   "median": 269.26689498159647,
+   "min": 245.3784520912296,
+   "max": 288.51283954626643,
+   "n": 3
+  },
+  "qps8": {
+   "median": 670.6163461622099,
+   "min": 508.7347792035321,
+   "max": 695.0843996172132,
+   "n": 3
+  },
+  "load": {
+   "median": 1486.2785853350822,
+   "min": 1389.6034326387085,
+   "max": 1620.956618065809,
+   "n": 3
+  },
+  "recall": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5181699774768911,
+   "min": 0.5181699774768911,
+   "max": 0.5181699774768911,
+   "n": 3
+  },
+  "errors": 0
+ },
+ "redis": {
+  "engine": "Redis 8.10.2 (query engine, HASH + vector index)",
+  "index": "HNSW TYPE FLOAT32 M=16 EF_CONSTRUCTION=128, EF_RUNTIME=100 per query, cosine; exact mode = FLAT index built on first exact query",
+  "hosting": "compose",
+  "runs": 3,
+  "p50": {
+   "median": 1.5061,
+   "min": 1.2194,
+   "max": 1.8554,
+   "n": 3
+  },
+  "p95": {
+   "median": 2.02301,
+   "min": 1.84491,
+   "max": 2.187645,
+   "n": 3
+  },
+  "qps1": {
+   "median": 783.3278435719446,
+   "min": 767.5322546542724,
+   "max": 820.2701790776397,
+   "n": 3
+  },
+  "qps8": {
+   "median": 2106.7936090054422,
+   "min": 2011.0114160629346,
+   "max": 3154.1715309580004,
+   "n": 3
+  },
+  "load": {
+   "median": 6874.1686060392985,
+   "min": 6347.268252030157,
+   "max": 10766.186776903653,
+   "n": 3
+  },
+  "recall": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5181699774768911,
+   "min": 0.5181699774768911,
+   "max": 0.5181699774768911,
+   "n": 3
+  },
+  "errors": 0
+ },
+ "mongodb": {
+  "engine": "MongoDB 8.0.32 Atlas Local (mongod + mongot Vector Search)",
+  "index": "vectorSearch index, HNSW maxEdges=16 numEdgeCandidates=128, float32 binData, cosine, numCandidates=20x hits (min 100); exact mode = $vectorSearch exact:true",
+  "hosting": "compose",
+  "runs": 3,
+  "p50": {
+   "median": 5.50565,
+   "min": 4.95625,
+   "max": 8.1371,
+   "n": 3
+  },
+  "p95": {
+   "median": 9.319749999999999,
+   "min": 7.727829999999998,
+   "max": 15.782239999999994,
+   "n": 3
+  },
+  "qps1": {
+   "median": 253.36029464142527,
+   "min": 225.29508406126575,
+   "max": 307.7027383978958,
+   "n": 3
+  },
+  "qps8": {
+   "median": 2807.436856691334,
+   "min": 2426.691680652674,
+   "max": 2927.7153675119707,
+   "n": 3
+  },
+  "load": {
+   "median": 2322.346065905877,
+   "min": 1802.9443733168362,
+   "max": 2342.767443222539,
+   "n": 3
+  },
+  "recall": {
+   "median": 1,
+   "min": 0.9649999999999999,
+   "max": 1,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5181699774768911,
+   "min": 0.5181699774768911,
+   "max": 0.5350443181774621,
+   "n": 3
+  },
+  "errors": 0
+ },
+ "clickhouse": {
+  "engine": "ClickHouse 26.3.39.7 (MergeTree + vector_similarity index)",
+  "index": "vector_similarity HNSW cosineDistance, quantization bf16, M=16 ef_construction=128, hnsw_candidate_list_size_for_search=256, rescoring off; exact mode = full scan with skip indexes off",
+  "hosting": "compose",
+  "runs": 3,
+  "p50": {
+   "median": 6.25475,
+   "min": 6.2211,
+   "max": 6.884600000000001,
+   "n": 3
+  },
+  "p95": {
+   "median": 8.521149999999999,
+   "min": 8.034099999999995,
+   "max": 9.663749999999999,
+   "n": 3
+  },
+  "qps1": {
+   "median": 166.84986495257905,
+   "min": 151.0309074278375,
+   "max": 168.14535750667923,
+   "n": 3
+  },
+  "qps8": {
+   "median": 665.047863806593,
+   "min": 625.3202779972162,
+   "max": 711.2615763181872,
+   "n": 3
+  },
+  "load": {
+   "median": 2710.554194530888,
+   "min": 2662.5407447492307,
+   "max": 3103.151356799632,
+   "n": 3
+  },
+  "recall": {
+   "median": 0.9949999999999999,
+   "min": 0.9850000000000001,
+   "max": 0.9949999999999999,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5276466892383727,
+   "min": 0.5199815237648059,
+   "max": 0.5276466892383727,
+   "n": 3
+  },
+  "errors": 0
+ },
+ "milvus": {
+  "engine": "Milvus 2.6.25 (standalone, embedded etcd, local storage, REST API v2)",
+  "index": "HNSW M=16 efConstruction=128, ef=100, metric COSINE, Strong consistency searches; approximate only (no exact mode)",
+  "hosting": "compose",
+  "runs": 3,
+  "p50": {
+   "median": 7.4178999999999995,
+   "min": 7.11985,
+   "max": 8.2705,
+   "n": 3
+  },
+  "p95": {
+   "median": 8.234865,
+   "min": 7.932435,
+   "max": 9.473865,
+   "n": 3
+  },
+  "qps1": {
+   "median": 150.799611063961,
+   "min": 138.28837686192475,
+   "max": 154.44278358196638,
+   "n": 3
+  },
+  "qps8": {
+   "median": 1690.8707640022042,
+   "min": 1493.2460049783065,
+   "max": 1723.6211225998966,
+   "n": 3
+  },
+  "load": {
+   "median": 745.3311546146809,
+   "min": 738.7458970701394,
+   "max": 852.5135320253867,
+   "n": 3
+  },
+  "recall": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5181699774768911,
+   "min": 0.5181699774768911,
+   "max": 0.5181699774768911,
+   "n": 3
+  },
+  "errors": 0
+ },
+ "weaviate": {
+  "engine": "Weaviate 1.39.8 (single node, REST + GraphQL)",
+  "index": "HNSW maxConnections(M)=16 efConstruction=128, ef=-1 (dynamic: limit x 8 clamped 100..500), cosine, no quantization; approximate only (no exact mode)",
+  "hosting": "compose",
+  "runs": 3,
+  "p50": {
+   "median": 15.36065,
+   "min": 15.3332,
+   "max": 16.11105,
+   "n": 3
+  },
+  "p95": {
+   "median": 23.275494999999996,
+   "min": 23.004755,
+   "max": 25.079355,
+   "n": 3
+  },
+  "qps1": {
+   "median": 63.8373257373481,
+   "min": 62.78243159216756,
+   "max": 81.53546222708492,
+   "n": 3
+  },
+  "qps8": {
+   "median": 523.3644374189535,
+   "min": 484.58064536339435,
+   "max": 541.0584958350915,
+   "n": 3
+  },
+  "load": {
+   "median": 735.1185490892246,
+   "min": 574.522598035045,
+   "max": 835.9471304918256,
+   "n": 3
+  },
+  "recall": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5181699774768911,
+   "min": 0.5181699774768911,
+   "max": 0.5181699774768911,
+   "n": 3
+  },
+  "errors": 0
+ },
+ "chroma": {
+  "engine": "Chroma 1.4.4 (single node, REST API v2)",
+  "index": "HNSW M=16 ef_construction=128, ef_search=100 (Chroma default), cosine; approximate only (no exact mode)",
+  "hosting": "compose",
+  "runs": 3,
+  "p50": {
+   "median": 6.00655,
+   "min": 5.9762,
+   "max": 6.630649999999999,
+   "n": 3
+  },
+  "p95": {
+   "median": 6.799939999999999,
+   "min": 6.732514999999999,
+   "max": 7.552649999999999,
+   "n": 3
+  },
+  "qps1": {
+   "median": 167.60203146058583,
+   "min": 156.5531092127286,
+   "max": 193.89394332204617,
+   "n": 3
+  },
+  "qps8": {
+   "median": 600.3243980355031,
+   "min": 330.89762574959,
+   "max": 609.7606350418376,
+   "n": 3
+  },
+  "load": {
+   "median": 431.1077478124984,
+   "min": 430.02733135542644,
+   "max": 460.9461606087727,
+   "n": 3
+  },
+  "recall": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5181699774768911,
+   "min": 0.5181699774768911,
+   "max": 0.5181699774768911,
+   "n": 3
+  },
+  "errors": 0
+ },
+ "elasticsearch": {
+  "engine": "Elasticsearch 9.5.3 (dense_vector)",
+  "index": "HNSW float32, no quantization, m=16, ef_construction=128, cosine; search k=top, num_candidates=100; 1 shard, 0 replicas",
+  "hosting": "compose",
+  "runs": 3,
+  "p50": {
+   "median": 11.76,
+   "min": 11.03455,
+   "max": 13.19345,
+   "n": 3
+  },
+  "p95": {
+   "median": 15.291699999999997,
+   "min": 13.961859999999998,
+   "max": 16.793815,
+   "n": 3
+  },
+  "qps1": {
+   "median": 159.89006842839956,
+   "min": 148.1167537134615,
+   "max": 166.84063857176972,
+   "n": 3
+  },
+  "qps8": {
+   "median": 2544.2182598797986,
+   "min": 2543.4270483505356,
+   "max": 2631.8997711610623,
+   "n": 3
+  },
+  "load": {
+   "median": 474.1747165516567,
+   "min": 462.2507837532611,
+   "max": 506.991352701306,
+   "n": 3
+  },
+  "recall": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5181699774768911,
+   "min": 0.5181699774768911,
+   "max": 0.5181699774768911,
+   "n": 3
+  },
+  "errors": 0
+ },
+ "opensearch": {
+  "engine": "OpenSearch 3.9.0 (k-NN plugin, faiss)",
+  "index": "faiss HNSW float32, no compression, m=16, ef_construction=128, cosinesimil; search k=top, ef_search=100; 1 shard, 0 replicas",
+  "hosting": "compose",
+  "runs": 3,
+  "p50": {
+   "median": 10.6206,
+   "min": 9.8301,
+   "max": 12.2851,
+   "n": 3
+  },
+  "p95": {
+   "median": 14.126240000000001,
+   "min": 14.096659999999995,
+   "max": 15.042259999999999,
+   "n": 3
+  },
+  "qps1": {
+   "median": 144.7844624554116,
+   "min": 129.8405534505337,
+   "max": 150.47742462437074,
+   "n": 3
+  },
+  "qps8": {
+   "median": 1874.576035028215,
+   "min": 1702.429892839155,
+   "max": 1966.6056581311475,
+   "n": 3
+  },
+  "load": {
+   "median": 414.2770955602066,
+   "min": 386.4637672886299,
+   "max": 551.1219802275524,
+   "n": 3
+  },
+  "recall": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5181699774768911,
+   "min": 0.5181699774768911,
+   "max": 0.5181699774768911,
+   "n": 3
+  },
+  "errors": 0
+ },
+ "typesense": {
+  "engine": "Typesense 30.2 (vector search)",
+  "index": "HNSW float32 (hnswlib), m=16, ef_construction=128, cosine; search k=top, ef=100; exact mode = filter ordinal:>=0 with flat_search_cutoff; index held in memory",
+  "hosting": "compose",
+  "runs": 3,
+  "p50": {
+   "median": 8.9246,
+   "min": 5.58545,
+   "max": 11.88675,
+   "n": 3
+  },
+  "p95": {
+   "median": 12.46074,
+   "min": 10.28783499999999,
+   "max": 12.906915,
+   "n": 3
+  },
+  "qps1": {
+   "median": 106.14995613393044,
+   "min": 95.42371267563212,
+   "max": 135.92747545804187,
+   "n": 3
+  },
+  "qps8": {
+   "median": 944.0409834753639,
+   "min": 896.4512657189027,
+   "max": 974.3796340110528,
+   "n": 3
+  },
+  "load": {
+   "median": 763.8147708366191,
+   "min": 708.9745900259724,
+   "max": 813.5060636475345,
+   "n": 3
+  },
+  "recall": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5181699774768911,
+   "min": 0.5181699774768911,
+   "max": 0.5181699774768911,
+   "n": 3
+  },
+  "errors": 0
+ },
+ "vespa": {
+  "engine": "Vespa 8.754.14 (tensor attribute + HNSW)",
+  "index": "HNSW float32 tensor, prenormalized-angular (cosine), max-links-per-node=16, neighbors-to-explore-at-insert=128; search targetHits=top, ef=100 via exploreAdditionalHits; exact mode = approximate:false; vectors held in memory",
+  "hosting": "compose",
+  "runs": 3,
+  "p50": {
+   "median": 6.410299999999999,
+   "min": 6.37575,
+   "max": 6.527100000000001,
+   "n": 3
+  },
+  "p95": {
+   "median": 8.954904999999997,
+   "min": 8.240804999999998,
+   "max": 9.58011,
+   "n": 3
+  },
+  "qps1": {
+   "median": 201.44118521715217,
+   "min": 174.24078004912369,
+   "max": 218.94795502610003,
+   "n": 3
+  },
+  "qps8": {
+   "median": 1552.896322118391,
+   "min": 1489.0498046990074,
+   "max": 1563.7614872791528,
+   "n": 3
+  },
+  "load": {
+   "median": 497.5584502991333,
+   "min": 493.516381447476,
+   "max": 518.1217532725965,
+   "n": 3
+  },
+  "recall": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5181699774768911,
+   "min": 0.5181699774768911,
+   "max": 0.5181699774768911,
+   "n": 3
+  },
+  "errors": 0
+ },
+ "duckdb": {
+  "engine": "DuckDB 1.5.6 + vss b833341 (HNSW, embedded, in process)",
+  "index": "HNSW (vss extension) FLOAT[n] metric=cosine m=16 ef_construction=128, ef_search=100 per connection, persistent (hnsw_enable_experimental_persistence=true, checkpoint_threshold=256MB); exact mode = array_cosine_similarity sequential scan; score = 1 - cosine distance",
+  "hosting": "embedded",
+  "runs": 3,
+  "p50": {
+   "median": 4.0506,
+   "min": 4.00315,
+   "max": 4.0623000000000005,
+   "n": 3
+  },
+  "p95": {
+   "median": 5.390834999999999,
+   "min": 5.278169999999999,
+   "max": 7.594819999999999,
+   "n": 3
+  },
+  "qps1": {
+   "median": 255.1369637768358,
+   "min": 247.050760312962,
+   "max": 257.32976230084387,
+   "n": 3
+  },
+  "qps8": {
+   "median": 181.48391120440576,
+   "min": 171.20252564193189,
+   "max": 199.52272588526432,
+   "n": 3
+  },
+  "load": {
+   "median": 1529.627334323699,
+   "min": 1483.1319217540356,
+   "max": 1569.4063989850372,
+   "n": 3
+  },
+  "recall": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5181699774768911,
+   "min": 0.5181699774768911,
+   "max": 0.5181699774768911,
+   "n": 3
+  },
+  "errors": 0
+ },
+ "sqlitevec": {
+  "engine": "SQLite 3.53.3 + sqlite-vec 0.1.7-alpha.2.1 (vec0, embedded, in process)",
+  "index": "vec0 brute-force scan, no ANN index (exact), float32, cosine distance, default chunk_size=1024; score = 1 - cosine distance",
+  "hosting": "embedded",
+  "runs": 3,
+  "p50": {
+   "median": 2.1567999999999996,
+   "min": 2.0683499999999997,
+   "max": 2.1622,
+   "n": 3
+  },
+  "p95": {
+   "median": 2.39574,
+   "min": 2.348775,
+   "max": 2.477125,
+   "n": 3
+  },
+  "qps1": {
+   "median": 526.5955371028231,
+   "min": 502.5788841481825,
+   "max": 545.2028781152445,
+   "n": 3
+  },
+  "qps8": {
+   "median": 457.7958930551818,
+   "min": 457.2847346724857,
+   "max": 528.0503160755109,
+   "n": 3
+  },
+  "load": {
+   "median": 4026.8229442838324,
+   "min": 2718.4768229099113,
+   "max": 4182.647599966475,
+   "n": 3
+  },
+  "recall": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5181699774768911,
+   "min": 0.5181699774768911,
+   "max": 0.5181699774768911,
+   "n": 3
+  },
+  "errors": 0
+ },
+ "sql-diskann": {
+  "engine": "Microsoft SQL Server 2025 (RTM-CU9) (KB5122048) - 17.0.5005.3 (X64)",
+  "index": "DiskANN (preview) via VECTOR_SEARCH, cosine, build {\"StartId\":\"306\", \"L\":\"48\", \"M\":\"8\", \"R\":\"48\"}",
+  "hosting": "always-on",
+  "runs": 3,
+  "p50": {
+   "median": 4.504250000000001,
+   "min": 4.23935,
+   "max": 4.5649999999999995,
+   "n": 3
+  },
+  "p95": {
+   "median": 5.5830649999999995,
+   "min": 5.497089999999999,
+   "max": 5.840755,
+   "n": 3
+  },
+  "qps1": {
+   "median": 226.9443819918238,
+   "min": 204.97592557754092,
+   "max": 247.93842623426337,
+   "n": 3
+  },
+  "qps8": {
+   "median": 1002.5462184703413,
+   "min": 890.2037740871064,
+   "max": 1025.3753381052097,
+   "n": 3
+  },
+  "load": {
+   "median": 667.620021261914,
+   "min": 584.1172934278667,
+   "max": 712.6450569293239,
+   "n": 3
+  },
+  "recall": {
+   "median": 0.9650000000000002,
+   "min": 0.9650000000000002,
+   "max": 0.9650000000000002,
+   "n": 3
+  },
+  "ndcg": {
+   "median": 0.5256995680516536,
+   "min": 0.5256995680516536,
+   "max": 0.5256995680516536,
+   "n": 3
+  },
+  "errors": 0
+ }
+}

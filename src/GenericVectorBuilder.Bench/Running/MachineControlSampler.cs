@@ -40,6 +40,112 @@ public sealed record OutsideWindow( double Load, DateTime From, DateTime To, dou
 public sealed record ClientCpu( double? Seconds, int Samples, string? Problem );
 
 /// <summary>
+/// The engine under test's CPU time over a window, from the per-sample ledger.
+/// </summary>
+/// <param name="EngineSeconds">CPU seconds of the engine's cgroups (dockerd's left out), or null when the window cannot be measured.</param>
+/// <param name="DockerdSeconds">CPU seconds of dockerd's cgroup, or null when it was not followed through the window.</param>
+/// <param name="Problem">Why the engine figure cannot be measured, or null.</param>
+public sealed record EngineCpu( double? EngineSeconds, double? DockerdSeconds, string? Problem );
+
+/// <summary>
+/// One sample of the engine CPU ledger: the cumulative CPU of the followed cgroups at a moment.
+/// A struct in a preallocated array, so a sample costs no allocation (the sampler's own CPU time
+/// is part of the client's CPU per search).
+/// </summary>
+/// <param name="AtTicks">When (UTC ticks).</param>
+/// <param name="Generation">Which set of followed cgroups was in force (a new set gets a new number).</param>
+/// <param name="EngineSeconds">Sum of usage_usec of the followed cgroups other than dockerd's, in seconds.</param>
+/// <param name="DockerdSeconds">dockerd's cgroup usage in seconds, or NaN when it was not followed or not read.</param>
+/// <param name="Engines">How many cgroups other than dockerd's were read.</param>
+/// <param name="Missing">How many followed cgroups could not be read in this sample.</param>
+internal readonly record struct EngineCpuSample( long AtTicks, int Generation, double EngineSeconds, double DockerdSeconds, int Engines, int Missing );
+
+/// <summary>
+/// The whole run's engine CPU samples, kept in time order in one array that only grows. Why the
+/// whole run and not a trailing window: the engine's cgroups are gone when a target's passes are
+/// annotated (its containers are stopped first), so the figures can only come from what was kept.
+/// </summary>
+internal sealed class EngineCpuLedger
+{
+   #region Data Members
+
+   private EngineCpuSample[] _samples;
+
+   #endregion Data Members
+
+   #region Constructor
+
+   /// <summary>
+   /// Creates the ledger with room for a run's samples, so appending allocates nothing until it
+   /// is full (then it doubles once).
+   /// </summary>
+   /// <param name="capacity">Samples to make room for.</param>
+   public EngineCpuLedger( int capacity )
+   {
+      _samples = new EngineCpuSample[Math.Max( 2, capacity )];
+   }
+
+   #endregion Constructor
+
+   #region Public Methods
+
+   /// <summary>Samples kept.</summary>
+   public int Count { get; private set; }
+
+   /// <summary>Room before the array has to grow.</summary>
+   public int Capacity => _samples.Length;
+
+   /// <summary>
+   /// One sample by position.
+   /// </summary>
+   /// <param name="index">Position, 0 to Count - 1.</param>
+   /// <returns>The sample.</returns>
+   public EngineCpuSample this[int index] => _samples[index];
+
+   /// <summary>
+   /// Appends a sample (callers append in time order).
+   /// </summary>
+   /// <param name="sample">The sample.</param>
+   public void Append( in EngineCpuSample sample )
+   {
+      if( Count == _samples.Length )
+      {
+         Array.Resize( ref _samples, _samples.Length * 2 );
+      }
+
+      _samples[Count++] = sample;
+   }
+
+   /// <summary>
+   /// The two samples either side of a moment inside the sampled span (the same search as the
+   /// client CPU ledger's).
+   /// </summary>
+   /// <param name="atTicks">The moment (UTC ticks), between the first and the last sample.</param>
+   /// <returns>Positions of the sample at or before it and the one after it.</returns>
+   public (int Low, int High) Bracket( long atTicks )
+   {
+      int low = 0;
+      int high = Count - 1;
+      while( high - low > 1 )
+      {
+         int middle = ( low + high ) / 2;
+         if( _samples[middle].AtTicks <= atTicks )
+         {
+            low = middle;
+         }
+         else
+         {
+            high = middle;
+         }
+      }
+
+      return ( low, high );
+   }
+
+   #endregion Public Methods
+}
+
+/// <summary>
 /// This process's cumulative CPU time at one moment.
 /// </summary>
 /// <param name="At">When (UTC).</param>
@@ -55,6 +161,14 @@ internal readonly record struct ClientCpuSample( DateTime At, double Seconds );
 /// <param name="Client">This process's user + system time, without its children.</param>
 /// <param name="Groups">Each engine cgroup's usage.</param>
 internal sealed record CpuReading( DateTime At, double Busy, double Self, double Client, Dictionary<string, double> Groups );
+
+/// <summary>
+/// What the engine CPU ledger needs to know about the followed cgroups of one sample.
+/// </summary>
+/// <param name="Generation">The set's generation.</param>
+/// <param name="Dockerd">dockerd's folder, or null.</param>
+/// <param name="Followed">How many cgroups were followed (read or not).</param>
+internal readonly record struct LedgerKey( int Generation, string? Dockerd, int Followed );
 
 /// <summary>
 /// Which /proc/stat columns make up "busy" so that it is counted the way the totals that get
@@ -144,9 +258,14 @@ public sealed record CpuMhz( int Cpu, int Min, int Median, int Max );
 /// subtracted totals contain, so the benchmark's own network softirq time is on both sides and
 /// cancels. A negative result is kept as it is: it means the counters did not add up, and
 /// clipping it to zero would hide that and bias every mean upward.
-/// Why this process's own CPU time is kept for the whole run: the client's CPU per search is
-/// part of every latency (for the fastest engines about as large as the latency itself), so each
-/// pass's figure is the ledger's CPU time over the pass's own window divided by its searches.
+/// Why this process's own CPU time is kept for the whole run: each pass's client CPU per search
+/// is the ledger's CPU time over the pass's own window divided by its searches, and the window is
+/// known only when the target is done.
+/// Why the engine's cgroups are kept per sample too (<see cref="EngineCpuLedger"/>): the same
+/// reads give the engine's CPU per search, and the cgroups are gone by the time the target's
+/// passes are annotated. dockerd's cgroup is subtracted from outside load like the engine's (it
+/// is in the followed set for a compose engine) and left out of the engine figure by string
+/// equality with its folder.
 /// Sampling never stops the run: a failed read is remembered in <see cref="LastError"/>.
 /// </summary>
 public sealed class MachineSampler : IDisposable
@@ -155,6 +274,14 @@ public sealed class MachineSampler : IDisposable
 
    private const double MIN_HISTORY_SECONDS = 3;
    private const int MIN_CLIENT_CPU_SAMPLES = 4;
+
+   /// <summary>
+   /// Engine CPU ledger samples made room for at the start: 32,768 samples are 2.3 hours at 4 Hz,
+   /// longer than a whole run of every target (about 81 minutes in v7), so the ledger does not
+   /// grow during a run; a longer run doubles it once, which costs an allocation, not a figure.
+   /// </summary>
+   private const int LEDGER_CAPACITY = 1 << 15;
+
    private static readonly TimeSpan KEEP_LOAD = TimeSpan.FromMinutes( 10 );
    private static readonly TimeSpan STOP_DEADLINE = TimeSpan.FromSeconds( 5 );
 
@@ -166,7 +293,10 @@ public sealed class MachineSampler : IDisposable
    private readonly List<FrequencySample> _frequencies = new();
    private readonly List<OutsideSample> _outside = new();
    private readonly List<ClientCpuSample> _client = new();
+   private readonly EngineCpuLedger _ledger = new( LEDGER_CAPACITY );
    private List<string> _groups = new();
+   private string? _dockerd;
+   private int _generation;
    private CpuReading? _last;
    private CancellationTokenSource? _stop;
    private Task? _loop;
@@ -235,9 +365,26 @@ public sealed class MachineSampler : IDisposable
    /// <param name="groups">cgroup folders (empty for an embedded engine or between targets).</param>
    public void SetEngineGroups( IEnumerable<string> groups )
    {
+      SetEngineGroups( groups, null );
+   }
+
+   /// <summary>
+   /// Sets the cgroup folders whose CPU time is benchmark time (subtracted from outside load), and
+   /// which of them is dockerd's (left out of the engine CPU figure). A set that differs from the
+   /// one in force starts a new generation in the engine CPU ledger, so no window is measured
+   /// across a change of what was summed.
+   /// </summary>
+   /// <param name="groups">cgroup folders (empty for an embedded engine or between targets).</param>
+   /// <param name="dockerdGroup">dockerd's folder when it is one of them, else null.</param>
+   public void SetEngineGroups( IEnumerable<string> groups, string? dockerdGroup )
+   {
+      List<string> list = groups.ToList();
       lock( _lock )
       {
-         _groups = groups.ToList();
+         bool same = string.Equals( _dockerd, dockerdGroup, StringComparison.Ordinal ) && list.Count == _groups.Count && list.All( g => _groups.Contains( g, StringComparer.Ordinal ) );
+         _generation += same ? 0 : 1;
+         _groups = list;
+         _dockerd = dockerdGroup;
       }
    }
 
@@ -252,16 +399,20 @@ public sealed class MachineSampler : IDisposable
       {
          int?[] mhz = _cpus.Select( ReadMhz ).ToArray();
          List<string> groups;
+         string? dockerd;
+         int generation;
          lock( _lock )
          {
             groups = _groups;
+            dockerd = _dockerd;
+            generation = _generation;
          }
 
          CpuReading reading = ReadCpu( now, groups );
          lock( _lock )
          {
             _frequencies.Add( new FrequencySample( now, mhz ) );
-            AddLoad( reading );
+            AddLoad( reading, new LedgerKey( generation, dockerd, groups.Count ) );
          }
       }
       catch( Exception ex ) when( ex is IOException or FormatException or IndexOutOfRangeException or OverflowException )
@@ -358,8 +509,7 @@ public sealed class MachineSampler : IDisposable
       List<PassNote> found = PassNoteReader.Read( notes );
       foreach( PassConditions pass in passes )
       {
-         DateTime start = DateTime.TryParse( pass.StartUtc, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out DateTime parsed ) ? parsed : DateTime.MinValue;
-         PassNote? note = found.Where( n => n.Pass == pass.Pass ).OrderBy( n => Math.Abs( ( n.Start - start ).Ticks ) ).FirstOrDefault();
+         PassNote? note = NoteFor( found, pass );
          if( note == null )
          {
             pass.ApplyClientCpu( null, null, null, $"no 'Pass {pass.Pass} after ...' note with a search count was found for this pass" );
@@ -368,6 +518,62 @@ public sealed class MachineSampler : IDisposable
 
          ClientCpu cpu = ClientCpuBetween( note.Start, note.End );
          pass.ApplyClientCpu( cpu.Seconds, note.Searches, cpu.Problem == null ? PassNoteReader.Basis( note, cpu ) : null, cpu.Problem ?? ( note.Searches == 0 ? "no search completed in the pass" : null ) );
+      }
+   }
+
+   /// <summary>
+   /// The engine under test's CPU time between two times from the ledger: the followed cgroups'
+   /// cumulative usage interpolated at each end, as <see cref="ClientCpuBetween"/> does for this
+   /// process. Null with the reason, never 0, when the window lies outside what was sampled, is
+   /// shorter than four samples, crosses a change of the followed cgroups, has a cgroup unread at
+   /// a bracketing sample, followed no cgroup of the engine, or saw the counter go down.
+   /// </summary>
+   /// <param name="from">Start (UTC).</param>
+   /// <param name="to">End (UTC).</param>
+   /// <returns>The engine's and dockerd's CPU seconds, or the reason there are none.</returns>
+   public EngineCpu EngineCpuBetween( DateTime from, DateTime to )
+   {
+      lock( _lock )
+      {
+         if( _ledger.Count < 2 || from.Ticks < _ledger[0].AtTicks || to.Ticks > _ledger[_ledger.Count - 1].AtTicks )
+         {
+            return new EngineCpu( null, null, _ledger.Count < 2 ? "the engine's cgroups were not sampled" : string.Create( CultureInfo.InvariantCulture, $"the window {from:HH:mm:ss.fff} to {to:HH:mm:ss.fff} lies outside the sampled span {new DateTime( _ledger[0].AtTicks, DateTimeKind.Utc ):HH:mm:ss.fff} to {new DateTime( _ledger[_ledger.Count - 1].AtTicks, DateTimeKind.Utc ):HH:mm:ss.fff}" ) );
+         }
+
+         if( to - from < _interval * MIN_CLIENT_CPU_SAMPLES )
+         {
+            return new EngineCpu( null, null, string.Create( CultureInfo.InvariantCulture, $"the window of {( to - from ).TotalSeconds:0.###} s is shorter than {MIN_CLIENT_CPU_SAMPLES} samples of {_interval.TotalMilliseconds:0} ms" ) );
+         }
+
+         ( int a, int b ) = _ledger.Bracket( from.Ticks );
+         ( int c, int d ) = _ledger.Bracket( to.Ticks );
+         return LedgerProblem( new[] { a, b, c, d } ) is string problem
+            ? new EngineCpu( null, null, problem )
+            : LedgerFigures( from, to, a, b, c, d );
+      }
+   }
+
+   /// <summary>
+   /// Fills each pass's engine CPU per search, dockerd CPU per search and CPUs busy, from the
+   /// same pass notes as <see cref="AttachClientCpu"/> (call that first: it takes the last sample).
+   /// </summary>
+   /// <param name="passes">One target's recorded passes.</param>
+   /// <param name="notes">That target's notes.</param>
+   /// <param name="nullReason">Why this target has no engine figure at all (an embedded engine, no cgroup followed, pinning failed), or null to measure it.</param>
+   public void AttachEngineCpu( IEnumerable<PassConditions> passes, IEnumerable<string> notes, string? nullReason )
+   {
+      List<PassNote> found = PassNoteReader.Read( notes );
+      foreach( PassConditions pass in passes )
+      {
+         PassNote? note = nullReason == null ? NoteFor( found, pass ) : null;
+         if( nullReason != null || note == null )
+         {
+            pass.ApplyEngineCpu( null, null, null, 0, nullReason ?? $"no 'Pass {pass.Pass} after ...' note with a search count was found for this pass" );
+            continue;
+         }
+
+         EngineCpu cpu = EngineCpuBetween( note.Start, note.End );
+         pass.ApplyEngineCpu( cpu.EngineSeconds, cpu.DockerdSeconds, note.Searches, ( note.End - note.Start ).TotalSeconds, cpu.Problem ?? ( note.Searches == 0 ? "no search completed in the pass" : null ) );
       }
    }
 
@@ -428,6 +634,91 @@ public sealed class MachineSampler : IDisposable
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// The pass note of a recorded pass: the note of the same name whose start is nearest the
+   /// pass's start (a pass name can repeat after a settle extension).
+   /// </summary>
+   /// <param name="found">The target's pass notes.</param>
+   /// <param name="pass">The pass.</param>
+   /// <returns>The note, or null.</returns>
+   private static PassNote? NoteFor( List<PassNote> found, PassConditions pass )
+   {
+      DateTime start = DateTime.TryParse( pass.StartUtc, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out DateTime parsed ) ? parsed : DateTime.MinValue;
+      return found.Where( n => n.Pass == pass.Pass ).OrderBy( n => Math.Abs( ( n.Start - start ).Ticks ) ).FirstOrDefault();
+   }
+
+   /// <summary>
+   /// Why the ledger samples bracketing a window cannot give an engine figure, or null when they
+   /// can: they must share one generation (generations only grow, so equal ends mean no change in
+   /// between), every followed cgroup must have been read, and at least one must be the engine's.
+   /// </summary>
+   /// <param name="positions">The four bracketing positions.</param>
+   /// <returns>The reason, or null.</returns>
+   private string? LedgerProblem( int[] positions )
+   {
+      EngineCpuSample first = _ledger[positions[0]];
+      foreach( int position in positions )
+      {
+         EngineCpuSample sample = _ledger[position];
+         string at = new DateTime( sample.AtTicks, DateTimeKind.Utc ).ToString( "HH:mm:ss.fff", CultureInfo.InvariantCulture );
+         if( sample.Generation != first.Generation )
+         {
+            return $"the followed cgroups changed inside the pass window (at or before {at})";
+         }
+
+         if( sample.Missing > 0 )
+         {
+            return string.Create( CultureInfo.InvariantCulture, $"{sample.Missing} followed cgroup(s) could not be read at {at} (no usage_usec in cpu.stat)" );
+         }
+
+         if( sample.Engines == 0 )
+         {
+            return $"no cgroup of the engine under test was followed at {at}";
+         }
+      }
+
+      return null;
+   }
+
+   /// <summary>
+   /// The engine's and dockerd's CPU seconds over a window whose bracketing samples passed
+   /// <see cref="LedgerProblem"/>.
+   /// </summary>
+   /// <param name="from">Start.</param>
+   /// <param name="to">End.</param>
+   /// <param name="a">Sample at or before the start.</param>
+   /// <param name="b">Sample after the start.</param>
+   /// <param name="c">Sample at or before the end.</param>
+   /// <param name="d">Sample after the end.</param>
+   /// <returns>The figures, or a reason when a counter went down.</returns>
+   private EngineCpu LedgerFigures( DateTime from, DateTime to, int a, int b, int c, int d )
+   {
+      double engine = Interpolate( c, d, to, static s => s.EngineSeconds ) - Interpolate( a, b, from, static s => s.EngineSeconds );
+      if( engine < 0 )
+      {
+         return new EngineCpu( null, null, string.Create( CultureInfo.InvariantCulture, $"the engine cgroups' CPU counter went down by {-engine:0.###} s inside the window (a cgroup was made again)" ) );
+      }
+
+      double dockerd = Interpolate( c, d, to, static s => s.DockerdSeconds ) - Interpolate( a, b, from, static s => s.DockerdSeconds );
+      return new EngineCpu( engine, double.IsNaN( dockerd ) || dockerd < 0 ? null : dockerd, null );
+   }
+
+   /// <summary>
+   /// A ledger value at a moment, interpolated between the samples either side (NaN stays NaN).
+   /// </summary>
+   /// <param name="low">Sample at or before the moment.</param>
+   /// <param name="high">Sample after it.</param>
+   /// <param name="at">The moment.</param>
+   /// <param name="value">Which value.</param>
+   /// <returns>The value at the moment.</returns>
+   private double Interpolate( int low, int high, DateTime at, Func<EngineCpuSample, double> value )
+   {
+      EngineCpuSample a = _ledger[low];
+      EngineCpuSample b = _ledger[high];
+      double span = b.AtTicks - a.AtTicks;
+      return span <= 0 ? value( a ) : value( a ) + ( value( b ) - value( a ) ) * ( at.Ticks - a.AtTicks ) / span;
+   }
 
    /// <summary>
    /// The clock samples between two times; when none lies inside (a window shorter than one
@@ -527,29 +818,109 @@ public sealed class MachineSampler : IDisposable
 
    /// <summary>
    /// Turns a reading into the outside CPU time since the previous one, and files this
-   /// process's CPU time in the ledger. An interval in which the engine's groups changed (a
-   /// target began, its engine finished starting, or it ended) is left out: the engine's CPU time
-   /// in it cannot be told apart, and counting it as outside work would hold the next pass for the
-   /// engine's own start-up. The interval's value is kept signed.
+   /// process's CPU time and the followed cgroups' CPU time in the ledgers. An interval in which
+   /// the engine's groups changed (a target began, its engine finished starting, or it ended) is
+   /// left out of the outside load: the engine's CPU time in it cannot be told apart, and counting
+   /// it as outside work would hold the next pass for the engine's own start-up. The interval's
+   /// value is kept signed. The arithmetic is the v7 code's (f662f82), written as loops so a
+   /// sample allocates no enumerators or sets; a test holds it to the old expression bit for bit.
    /// </summary>
    /// <param name="reading">The new reading.</param>
-   private void AddLoad( CpuReading reading )
+   /// <param name="key">The followed cgroups' generation, dockerd's folder and count.</param>
+   private void AddLoad( CpuReading reading, LedgerKey key )
    {
       if( _last != null && reading.At <= _last.At )
       {
          return;
       }
 
-      if( _last != null && reading.Groups.Keys.ToHashSet( StringComparer.Ordinal ).SetEquals( _last.Groups.Keys ) )
+      if( _last != null && SameGroups( reading.Groups, _last.Groups ) )
       {
-         double engine = reading.Groups.Where( g => _last.Groups.ContainsKey( g.Key ) ).Sum( g => g.Value - _last.Groups[g.Key] );
+         double engine = 0;
+         foreach( KeyValuePair<string, double> group in reading.Groups )
+         {
+            engine += group.Value - _last.Groups[group.Key];
+         }
+
          double outside = ( reading.Busy - _last.Busy ) - ( reading.Self - _last.Self ) - engine;
          _outside.Add( new OutsideSample( reading.At, ( reading.At - _last.At ).TotalSeconds, outside, _last.At ) );
-         _outside.RemoveAll( s => s.At < reading.At - KEEP_LOAD );
+         TrimOutside( reading.At - KEEP_LOAD );
       }
 
       _client.Add( new ClientCpuSample( reading.At, reading.Client ) );
+      AppendLedger( reading, key );
       _last = reading;
+   }
+
+   /// <summary>
+   /// True when two readings followed the same cgroups (both use ordinal keys, so equal counts
+   /// and one inside the other is set equality).
+   /// </summary>
+   /// <param name="a">One reading's groups.</param>
+   /// <param name="b">The other's.</param>
+   /// <returns>True when the key sets are equal.</returns>
+   private static bool SameGroups( Dictionary<string, double> a, Dictionary<string, double> b )
+   {
+      if( a.Count != b.Count )
+      {
+         return false;
+      }
+
+      foreach( string group in a.Keys )
+      {
+         if( !b.ContainsKey( group ) )
+         {
+            return false;
+         }
+      }
+
+      return true;
+   }
+
+   /// <summary>
+   /// Drops outside samples older than the cutoff. The list is in time order (a reading older
+   /// than the last is refused), so they are all at its front.
+   /// </summary>
+   /// <param name="cutoff">Oldest end time kept.</param>
+   private void TrimOutside( DateTime cutoff )
+   {
+      int old = 0;
+      while( old < _outside.Count && _outside[old].At < cutoff )
+      {
+         old++;
+      }
+
+      if( old > 0 )
+      {
+         _outside.RemoveRange( 0, old );
+      }
+   }
+
+   /// <summary>
+   /// Files one sample of the followed cgroups' CPU in the engine CPU ledger: dockerd's folder
+   /// alone, every other folder summed.
+   /// </summary>
+   /// <param name="reading">The reading.</param>
+   /// <param name="key">Generation, dockerd's folder and how many cgroups were followed.</param>
+   private void AppendLedger( CpuReading reading, LedgerKey key )
+   {
+      double engine = 0;
+      double dockerd = double.NaN;
+      int engines = 0;
+      foreach( KeyValuePair<string, double> group in reading.Groups )
+      {
+         if( key.Dockerd != null && string.Equals( group.Key, key.Dockerd, StringComparison.Ordinal ) )
+         {
+            dockerd = group.Value;
+         }
+         else
+         {
+            engine += group.Value;
+            engines++;
+         }
+      }
+
+      _ledger.Append( new EngineCpuSample( reading.At.Ticks, key.Generation, engine, dockerd, engines, key.Followed - reading.Groups.Count ) );
    }
 
    /// <summary>

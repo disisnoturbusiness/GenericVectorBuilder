@@ -105,7 +105,7 @@ public static class BenchMarkdown
    /// <returns>Safe HTML, e.g. "sqlite-vec &lt;span class="muted"&gt;sqlitevec&lt;/span&gt;".</returns>
    private static string FoldTitle( string key )
    {
-      string name = BenchSummaryReader.FriendlyName( key );
+      string name = BenchNames.FriendlyName( key );
       return name == key ? Inline( key ) : $"{Inline( name )} <span class=\"muted\">{Inline( key )}</span>";
    }
 
@@ -189,6 +189,20 @@ public static class BenchMarkdown
    }
 
    /// <summary>
+   /// Splits a table line into its cells on every pipe that is not escaped; an escaped pipe (backslash, pipe) is a
+   /// pipe inside the cell.
+   /// Why: the consolidated report escapes a pipe inside a recorded text this way, and splitting on every pipe put
+   /// the rest of that text under the wrong column.
+   /// </summary>
+   /// <param name="line">One table line.</param>
+   /// <returns>The trimmed cells.</returns>
+   internal static string[] SplitCells( string line )
+   {
+      const char ESCAPED = '\u0001';
+      return line.Trim().Replace( "\\|", ESCAPED.ToString() ).Trim( '|' ).Split( '|' ).Select( c => c.Replace( ESCAPED, '|' ).Trim() ).ToArray();
+   }
+
+   /// <summary>
    /// Renders a pipe table (header, separator, rows) inside a horizontally scrolling box, since
    /// the benchmark tables are wider than a phone screen.
    /// </summary>
@@ -202,7 +216,7 @@ public static class BenchMarkdown
       bool header = true;
       for( ; i < lines.Length && lines[i].StartsWith( '|' ); i++ )
       {
-         string[] cells = lines[i].Trim().Trim( '|' ).Split( '|' ).Select( c => c.Trim() ).ToArray();
+         string[] cells = SplitCells( lines[i] );
          if( cells.All( c => c.Length > 0 && c.All( ch => ch is '-' or ':' ) ) )
          {
             continue;

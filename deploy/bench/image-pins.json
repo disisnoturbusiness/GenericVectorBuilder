@@ -1,0 +1,70 @@
+{
+  "chroma": {
+    "id": "sha256:1e0b73a187a28757c572acba508c46f48c9e8b0acaf5c20e6d95cdedce1acdf6",
+    "ref": "chromadb/chroma:latest"
+  },
+  "clickhouse": {
+    "id": "sha256:3a91276f066905da0edbbd622d3fc2a2df632c87ea7fe32ef4e74fdf8c9567b0",
+    "ref": "clickhouse/clickhouse-server:26.3.39.7"
+  },
+  "elasticsearch": {
+    "id": "sha256:e23d4758358a4e356cc2ef3259a5a6f345cacc1722c10dffe6d7150a1a78e52f",
+    "ref": "elasticsearch:9.5.3"
+  },
+  "mariadb": {
+    "id": "sha256:6422478cb8e159f080fb1d8ccf65101e26fe51385787fde7d16c3b165a331f15",
+    "ref": "mariadb:11.8.9"
+  },
+  "milvus": {
+    "id": "sha256:29f7668e64df1c6d5cdadbfbee99f38c72e4001054f149a298725acae57230ad",
+    "ref": "milvusdb/milvus:v2.6.25"
+  },
+  "mongodb": {
+    "id": "sha256:1985314b0ded756ba965e0f400d17406b7a89bec659d4763a490f42f006e4fbd",
+    "ref": "mongodb/mongodb-atlas-local:8.0.32"
+  },
+  "opensearch": {
+    "id": "sha256:adfa61f85025d06b4aeb562e7e74fde7e31c437039c93c3862c17e9acebd6c7c",
+    "ref": "opensearchproject/opensearch:3.9.0"
+  },
+  "oracle": {
+    "id": "sha256:f5ff19033860d662c821cb04eb10483fa94f14f78eae252d054291ea07028093",
+    "ref": "gvenzl/oracle-free:23-slim-faststart"
+  },
+  "pgvector": {
+    "id": "sha256:7a7e9f22015b67edb4bef5c59daeebcd7e74bfa570df6ce60ae01237c8648a84",
+    "ref": "pgvector/pgvector:0.8.7-pg17-trixie"
+  },
+  "qdrant": {
+    "id": "sha256:f1c7272cdac52b38c1a0e89313922d940ba50afd90d593a1605dbbc214e66ffb",
+    "ref": "qdrant/qdrant:v1.17.0@sha256:f1c7272cdac52b38c1a0e89313922d940ba50afd90d593a1605dbbc214e66ffb"
+  },
+  "qdrant-hnsw": {
+    "id": "sha256:f1c7272cdac52b38c1a0e89313922d940ba50afd90d593a1605dbbc214e66ffb",
+    "ref": "qdrant/qdrant:v1.17.0@sha256:f1c7272cdac52b38c1a0e89313922d940ba50afd90d593a1605dbbc214e66ffb"
+  },
+  "redis": {
+    "id": "sha256:6f81e8915c60b065a524e6967e0ad1c639ba6efa84d669f823683ea04d9150ee",
+    "ref": "redis:8.10.2"
+  },
+  "sql": {
+    "id": "sha256:2b5b581621126574f3d1f75e78d3eebe8d05aedb59ad0cfdf9aa42cb0634d726",
+    "ref": "mcr.microsoft.com/mssql/server:2025-CU9-ubuntu-24.04@sha256:2b5b581621126574f3d1f75e78d3eebe8d05aedb59ad0cfdf9aa42cb0634d726"
+  },
+  "sql-diskann": {
+    "id": "sha256:2b5b581621126574f3d1f75e78d3eebe8d05aedb59ad0cfdf9aa42cb0634d726",
+    "ref": "mcr.microsoft.com/mssql/server:2025-CU9-ubuntu-24.04@sha256:2b5b581621126574f3d1f75e78d3eebe8d05aedb59ad0cfdf9aa42cb0634d726"
+  },
+  "typesense": {
+    "id": "sha256:610f2d34b1f93d00762869da2c67736775e5798d19a2c8b91b014b8a0cc1e110",
+    "ref": "typesense/typesense:30.2"
+  },
+  "vespa": {
+    "id": "sha256:5c30f5c41e7563498c4f925db6a837a3848f04726a3ed26aed4a7c8ab69f18fd",
+    "ref": "vespaengine/vespa:8.754.14"
+  },
+  "weaviate": {
+    "id": "sha256:f6f4a5961f99e8718a02c822ca6a0d65ed3f9c567734419a7b2144933014f13a",
+    "ref": "semitechnologies/weaviate:1.39.8"
+  }
+}

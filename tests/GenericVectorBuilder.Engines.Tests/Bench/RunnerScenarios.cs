@@ -8,6 +8,11 @@ using GenericVectorBuilder.Bench.Report;
 using GenericVectorBuilder.Bench.Running;
 using GenericVectorBuilder.Bench.Targets;
 using GenericVectorBuilder.Bench.Truth;
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Encodings.Web;
 using GenericVectorBuilder.Core.Contracts;
 using GenericVectorBuilder.Engines.Common;
 
@@ -26,6 +31,9 @@ public static class RunnerScenarios
 
    /// <summary>Collection every scenario loads, as the benchmark names it.</summary>
    public const string COLLECTION = "gvbbench_t";
+
+   /// <summary>How the scenarios print JSON for the tests to compare: plain characters, so a "+" in a version reads as "+".</summary>
+   private static readonly JsonSerializerOptions READABLE = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
    #endregion Data Members
 
@@ -164,6 +172,240 @@ public static class RunnerScenarios
       return new TargetScenario( trace.ToArray(), result.Notes.ToArray(), result.Error, File.ReadAllText( Path.Combine( folder, "results.json" ) ) );
    }
 
+   /// <summary>
+   /// Measures one fake target the way run-all does (or settings-only), with the engine record wired to fakes that write into the
+   /// same trace as the sink: the settings reads, the data-folder sizes, the ClickHouse statements and the image check.
+   /// </summary>
+   /// <param name="kind">"clickhouse" (a container target named clickhouse), "redis" (a redis container on its pinned image, with the entrypoint shape of redis.compose.yaml and all ten secrets in its environment), "mismatch" (a redis container on another image than the pinned one), "embedded" (an embedded target named sqlitevec) or "plain" (a fake with no container).</param>
+   /// <param name="settingsOnly">True for the settings-only path.</param>
+   /// <param name="folder">Folder for results.json and results.md.</param>
+   /// <returns>The ordered trace (sink calls and fakes' markers), notes, error and the results.json text.</returns>
+   public static async Task<RecordScenario> RecordsAsync( string kind, bool settingsOnly, string folder )
+   {
+      const string PINNED = "sha256:6f81e8915c60b065a524e6967e0ad1c639ba6efa84d669f823683ea04d9150ee";
+      var trace = new CallTrace();
+      var args = new List<string> { "run-all", "--pipeline", "t", "--warmup", "2", "--seconds", "1", "--exact-seconds", "1", "--concurrency", "1", "--queries", "random:3", "--top", "3", "--seed", "42" };
+      if( settingsOnly )
+      {
+         args.Add( "--settings-only" );
+      }
+
+      BenchOptions options = BenchOptions.Parse( args );
+      string name = kind switch { "clickhouse" => "clickhouse", "mismatch" or "redis" => "redis", "embedded" => "sqlitevec", _ => "fake" };
+      var sink = new FakeFullSink( name, trace );
+      string container = "gvb-" + name;
+      string image = kind == "mismatch" ? "sha256:1e0b73a187a28757c572acba508c46f48c9e8b0acaf5c20e6d95cdedce1acdf6" : PINNED;
+      string mount = kind == "clickhouse" ? "/home/dan/gvb-data/engines/clickhouse:/var/lib/clickhouse:rw" : "/home/dan/gvb-data/engines/redis:/data:rw";
+      string port = kind == "clickhouse" ? "8123:8123" : "6379:6379";
+      BenchTarget target = kind is "clickhouse" or "mismatch" or "redis"
+         ? ContainerTarget( sink, container, TargetsSettingsScenarios.Inspect( container, Array.Empty<string>(), new[] { mount }, new[] { port }, image ), port )
+         : Target( sink, null );
+      var handler = new TraceHandler( trace );
+      var probe = new ScriptProbe( new[]
+      {
+         "image inspect=>0|{\"LastTagTime\":\"2026-10-03T14:09:34.185138197Z\"}|", "CONFIG GET search-workers=>0|search-workers\\n8\\n|", "CONFIG GET save=>0|save\\n300 1\\n|",
+         "CONFIG GET appendonly=>0|appendonly\\nno\\n|", "CONFIG GET maxmemory=>0|maxmemory\\n0\\n|",
+      }, Array.Empty<string>() );
+      long sizes = 7_000_000_000;
+      var meter = new DataFolderState( ( arguments, limit, ct ) =>
+      {
+         trace.Add( "du" );
+         sizes = trace.ToArray().Count( e => e == "http truncate" ) > 0 ? 150_000_000 : sizes;
+         return Task.FromResult( new ShellResult( 0, $"{sizes}\t{arguments.Last()}", string.Empty ) );
+      }, null, null, _ => true );
+      var measurer = new TargetRunner( options, new EngineLifecycle( new FakeHost( Array.Empty<string>(), Array.Empty<string>() ), true, _ => { } ), _ => { } )
+      {
+         Probe = probe,
+         SettingsReader = new EngineSettingsReader( probe, () => new ClickHouseHttp( handler, "gvb", "pw" ) ),
+         Pins = new ImagePins( new Dictionary<string, ImagePin> { [name] = new ImagePin( "redis:8.10.2", PINNED ) } ),
+         Folders = meter,
+         ClickHouse = new ClickHouseStartState( () => new ClickHouseHttp( handler, "gvb", "pw" ), ( _, _ ) => Task.CompletedTask ),
+      };
+      PipelineData data = Data( 20, 4 );
+      TargetReport result = settingsOnly ? await measurer.SettingsOnlyAsync( target, CancellationToken.None ) : await measurer.MeasureAsync( target, data, Runner( data, options ), CancellationToken.None );
+      var report = new BenchReport { RunSeed = 42, Command = "run-all", Pipeline = "t", SettingsOnly = settingsOnly };
+      report.TargetOrder.Add( result.Name );
+      report.Targets.Add( result );
+      ResultsWriter.Write( report, folder );
+      string json = File.ReadAllText( Path.Combine( folder, "results.json" ) );
+      string markdown = File.ReadAllText( Path.Combine( folder, "results.md" ) );
+      string everything = string.Join( "\n", trace.ToArray().Append( json ).Append( markdown ).Concat( result.Notes ).Append( result.Error ?? string.Empty ) );
+      int leaks = TargetsSettingsScenarios.SECRETS.Select( s => s.Split( '=', 2 )[1] ).Count( v => v.Length > 4 && everything.Contains( v, StringComparison.Ordinal ) )
+         + new[] { "requirepass", "REDIS_PASSWORD", "docker-entrypoint" }.Count( w => everything.Contains( w, StringComparison.Ordinal ) );
+      return new RecordScenario( trace.ToArray(), result.Notes.ToArray(), result.Error, json, leaks, markdown );
+   }
+
+   /// <summary>
+   /// Cases of the recall-to-hits rule: a mean over every query gives a whole number of hits, anything else gives none.
+   /// </summary>
+   /// <returns>One line per case: "recall|queries|top|hits" with "null" for none.</returns>
+   public static string[] RecallHitsCases()
+   {
+      (double? Recall, int Queries, int Top)[] cases =
+      {
+         ( 187 / 200.0, 20, 10 ), ( 1.0, 20, 10 ), ( 0.0, 20, 10 ), ( ( 1 + 0.9 + 0.8 + 1 ) / 4.0, 4, 10 ),
+         ( 0.9333, 20, 10 ), ( 187 / 190.0, 20, 10 ), ( 1.5, 20, 10 ), ( -0.1, 20, 10 ), ( double.NaN, 20, 10 ), ( null, 20, 10 ), ( 0.5, 0, 10 ), ( 0.5, 20, 0 ),
+      };
+      return cases.Select( c => $"{c.Recall?.ToString( "0.#####", System.Globalization.CultureInfo.InvariantCulture ) ?? "null"}|{c.Queries}|{c.Top}|{SearchReport.HitsFrom( c.Recall, c.Queries, c.Top )?.ToString() ?? "null"}" ).ToArray();
+   }
+
+   /// <summary>
+   /// Cases of the disk growth rule: a folder that grew, one that did not change, one that shrank, and a reading with no "before".
+   /// </summary>
+   /// <returns>One line per case: "bytes|text".</returns>
+   public static string[] GrowthCases()
+   {
+      Func<Measurement?, Measurement, string> show = ( before, after ) =>
+      {
+         Measurement m = TargetRunner.Growth( before, after );
+         return $"{( m.Bytes?.ToString() ?? "null" )}|{m.Text}";
+      };
+      var after = new Measurement( 5_000_000, "whole engine data folder" );
+      return new[]
+      {
+         show( new Measurement( 1_000_000, "x" ), after ),
+         show( new Measurement( 5_000_000, "x" ), after ),
+         show( new Measurement( 7_000_000, "x" ), after ),
+         show( null, after ),
+         show( new Measurement( null, "could not size" ), after ),
+      };
+   }
+
+   /// <summary>
+   /// Writes a report that carries every new record with ResultsWriter and returns results.json, so the field names are checked against the contract.
+   /// </summary>
+   /// <param name="folder">Folder for the files.</param>
+   /// <param name="full">True for every record filled in; false for none (the fields must then be absent).</param>
+   /// <returns>The results.json text.</returns>
+   public static string WriteContract( string folder, bool full )
+   {
+      var report = new BenchReport { RunSeed = 1, Command = "run-all", Pipeline = "t", SettingsOnly = full, QueriesFileSha256 = full ? new string( 'a', 64 ) : null };
+      var target = new TargetReport { Name = "x", Engine = "E", Hosting = "compose", Index = "I" };
+      if( full )
+      {
+         target.EngineSettings = new List<EngineSetting> { new() { Key = "search-workers", Value = "8", How = "read: docker exec gvb-redis redis-cli CONFIG GET search-workers" } };
+         target.Image = new ImageRecord { Ref = "redis:8.10.2", Id = "sha256:1", PinnedId = "sha256:1", LastTagTimeUtc = "2026-10-03T14:09:34.185138197Z" };
+         target.DataFolder = new DataFolderRecord { Path = "/p", BytesAtStart = 1, Reset = "truncated", BytesAfterReset = 2, BytesAtEnd = 3, BenchFileBytes = 4 };
+         target.Search = new SearchReport { Recall = 0.935, RecallHits = 187 };
+      }
+
+      report.Targets.Add( target );
+      ResultsWriter.Write( report, folder );
+      return File.ReadAllText( Path.Combine( folder, "results.json" ) );
+   }
+
+   /// <summary>
+   /// The writer's temporary-file rule: a second write replaces the first, no temporary file is left, and a report that cannot be rendered
+   /// writes nothing and leaves the earlier files whole.
+   /// </summary>
+   /// <param name="folder">Folder for the files.</param>
+   /// <returns>Lines: "files|names", "first|marker", "second|marker", "error|type", "after|marker", "files|names".</returns>
+   public static string[] WriterIsAtomic( string folder )
+   {
+      var lines = new List<string>();
+      var report = new BenchReport { RunSeed = 1, Command = "run-all", Pipeline = "first" };
+      ResultsWriter.Write( report, folder );
+      lines.Add( "first|" + JsonNode.Parse( File.ReadAllText( Path.Combine( folder, "results.json" ) ) )!["pipeline"] );
+      report.Pipeline = "second";
+      ResultsWriter.Write( report, folder );
+      lines.Add( "second|" + JsonNode.Parse( File.ReadAllText( Path.Combine( folder, "results.json" ) ) )!["pipeline"] );
+      lines.Add( "files|" + string.Join( ",", Directory.GetFiles( folder ).Select( Path.GetFileName ).OrderBy( n => n, StringComparer.Ordinal ) ) );
+      report.Pipeline = "third";
+      report.Targets.Add( null! );
+      try
+      {
+         ResultsWriter.Write( report, folder );
+         lines.Add( "error|none" );
+      }
+      catch( NullReferenceException )
+      {
+         lines.Add( "error|NullReferenceException" );
+      }
+
+      lines.Add( "after|" + JsonNode.Parse( File.ReadAllText( Path.Combine( folder, "results.json" ) ) )!["pipeline"] );
+      lines.Add( "files|" + string.Join( ",", Directory.GetFiles( folder ).Select( Path.GetFileName ).OrderBy( n => n, StringComparer.Ordinal ) ) );
+      return lines.ToArray();
+   }
+
+   /// <summary>
+   /// Adds the build and boot to a results.json after machine control wrote its conditions, and tries it on one without conditions.
+   /// </summary>
+   /// <param name="folder">Folder for the files.</param>
+   /// <returns>Lines: the conditions JSON after the adds, then "error|message" for the file without conditions.</returns>
+   public static string[] AddConditions( string folder )
+   {
+      ResultsWriter.Write( new BenchReport { RunSeed = 1, Command = "run-all", Pipeline = "t" }, folder );
+      string path = Path.Combine( folder, "results.json" );
+      JsonObject root = (JsonObject)JsonNode.Parse( File.ReadAllText( path ) )!;
+      root["conditions"] = new JsonObject { ["machineControl"] = true, ["governor"] = "performance" };
+      File.WriteAllText( path, root.ToJsonString() );
+      var stamp = RunStamp.Parse( "1.0.0+f662f82f1993d2268dc85a55c872f06e556c987d", "7bdd3a0a-0c2e-4a2a-8f0b-4a0e0f0a1b2c\n", "cpu  1 2 3\nbtime 1791042819\nprocesses 5\n", true );
+      ResultsWriter.AddCondition( folder, "build", stamp.BuildJson() );
+      ResultsWriter.AddCondition( folder, "boot", stamp.BootJson() );
+      var lines = new List<string> { JsonNode.Parse( File.ReadAllText( path ) )!["conditions"]!.ToJsonString( READABLE ) };
+      string bare = Path.Combine( folder, "bare" );
+      ResultsWriter.Write( new BenchReport { RunSeed = 1, Command = "run-all", Pipeline = "t" }, bare );
+      try
+      {
+         ResultsWriter.AddCondition( bare, "build", stamp.BuildJson() );
+         lines.Add( "error|none" );
+      }
+      catch( InvalidDataException ex )
+      {
+         lines.Add( "error|" + ex.Message.Replace( bare, "<folder>" ) );
+      }
+
+      return lines.ToArray();
+   }
+
+   /// <summary>
+   /// Parses the build and boot sources.
+   /// </summary>
+   /// <param name="version">Informational version.</param>
+   /// <param name="bootId">boot_id text.</param>
+   /// <param name="stat">/proc/stat text.</param>
+   /// <param name="requireCommit">Whether a missing commit is an error.</param>
+   /// <returns>"build|json" and "boot|json", or "error|message".</returns>
+   public static string[] Stamp( string version, string bootId, string stat, bool requireCommit )
+   {
+      try
+      {
+         RunStamp stamp = RunStamp.Parse( version, bootId, stat, requireCommit );
+         return new[] { "build|" + stamp.BuildJson().ToJsonString( READABLE ), "boot|" + stamp.BootJson().ToJsonString( READABLE ) };
+      }
+      catch( InvalidOperationException ex )
+      {
+         return new[] { "error|" + ex.Message };
+      }
+   }
+
+   /// <summary>
+   /// The SHA-256 the golden-file record uses.
+   /// </summary>
+   /// <param name="text">Text whose UTF-8 bytes are hashed.</param>
+   /// <returns>64 lower-case hex digits.</returns>
+   public static string GoldenHash( string text )
+   {
+      return GoldenQueries.Sha256Hex( Encoding.UTF8.GetBytes( text ) );
+   }
+
+   /// <summary>
+   /// Parses a command line with the real BenchOptions and reports the settings-only switch or the error.
+   /// </summary>
+   /// <param name="args">Arguments.</param>
+   /// <returns>"settingsOnly|bool" or "error|message".</returns>
+   public static string SettingsOnlyOption( string[] args )
+   {
+      try
+      {
+         return "settingsOnly|" + BenchOptions.Parse( args ).SettingsOnly;
+      }
+      catch( ArgumentException ex )
+      {
+         return "error|" + ex.Message;
+      }
+   }
+
    #endregion Public Methods
 
    #region Private Methods
@@ -212,6 +454,29 @@ public static class RunnerScenarios
    }
 
    /// <summary>
+   /// Wraps a fake sink as a compose-hosted target with a container binding: its route lists one container, asks the router for one
+   /// published port, and hands back the sink; the fake inspector answers "docker inspect" with the text given.
+   /// </summary>
+   /// <param name="sink">The sink.</param>
+   /// <param name="container">Container name.</param>
+   /// <param name="inspect">What "docker inspect" prints.</param>
+   /// <param name="port">"host:container" port to ask the router for.</param>
+   /// <returns>The target.</returns>
+   private static BenchTarget ContainerTarget( FakeSink sink, string container, string inspect, string port )
+   {
+      Func<string, CancellationToken, Task<Measurement>> none = ( _, _ ) => Task.FromResult( Measurement.None( "fake" ) );
+      var route = new EngineRoute( new[] { container }, router =>
+      {
+         router.Address( container, int.Parse( port.Split( ':' )[0] ) );
+         return sink;
+      } );
+      return new BenchTarget( sink, "Fake 1.0", "fake flat index", "compose", $"/x/{sink.Name}.compose.yaml", none, none )
+      {
+         Container = new ContainerBinding( route, new FixedInspector( container, inspect ), TimeSpan.FromSeconds( 5 ), TimeSpan.FromMilliseconds( 10 ) ),
+      };
+   }
+
+   /// <summary>
    /// Wraps a fake sink as a benchmark target.
    /// </summary>
    /// <param name="sink">The sink.</param>
@@ -250,6 +515,73 @@ public sealed record PinnedLifecycleScenario( string[] Calls, string[] Notes );
 /// <param name="Error">The target's error, or null.</param>
 /// <param name="Json">The results.json text.</param>
 public sealed record TargetScenario( string[] Events, string[] Notes, string? Error, string Json );
+
+/// <summary>What <see cref="RunnerScenarios.RecordsAsync"/> saw.</summary>
+/// <param name="Events">Sink calls and the fakes' markers ("du", "http settings", "http list", "http truncate") in order.</param>
+/// <param name="Notes">The target's notes.</param>
+/// <param name="Error">The target's error, or null.</param>
+/// <param name="Json">The results.json text.</param>
+/// <param name="Leaks">How many of the ten planted secret values, and of the words of the entrypoint shape, appear in the results.json, results.md, notes, error or trace.</param>
+/// <param name="Markdown">The results.md text.</param>
+public sealed record RecordScenario( string[] Events, string[] Notes, string? Error, string Json, int Leaks, string Markdown );
+
+/// <summary>
+/// A ClickHouse stand-in over HTTP: answers the settings read, the table list (before the truncation, then after it) and the
+/// truncation, and writes a marker for each into the shared trace.
+/// </summary>
+public sealed class TraceHandler : HttpMessageHandler
+{
+   #region Data Members
+
+   private readonly CallTrace _trace;
+   private int _lists;
+
+   #endregion Data Members
+
+   #region Constructor
+
+   /// <summary>Creates the handler.</summary>
+   /// <param name="trace">The shared trace.</param>
+   public TraceHandler( CallTrace trace )
+   {
+      _trace = trace;
+   }
+
+   #endregion Constructor
+
+   #region Overrides
+
+   /// <summary>
+   /// Answers a statement and records what it was.
+   /// </summary>
+   /// <param name="request">The request.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The answer.</returns>
+   protected override async Task<HttpResponseMessage> SendAsync( HttpRequestMessage request, CancellationToken ct )
+   {
+      string body = await request.Content!.ReadAsStringAsync( ct );
+      string answer;
+      if( body.Contains( "max_threads", StringComparison.Ordinal ) )
+      {
+         _trace.Add( "http settings" );
+         answer = "'auto(4)'\n";
+      }
+      else if( body.StartsWith( "TRUNCATE", StringComparison.Ordinal ) )
+      {
+         _trace.Add( "http truncate" );
+         answer = string.Empty;
+      }
+      else
+      {
+         _trace.Add( "http list" );
+         answer = _lists++ == 0 ? "metric_log\t1048576000\nquery_log\t3145728000\nquery_log_0\t52428800\n" : "metric_log\t0\nquery_log\t0\nquery_log_0\t52428800\n";
+      }
+
+      return new HttpResponseMessage( HttpStatusCode.OK ) { Content = new StringContent( answer, Encoding.UTF8 ) };
+   }
+
+   #endregion Overrides
+}
 
 /// <summary>
 /// An ordered, thread-safe list of events. Why thread-safe: the throughput passes and their

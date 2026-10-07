@@ -38,8 +38,6 @@ namespace GenericVectorBuilder.Bench.Targets
    }
 }";
 
-   private const string CLIENT_CPU_LINE = "Client CPU per search is the CPU time the test's .NET client itself used for each search, measured in the same pass as the figure beside it. Where it is close to the latency, the client library is a large part of what is measured. For an embedded engine (DuckDB, sqlite-vec) the engine runs inside the client process, so its figure is the engine's own CPU time, not client overhead.";
-
    private readonly string _root;
 
    #endregion Data Members
@@ -103,6 +101,7 @@ namespace GenericVectorBuilder.Bench.Targets
       Assert.Contains( "| 700.0 | 2500.0 | - | - | 1.000 |", md );
       Assert.Contains( "- Client CPU per search: 1 searcher 0.49 ms, 8 searchers 0.30 ms", md );
       Assert.Equal( 1, md.Split( "- " + CLIENT_CPU_LINE ).Length - 1 );
+      Assert.DoesNotContain( "close to the latency", md );
    }
 
    /// <summary>
@@ -127,6 +126,9 @@ namespace GenericVectorBuilder.Bench.Targets
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>The client-CPU line, read from the compiled ConsolidateFraming (gap G23: no hand-kept copy that can drift from the source).</summary>
+   private static string CLIENT_CPU_LINE => (string)COMPILED.Value.GetType( "GenericVectorBuilder.Bench.Stats.ConsolidateFraming" )!.GetField( "CLIENT_CPU_LINE" )!.GetValue( null )!;
 
    /// <summary>
    /// A report of two targets (the first with an exact mode of 120 searches) built from JSON, so the

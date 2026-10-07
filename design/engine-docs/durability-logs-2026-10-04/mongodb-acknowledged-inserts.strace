@@ -1,0 +1,57 @@
+666721 +++ exited with 0 +++
+666762 +++ exited with 0 +++
+666768 +++ exited with 0 +++
+666718 +++ exited with 0 +++
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+668643 fdatasync(98</data/db>)          = 0
+668643 fdatasync(97</data/db/collection-0-13951080542199070224.wt>) = 0
+668643 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+668643 fdatasync(99</data/db>)          = 0
+668643 fdatasync(98</data/db/index-1-13951080542199070224.wt>) = 0
+668643 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+668812 +++ exited with 0 +++
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+668816 +++ exited with 0 +++
+668817 +++ exited with 0 +++
+668815 +++ exited with 0 +++
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018> <unfinished ...>
+668818 +++ exited with 0 +++
+666711 <... fdatasync resumed>)         = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+668820 +++ exited with 0 +++
+668821 +++ exited with 0 +++
+668819 +++ exited with 0 +++
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+666711 fdatasync(13</data/db/journal/WiredTigerLog.0000000018>) = 0
+668640 +++ exited with 0 +++
+668643 +++ exited with 0 +++
+668642 +++ exited with 0 +++
+668641 +++ exited with 0 +++

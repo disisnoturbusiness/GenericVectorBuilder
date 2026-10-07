@@ -65,6 +65,19 @@ public static class SegmentLayout
    }
 
    /// <summary>
+   /// The engine's own words for its layout: the part of the evidence text that names the segment
+   /// count, exactly as written (for example "4 segment(s)").
+   /// Why: a sentence that prints the layout must print text that is in the run's record, so the
+   /// audit can find it there.
+   /// </summary>
+   /// <param name="detail">The engine's evidence text, or null.</param>
+   /// <returns>The matched text, or null when the text names no segment count.</returns>
+   public static string? RawMatch( string? detail )
+   {
+      return detail != null && IN_TEXT.Match( detail ) is { Success: true } m ? m.Value : null;
+   }
+
+   /// <summary>
    /// Writes a layout the same way whatever spelling the engine used.
    /// </summary>
    /// <param name="count">Segments.</param>

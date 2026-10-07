@@ -14,6 +14,7 @@ namespace GenericVectorBuilder.Engines.Tests.Bench;
 /// Why these get tests: each decides whether the box is left changed after a run, or whether a
 /// number was measured under the conditions the results claim.
 /// </summary>
+[Collection( TimingCollection.NAME )]
 public class MachineControlTests
 {
    #region Public Methods
@@ -798,7 +799,7 @@ internal static class MachineControlCompiler
    }
 
    /// <summary>
-   /// Compiles every benchmark source plus the three scenario files.
+   /// Compiles every benchmark source plus the four scenario files.
    /// </summary>
    /// <returns>The assembly.</returns>
    private static Assembly Compile()
@@ -809,7 +810,7 @@ internal static class MachineControlCompiler
       List<SyntaxTree> trees = Directory.EnumerateFiles( bench, "*.cs", SearchOption.AllDirectories )
          .Where( f => Path.GetRelativePath( bench, f ).Split( Path.DirectorySeparatorChar )[0] is not ( "bin" or "obj" ) )
          .Select( f => CSharpSyntaxTree.ParseText( File.ReadAllText( f ), parse, f ) ).ToList();
-      foreach( string file in new[] { "MachineControlScenarios.cs", "MachineControlAccountingScenarios.cs", "MachineControlClockScenarios.cs" } )
+      foreach( string file in new[] { "MachineControlScenarios.cs", "MachineControlAccountingScenarios.cs", "MachineControlClockScenarios.cs", "MachineControlV8Scenarios.cs" } )
       {
          string scenarios = Path.Combine( root, "tests", "GenericVectorBuilder.Engines.Tests", "Bench", file );
          trees.Add( CSharpSyntaxTree.ParseText( File.ReadAllText( scenarios ), parse.WithPreprocessorSymbols( "BENCH_UNDER_TEST" ), scenarios ) );

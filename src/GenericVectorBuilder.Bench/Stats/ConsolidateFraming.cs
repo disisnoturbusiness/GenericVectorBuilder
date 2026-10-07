@@ -3,18 +3,17 @@ using System.Globalization;
 namespace GenericVectorBuilder.Bench.Stats;
 
 /// <summary>
-/// The words that frame the speed ranking in every place it is shown: the title that says what
-/// was ranked and on how big a collection, and the one line that says what the numbers do not
-/// measure.
-/// Why one place: at 524 vectors the timings are request cost (connection, driver, parsing, a
-/// scan over a few hundred rows), not how an index scales, and a ranking shown without that is
-/// read as an index ranking. Every search is timed end to end through the engine's own .NET client
-/// library, and for the fastest engines the client's own CPU per search (0.49 to 0.87 ms in the v4
-/// review of 2026-10-05) is about as large as the latency, so the order partly reflects the client
-/// library; the line says so, and the tables show
-/// the client CPU per search where the results carry it. The markdown report, the results.md of a
-/// run and the summary page must say the same thing; the web page keeps a copy of these strings
-/// (it does not reference the benchmark) and a test compares the two.
+/// The words that frame the speed figures of a single run's results.md: the title that says what was
+/// timed and on how big a collection, the one line that says what the numbers do not measure, and the
+/// line that says what client CPU per search is.
+/// Why one place: at 524 vectors the timings are request cost (connection, driver, parsing, a scan
+/// over a few hundred rows), not how an index scales, and a figure shown without that is read as an
+/// index ranking. The consolidated report no longer prints these lines: its prose comes from
+/// <see cref="ConsolidateText"/>, audited sentence by sentence.
+/// Why <see cref="RETIRED"/>: the v5 to v7 results.md files carry a client-CPU line that read client
+/// CPU per search as a part of the latency, which client CPU above the time per search (Redis, DuckDB,
+/// sqlite-vec) shows it is not; the runs are read in place, so the consolidation lists the lines that
+/// still hold those words, and the page marks those run pages (hole H4).
 /// </summary>
 public static class ConsolidateFraming
 {
@@ -41,21 +40,25 @@ public static class ConsolidateFraming
    /// <summary>The one line when the collection size is unknown.</summary>
    public const string LINE_UNKNOWN = "The collection size was not recorded in these results. Measured end to end through each engine's .NET client.";
 
-   /// <summary>What a band is and what its order means, printed under every banded table.</summary>
-   public const string BANDS_LINE = "Engines in different bands never overlap: every run of an engine in a faster band beat every run of an engine in a slower band, and the medians on either side of a band boundary are at least 3% apart. Engines in one band are linked by overlapping slowest-to-fastest ranges or by neighboring medians less than 3% apart (an engine varies about 2% from run to run), so these runs do not separate them cleanly. Inside a band they are listed by median, and that order is not a ranking.";
+   /// <summary>
+   /// What the client CPU per search column is; printed under a run's table that shows it. It says what
+   /// the figure is and that it can exceed the time per search, never what share of the latency it is.
+   /// </summary>
+   public const string CLIENT_CPU_LINE = "Client CPU per search is the CPU time the test's .NET client itself used for each search, measured in the same pass as the figure beside it, summed over every thread, so it can exceed the time per search. For an embedded engine (DuckDB, sqlite-vec) the engine runs inside the client process, so its figure includes the engine's own CPU time.";
 
-   /// <summary>What the client CPU per search column is and why it sits beside the latency; printed under a table that shows it.</summary>
-   public const string CLIENT_CPU_LINE = "Client CPU per search is the CPU time the test's .NET client itself used for each search, measured in the same pass as the figure beside it. Where it is close to the latency, the client library is a large part of what is measured. For an embedded engine (DuckDB, sqlite-vec) the engine runs inside the client process, so its figure is the engine's own CPU time, not client overhead.";
-
-   /// <summary>Printed instead of <see cref="BANDS_LINE"/> when only one run was used.</summary>
-   public const string ONE_RUN_LINE = "One run: no spread is known, so no band can be drawn. The order shows this run only.";
+   /// <summary>Words of framing sentences this report retired; a run's results.md line holding one is listed for the page to mark.</summary>
+   public static readonly IReadOnlyList<string> RETIRED = new[]
+   {
+      "Where it is close to the latency, the client library is a large part of what is measured.",
+      "not client overhead",
+   };
 
    #endregion Data Members
 
    #region Public Methods
 
    /// <summary>
-   /// The ranking's title.
+   /// The run's title.
    /// </summary>
    /// <param name="rows">Vectors in the collection, or null when not recorded.</param>
    /// <returns>E.g. "Request speed on a small collection (524 vectors)".</returns>

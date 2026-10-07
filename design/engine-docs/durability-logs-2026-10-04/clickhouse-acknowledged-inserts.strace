@@ -1,0 +1,1135 @@
+703781 18:06:04.444920 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704314 18:06:04.447777 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x464, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703787 18:06:04.455115 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x48, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703767 18:06:04.464558 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x20, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704048 18:06:04.483146 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x250, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703973 18:06:04.492207 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1bc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703813 18:06:04.507236 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x7c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704006 18:06:04.525878 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1fc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704110 18:06:04.537141 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x296, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703970 18:06:04.582178 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1b6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703889 18:06:04.582226 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x114, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704194 18:06:04.582513 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x372, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703957 18:06:04.592483 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x19c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704175 18:06:04.593490 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x332, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704360 18:06:04.595948 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4be, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703798 18:06:04.615158 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x5e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704009 18:06:04.627324 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x204, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703837 18:06:04.641394 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xac, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703925 18:06:04.650481 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x15c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704102 18:06:04.676978 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2f6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704273 18:06:04.685528 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x412, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703823 18:06:04.688134 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x90, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704316 18:06:04.716317 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x468, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703937 18:06:04.735545 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x174, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704090 18:06:04.741199 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2c8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704437 18:06:04.753015 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x552, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704373 18:06:04.780319 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4d8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704387 18:06:04.818188 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4f4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703986 18:06:04.834316 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1d6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704342 18:06:04.847317 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x49a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704038 18:06:04.857302 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x23c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703988 18:06:04.857346 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1da, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703953 18:06:04.857382 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x194, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703903 18:06:04.863643 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x130, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704191 18:06:04.863781 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x36c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704161 18:06:04.897883 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x308, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704385 18:06:04.921617 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4f0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703870 18:06:04.963906 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xee, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704379 18:06:04.975996 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4e4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703861 18:06:04.978163 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xdc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703968 18:06:04.987299 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1b2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704221 18:06:05.017372 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3aa, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704287 18:06:05.026107 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x42e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704362 18:06:05.054973 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4c2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704377 18:06:05.064734 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4e0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703864 18:06:05.070878 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xe2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704386 18:06:05.073007 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4f2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703831 18:06:05.074044 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xa0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703774 18:06:05.087310 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703854 18:06:05.114346 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xce, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704073 18:06:05.120277 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x282, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704136 18:06:05.133742 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x34e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704067 18:06:05.137414 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x276, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704185 18:06:05.173052 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x35c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704283 18:06:05.177996 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x426, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704233 18:06:05.180354 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3c2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704024 18:06:05.186545 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x222, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704135 18:06:05.274840 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x35e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704139 18:06:05.277497 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2ca, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703850 18:06:05.300801 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xc6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704346 18:06:05.304369 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4a2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703927 18:06:05.316582 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x160, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704071 18:06:05.322711 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x27e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703829 18:06:05.329006 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x9c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704084 18:06:05.357980 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2ae, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704031 18:06:05.361868 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x230, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703943 18:06:05.370843 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x180, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704238 18:06:05.372258 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3cc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704171 18:06:05.401711 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x32a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703769 18:06:05.405573 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x24, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704230 18:06:05.405917 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3bc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704242 18:06:05.422680 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3d4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703922 18:06:05.424934 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x158, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703887 18:06:05.440582 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x110, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704060 18:06:05.449685 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x268, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704415 18:06:05.453822 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x524, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704123 18:06:05.489512 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x33a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704076 18:06:05.489746 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x28c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703933 18:06:05.493496 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x16c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704294 18:06:05.496846 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x43c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704309 18:06:05.539301 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x45a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704210 18:06:05.541940 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x394, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703820 18:06:05.547286 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x8a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704053 18:06:05.548163 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x25a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704203 18:06:05.549498 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x386, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703965 18:06:05.550145 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1ac, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704127 18:06:05.556972 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2b2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703794 18:06:05.574207 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x56, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703886 18:06:05.590736 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x10e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704143 18:06:05.599292 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2da, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704051 18:06:05.608722 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x256, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703955 18:06:05.650635 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x198, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703944 18:06:05.662783 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x182, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704431 18:06:05.666593 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x548, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704202 18:06:05.670749 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x384, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703786 18:06:05.671676 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x46, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704247 18:06:05.686037 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3de, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704304 18:06:05.686246 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x450, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704106 18:06:05.692397 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x306, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704121 18:06:05.749563 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x324, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704208 18:06:05.752923 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x390, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703825 18:06:05.759430 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x94, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704015 18:06:05.814299 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x210, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703776 18:06:05.884474 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x32, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703796 18:06:05.903366 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x5a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704193 18:06:05.924432 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x370, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704149 18:06:05.940135 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2ea, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703857 18:06:05.953026 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xd4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703835 18:06:05.953674 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xa8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704306 18:06:05.961542 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x454, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704158 18:06:05.967627 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x300, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704359 18:06:05.972789 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4bc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703979 18:06:05.978187 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1c8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704277 18:06:05.980282 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x41a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704077 18:06:05.993496 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x292, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704236 18:06:06.009564 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3c8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703775 18:06:06.011864 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x30, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703916 18:06:06.012631 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x14a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703885 18:06:06.021924 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x10c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703811 18:06:06.031501 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x78, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704162 18:06:06.032726 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x30c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704223 18:06:06.041566 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3ae, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704199 18:06:06.053838 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x37e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703780 18:06:06.064489 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704266 18:06:06.084220 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x404, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704026 18:06:06.085347 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x226, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704344 18:06:06.093524 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x49e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703814 18:06:06.097813 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x7e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703993 18:06:06.107468 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1e8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704094 18:06:06.135147 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2d3, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704320 18:06:06.139440 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x470, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704163 18:06:06.173523 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x310, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704142 18:06:06.230988 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2db, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704131 18:06:06.269543 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x346, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704431 18:06:06.290302 openat(AT_FDCWD, "/etc/clickhouse-server/config.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 148
+704435 18:06:06.299730 openat(AT_FDCWD, "/etc/clickhouse-server/users.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 148
+704114 18:06:06.310919 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x29e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703761 18:06:06.323232 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x14, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703935 18:06:06.330406 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x170, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704023 18:06:06.355566 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x220, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704353 18:06:06.358567 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4b0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703940 18:06:06.364024 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x17a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704012 18:06:06.364678 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x20a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704263 18:06:06.365969 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3fe, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704059 18:06:06.366264 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x266, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704057 18:06:06.407633 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x262, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704134 18:06:06.425424 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x350, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703950 18:06:06.455272 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x18e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704356 18:06:06.480423 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4b6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703764 18:06:06.487967 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704310 18:06:06.506952 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x45c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704240 18:06:06.507779 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3d0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703879 18:06:06.508216 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x100, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704408 18:06:06.527860 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x522, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703997 18:06:06.529524 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1ec, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704166 18:06:06.559833 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x349, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704268 18:06:06.560970 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x408, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704241 18:06:06.593748 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3d2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703923 18:06:06.598624 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x156, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704261 18:06:06.602296 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3fa, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703918 18:06:06.606198 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x14e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703954 18:06:06.613115 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x196, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703948 18:06:06.632362 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x18a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704262 18:06:06.635253 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3fc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703892 18:06:06.656351 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x11a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703802 18:06:06.683783 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x66, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704222 18:06:06.697907 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3ac, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703880 18:06:06.698563 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x102, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704130 18:06:06.707386 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2b8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703868 18:06:06.719883 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xea, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704343 18:06:06.734868 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x49c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704036 18:06:06.734912 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x238, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704008 18:06:06.736328 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x200, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704299 18:06:06.755924 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x446, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704049 18:06:06.785360 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x252, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703805 18:06:06.787535 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x6c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704255 18:06:06.803076 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3ee, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703756 18:06:06.803833 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xa, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703877 18:06:06.840278 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xfc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704237 18:06:06.852296 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3ca, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704150 18:06:06.860301 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2ec, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704027 18:06:06.863816 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x228, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704087 18:06:06.880933 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2bc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703799 18:06:06.931268 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x60, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703759 18:06:06.931330 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x10, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704152 18:06:06.976826 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x31a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703958 18:06:06.976870 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x19e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704120 18:06:06.996706 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2a6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704108 18:06:07.001912 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x316, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703745 18:06:07.027630 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704100 18:06:07.031928 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x356, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704260 18:06:07.038770 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3f8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704207 18:06:07.051470 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x38e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704198 18:06:07.111303 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x37c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703807 18:06:07.121612 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x70, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704040 18:06:07.123674 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x240, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703858 18:06:07.138838 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xd6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704022 18:06:07.144616 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x21e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704074 18:06:07.163942 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x284, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703833 18:06:07.189904 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xa4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704321 18:06:07.271247 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x472, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704366 18:06:07.280277 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4ca, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704195 18:06:07.306764 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x374, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704354 18:06:07.358735 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4b2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704020 18:06:07.360273 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x21a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704138 18:06:07.364083 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2c3, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704270 18:06:07.402830 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x40c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704413 18:06:07.428981 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_34_34_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704413 18:06:07.429279 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_34_34_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704413 18:06:07.429459 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_34_34_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704413 18:06:07.429970 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_34_34_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704302 18:06:07.430105 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x44c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704413 18:06:07.430164 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_34_34_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704413 18:06:07.435055 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_34_34_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704413 18:06:07.435462 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_34_34_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704413 18:06:07.435788 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_34_34_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704413 18:06:07.436075 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_34_34_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704413 18:06:07.436343 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_34_34_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704413 18:06:07.436590 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_34_34_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704413 18:06:07.436841 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_34_34_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704436 18:06:07.475042 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_35_35_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704436 18:06:07.475294 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_35_35_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704436 18:06:07.475429 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_35_35_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704436 18:06:07.475845 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_35_35_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704436 18:06:07.475988 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_35_35_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704436 18:06:07.480520 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_35_35_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704436 18:06:07.480810 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_35_35_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704436 18:06:07.481148 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_35_35_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704436 18:06:07.481408 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_35_35_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704436 18:06:07.481643 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_35_35_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704436 18:06:07.481880 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_35_35_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704436 18:06:07.482128 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_35_35_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704204 18:06:07.495037 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x388, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704133 18:06:07.510531 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x35a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704348 18:06:07.511275 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4a6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703949 18:06:07.514787 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x18c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705230 18:06:07.523779 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_36_36_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+705230 18:06:07.523999 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_36_36_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+705230 18:06:07.524163 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_36_36_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+705230 18:06:07.524612 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_36_36_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+705230 18:06:07.524748 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_36_36_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+705230 18:06:07.528986 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_36_36_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+705230 18:06:07.529303 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_36_36_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+705230 18:06:07.529609 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_36_36_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+705230 18:06:07.529850 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_36_36_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+705230 18:06:07.530110 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_36_36_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+705230 18:06:07.530373 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_36_36_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+705230 18:06:07.530605 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_36_36_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704376 18:06:07.541775 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4de, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704115 18:06:07.551166 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2c4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703909 18:06:07.563447 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x13c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703934 18:06:07.564741 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x16e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704421 18:06:07.565711 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_37_37_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704421 18:06:07.565944 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_37_37_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704421 18:06:07.566087 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_37_37_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704421 18:06:07.566513 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_37_37_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704421 18:06:07.566653 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_37_37_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704421 18:06:07.571205 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_37_37_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704421 18:06:07.571505 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_37_37_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704421 18:06:07.571811 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_37_37_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704174 18:06:07.571925 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x330, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704421 18:06:07.572034 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_37_37_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704421 18:06:07.572292 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_37_37_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704421 18:06:07.572515 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_37_37_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704421 18:06:07.572716 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_37_37_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704281 18:06:07.588409 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x422, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703977 18:06:07.604474 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1c4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704438 18:06:07.607789 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_38_38_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704438 18:06:07.607947 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_38_38_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704438 18:06:07.608056 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_38_38_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704438 18:06:07.608409 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_38_38_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704438 18:06:07.608517 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_38_38_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704438 18:06:07.613521 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_38_38_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704438 18:06:07.613865 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_38_38_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704438 18:06:07.614211 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_38_38_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704438 18:06:07.614457 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_38_38_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704438 18:06:07.614682 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_38_38_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704438 18:06:07.614899 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_38_38_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704438 18:06:07.615128 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_38_38_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704058 18:06:07.626518 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x264, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704330 18:06:07.629685 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_38_1/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 228
+704330 18:06:07.629998 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_38_1/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 231
+704330 18:06:07.630226 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_38_1/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 238
+704330 18:06:07.631055 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_38_1/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704330 18:06:07.631235 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_38_1/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704330 18:06:07.634026 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_34_34_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704330 18:06:07.634611 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_34_34_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704330 18:06:07.635834 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_35_35_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704330 18:06:07.636305 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_35_35_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704330 18:06:07.637560 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_36_36_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704330 18:06:07.638129 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_36_36_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704330 18:06:07.639971 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_37_37_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704330 18:06:07.640851 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_37_37_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704330 18:06:07.642600 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_38_38_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704330 18:06:07.643068 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_38_38_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704295 18:06:07.645111 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x43e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704323 18:06:07.650413 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x474, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704288 18:06:07.652801 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x430, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704414 18:06:07.658034 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_39_39_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704414 18:06:07.658265 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_39_39_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704414 18:06:07.658412 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_39_39_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704414 18:06:07.658851 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_39_39_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704414 18:06:07.658972 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_39_39_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704414 18:06:07.663162 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_39_39_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704414 18:06:07.663463 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_39_39_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704414 18:06:07.663783 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_39_39_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 283
+704414 18:06:07.664027 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_39_39_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 284
+704414 18:06:07.664275 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_39_39_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 285
+704414 18:06:07.664518 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_39_39_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 286
+704414 18:06:07.664741 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_39_39_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 288
+704428 18:06:07.670710 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x542, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703964 18:06:07.671536 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1aa, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704335 18:06:07.672371 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_38_1/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704335 18:06:07.672912 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_38_1/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704335 18:06:07.673341 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_38_1/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 148
+704335 18:06:07.673667 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_38_1/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704335 18:06:07.673943 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_38_1/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704335 18:06:07.674215 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_38_1/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704335 18:06:07.674483 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_38_1/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+703902 18:06:07.689517 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x12e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704371 18:06:07.689987 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4d4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705230 18:06:07.702744 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_40_40_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+705230 18:06:07.702945 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_40_40_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+705230 18:06:07.703088 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_40_40_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+705230 18:06:07.703504 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_40_40_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+705230 18:06:07.703625 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_40_40_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704414 18:06:07.704211 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x533, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705230 18:06:07.708122 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_40_40_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+705230 18:06:07.708413 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_40_40_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+705230 18:06:07.708748 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_40_40_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+705230 18:06:07.708977 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_40_40_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+705230 18:06:07.709206 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_40_40_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+705230 18:06:07.709454 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_40_40_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+705230 18:06:07.709673 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_40_40_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704404 18:06:07.745643 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_41_41_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704404 18:06:07.745896 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_41_41_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704404 18:06:07.746037 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_41_41_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704404 18:06:07.746514 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_41_41_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704404 18:06:07.746641 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_41_41_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704404 18:06:07.751262 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_41_41_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704404 18:06:07.751612 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_41_41_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704404 18:06:07.751959 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_41_41_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704404 18:06:07.752223 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_41_41_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704404 18:06:07.752471 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_41_41_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704404 18:06:07.752696 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_41_41_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704404 18:06:07.752960 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_41_41_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704068 18:06:07.754859 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x278, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703990 18:06:07.765659 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1de, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704438 18:06:07.789758 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_42_42_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704438 18:06:07.789991 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_42_42_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704438 18:06:07.790170 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_42_42_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704438 18:06:07.790595 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_42_42_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704438 18:06:07.790734 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_42_42_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704438 18:06:07.794902 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_42_42_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704438 18:06:07.795225 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_42_42_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704438 18:06:07.795565 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_42_42_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704438 18:06:07.795820 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_42_42_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704438 18:06:07.796067 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_42_42_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704438 18:06:07.796310 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_42_42_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704438 18:06:07.796570 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_42_42_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+703976 18:06:07.816984 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1c2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705232 18:06:07.831077 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_43_43_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+705232 18:06:07.831296 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_43_43_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+705232 18:06:07.831418 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_43_43_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+705232 18:06:07.831824 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_43_43_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+705232 18:06:07.831943 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_43_43_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+705232 18:06:07.836167 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_43_43_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+705232 18:06:07.836453 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_43_43_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+705232 18:06:07.836948 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_43_43_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+705232 18:06:07.837239 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_43_43_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+705232 18:06:07.837480 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_43_43_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+705232 18:06:07.837720 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_43_43_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+705232 18:06:07.837967 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_43_43_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704112 18:06:07.845629 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x29a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704324 18:06:07.853463 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_43_2/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 228
+704324 18:06:07.853773 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_43_2/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 148
+704324 18:06:07.853970 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_43_2/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 231
+704324 18:06:07.854516 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_43_2/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 238
+704324 18:06:07.854675 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_43_2/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704325 18:06:07.857100 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_34_38_1/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704325 18:06:07.857748 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_34_38_1/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704325 18:06:07.858819 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_39_39_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704325 18:06:07.859328 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_39_39_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704325 18:06:07.861277 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_40_40_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704325 18:06:07.861959 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_40_40_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704325 18:06:07.863241 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_41_41_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704325 18:06:07.863748 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_41_41_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704325 18:06:07.865229 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_42_42_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704325 18:06:07.865661 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_42_42_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704325 18:06:07.866687 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_43_43_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704325 18:06:07.867263 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_43_43_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+703915 18:06:07.878114 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x148, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705234 18:06:07.880111 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_44_44_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+705234 18:06:07.880329 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_44_44_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+705234 18:06:07.880459 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_44_44_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+705234 18:06:07.880985 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_44_44_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+705234 18:06:07.881139 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_44_44_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+705234 18:06:07.885346 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_44_44_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+705234 18:06:07.885626 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_44_44_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+705234 18:06:07.885903 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_44_44_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 283
+705234 18:06:07.886153 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_44_44_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 284
+705234 18:06:07.886376 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_44_44_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 285
+705234 18:06:07.886599 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_44_44_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 286
+705234 18:06:07.886856 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_44_44_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 288
+704329 18:06:07.898307 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_43_2/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704329 18:06:07.898807 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_43_2/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666 <unfinished ...>
+704384 18:06:07.898931 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4ee, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704329 18:06:07.898946 <... openat resumed>) = 273
+704329 18:06:07.899322 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_43_2/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704329 18:06:07.899652 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_43_2/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704329 18:06:07.899959 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_43_2/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704329 18:06:07.900320 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_43_2/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704329 18:06:07.900552 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_43_2/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704436 18:06:07.919553 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_45_45_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704436 18:06:07.919750 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_45_45_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704436 18:06:07.919881 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_45_45_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704436 18:06:07.920297 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_45_45_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704436 18:06:07.920418 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_45_45_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704436 18:06:07.924397 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_45_45_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704436 18:06:07.924660 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_45_45_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704436 18:06:07.924921 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_45_45_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704436 18:06:07.925139 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_45_45_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704436 18:06:07.925337 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_45_45_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704436 18:06:07.925522 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_45_45_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704436 18:06:07.925706 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_45_45_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704056 18:06:07.927018 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x260, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703772 18:06:07.933351 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704422 18:06:07.956611 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_46_46_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704422 18:06:07.956787 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_46_46_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666 <unfinished ...>
+704246 18:06:07.956825 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3dc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704422 18:06:07.956854 <... openat resumed>) = 272
+704422 18:06:07.956908 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_46_46_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704422 18:06:07.957282 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_46_46_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704422 18:06:07.957423 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_46_46_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704422 18:06:07.960963 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_46_46_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704422 18:06:07.961199 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_46_46_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704422 18:06:07.961422 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_46_46_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704422 18:06:07.961605 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_46_46_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704422 18:06:07.961801 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_46_46_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704422 18:06:07.961988 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_46_46_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704422 18:06:07.962180 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_46_46_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+703891 18:06:07.963921 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x118, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703873 18:06:07.979479 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xf4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704404 18:06:07.993079 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_47_47_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704404 18:06:07.993276 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_47_47_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704404 18:06:07.993390 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_47_47_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704404 18:06:07.993740 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_47_47_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704404 18:06:07.993848 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_47_47_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704404 18:06:07.997457 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_47_47_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704404 18:06:07.997703 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_47_47_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704404 18:06:07.998017 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_47_47_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704404 18:06:07.998247 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_47_47_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704404 18:06:07.998447 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_47_47_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704404 18:06:07.998637 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_47_47_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704404 18:06:07.998826 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_47_47_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704113 18:06:08.005615 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x29c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703967 18:06:08.015251 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1b0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704399 18:06:08.034194 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_48_48_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704399 18:06:08.034370 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_48_48_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704399 18:06:08.034471 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_48_48_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704399 18:06:08.034790 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_48_48_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704399 18:06:08.034904 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_48_48_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704399 18:06:08.038274 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_48_48_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704399 18:06:08.038501 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_48_48_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704399 18:06:08.038720 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_48_48_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704399 18:06:08.038893 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_48_48_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704399 18:06:08.039067 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_48_48_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704399 18:06:08.039237 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_48_48_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704399 18:06:08.039403 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_48_48_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704326 18:06:08.050985 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_48_3/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 228
+704326 18:06:08.051234 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_48_3/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 231
+704326 18:06:08.051382 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_48_3/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 238
+704326 18:06:08.051932 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_48_3/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666 <unfinished ...>
+704001 18:06:08.052013 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1f4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704326 18:06:08.052025 <... openat resumed>) = 271
+704326 18:06:08.052096 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_48_3/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+703994 18:06:08.053410 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1e4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704326 18:06:08.053911 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_34_43_2/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704326 18:06:08.054291 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_34_43_2/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704326 18:06:08.055109 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_44_44_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704326 18:06:08.055498 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_44_44_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704326 18:06:08.056631 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_45_45_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704326 18:06:08.057281 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_45_45_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704326 18:06:08.058639 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_46_46_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704326 18:06:08.059002 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_46_46_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704326 18:06:08.060341 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_47_47_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704326 18:06:08.060869 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_47_47_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704326 18:06:08.062038 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_48_48_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704326 18:06:08.062681 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_48_48_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704421 18:06:08.071776 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_49_49_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 148
+704421 18:06:08.071936 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_49_49_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704421 18:06:08.072062 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_49_49_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704421 18:06:08.072434 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_49_49_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704421 18:06:08.072560 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_49_49_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704111 18:06:08.074694 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x298, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704421 18:06:08.075963 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_49_49_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704421 18:06:08.076224 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_49_49_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704421 18:06:08.076588 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_49_49_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 283
+704421 18:06:08.076825 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_49_49_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 284
+704421 18:06:08.077052 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_49_49_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 285
+704421 18:06:08.077282 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_49_49_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 286
+704421 18:06:08.077495 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_49_49_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 288
+704338 18:06:08.088212 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_48_3/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 148
+704338 18:06:08.088510 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_48_3/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704338 18:06:08.088790 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_48_3/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704338 18:06:08.088990 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_48_3/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704338 18:06:08.089203 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_48_3/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704338 18:06:08.089380 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_48_3/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704338 18:06:08.089561 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_48_3/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+705158 18:06:08.110632 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_50_50_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+705158 18:06:08.110833 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_50_50_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+705158 18:06:08.110946 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_50_50_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+705158 18:06:08.111319 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_50_50_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+705158 18:06:08.111427 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_50_50_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+705158 18:06:08.114786 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_50_50_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+705158 18:06:08.115030 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_50_50_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+705158 18:06:08.115314 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_50_50_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+705158 18:06:08.115524 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_50_50_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+705158 18:06:08.115704 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_50_50_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+705158 18:06:08.115884 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_50_50_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+705158 18:06:08.116073 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_50_50_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+703849 18:06:08.132421 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xc4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704438 18:06:08.148386 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_51_51_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704438 18:06:08.148548 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_51_51_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704438 18:06:08.148646 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_51_51_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704438 18:06:08.148958 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_51_51_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704438 18:06:08.149064 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_51_51_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704126 18:06:08.149545 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2b0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704438 18:06:08.152270 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_51_51_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704438 18:06:08.152498 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_51_51_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704438 18:06:08.152719 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_51_51_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704438 18:06:08.152891 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_51_51_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704438 18:06:08.153099 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_51_51_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704438 18:06:08.153287 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_51_51_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704438 18:06:08.153471 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_51_51_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704018 18:06:08.161637 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x216, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703882 18:06:08.177041 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x106, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705158 18:06:08.182604 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_52_52_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+705158 18:06:08.182800 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_52_52_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+705158 18:06:08.182923 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_52_52_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+705158 18:06:08.183296 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_52_52_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+705158 18:06:08.183430 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_52_52_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704390 18:06:08.184703 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4fa, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705158 18:06:08.187031 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_52_52_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+705158 18:06:08.187292 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_52_52_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+705158 18:06:08.187566 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_52_52_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+705158 18:06:08.187806 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_52_52_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+705158 18:06:08.188026 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_52_52_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+705158 18:06:08.188240 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_52_52_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+705158 18:06:08.188452 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_52_52_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704010 18:06:08.201089 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x206, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704436 18:06:08.218188 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_53_53_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704436 18:06:08.218387 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_53_53_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704436 18:06:08.218498 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_53_53_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704436 18:06:08.218866 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_53_53_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704436 18:06:08.218971 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_53_53_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704436 18:06:08.222153 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_53_53_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704436 18:06:08.222379 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_53_53_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704436 18:06:08.222644 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_53_53_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704436 18:06:08.222816 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_53_53_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704436 18:06:08.222981 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_53_53_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704436 18:06:08.223152 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_53_53_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704436 18:06:08.223323 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_53_53_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704334 18:06:08.235000 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_53_4/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 228
+704334 18:06:08.235320 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_53_4/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 231
+704334 18:06:08.235550 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_53_4/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 238
+704334 18:06:08.236207 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_53_4/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704334 18:06:08.236394 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_53_4/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704044 18:06:08.236582 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x248, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704173 18:06:08.238430 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x32e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704334 18:06:08.238617 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_34_48_3/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704334 18:06:08.238990 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_34_48_3/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704334 18:06:08.239799 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_49_49_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704334 18:06:08.240171 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_49_49_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704334 18:06:08.241105 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_50_50_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704334 18:06:08.241512 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_50_50_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704104 18:06:08.242249 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2fe, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704334 18:06:08.242873 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_51_51_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704334 18:06:08.243455 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_51_51_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704334 18:06:08.244569 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_52_52_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704334 18:06:08.244954 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_52_52_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704334 18:06:08.246312 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_53_53_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704334 18:06:08.246633 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_53_53_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+705233 18:06:08.257342 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_54_54_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 148
+705233 18:06:08.257523 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_54_54_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+705233 18:06:08.257617 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_54_54_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+705233 18:06:08.257941 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_54_54_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+705233 18:06:08.258049 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_54_54_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+705233 18:06:08.261501 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_54_54_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+705233 18:06:08.261740 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_54_54_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+705233 18:06:08.261972 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_54_54_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 283
+705233 18:06:08.262146 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_54_54_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 284
+705233 18:06:08.262335 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_54_54_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 285
+705233 18:06:08.262508 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_54_54_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 286
+705233 18:06:08.262677 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_54_54_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 288
+704331 18:06:08.275032 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_53_4/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 148
+704331 18:06:08.275284 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_53_4/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704331 18:06:08.275565 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_53_4/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704331 18:06:08.275754 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_53_4/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704331 18:06:08.275986 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_53_4/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704331 18:06:08.276203 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_53_4/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704331 18:06:08.276391 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_53_4/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704431 18:06:08.292514 openat(AT_FDCWD, "/etc/clickhouse-server/config.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 271
+705232 18:06:08.293696 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_55_55_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+705232 18:06:08.293842 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_55_55_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+705232 18:06:08.293931 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_55_55_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+705232 18:06:08.294229 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_55_55_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+705232 18:06:08.294321 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_55_55_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+703744 18:06:08.295109 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704419 18:06:08.297309 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x52e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705232 18:06:08.297871 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_55_55_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+705232 18:06:08.298126 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_55_55_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+705232 18:06:08.298425 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_55_55_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+705232 18:06:08.298605 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_55_55_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+705232 18:06:08.298794 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_55_55_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+703768 18:06:08.298922 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x22, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705232 18:06:08.299009 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_55_55_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+705232 18:06:08.299288 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_55_55_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704435 18:06:08.301621 openat(AT_FDCWD, "/etc/clickhouse-server/users.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 272
+704285 18:06:08.304290 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x42a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703836 18:06:08.313438 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xaa, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704141 18:06:08.315128 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2d2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705158 18:06:08.325127 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_56_56_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+705158 18:06:08.325283 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_56_56_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+705158 18:06:08.325373 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_56_56_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+705158 18:06:08.325745 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_56_56_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+705158 18:06:08.325871 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_56_56_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+705158 18:06:08.329301 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_56_56_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+705158 18:06:08.329537 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_56_56_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+705158 18:06:08.329757 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_56_56_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+705158 18:06:08.329909 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_56_56_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+705158 18:06:08.330066 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_56_56_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+705158 18:06:08.330235 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_56_56_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+705158 18:06:08.330387 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_56_56_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704050 18:06:08.330553 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x254, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703962 18:06:08.332781 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1a6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703947 18:06:08.334573 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x188, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704250 18:06:08.335206 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3e4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704007 18:06:08.349221 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1fe, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703862 18:06:08.351410 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xde, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705232 18:06:08.358618 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_57_57_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+705232 18:06:08.358808 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_57_57_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+705232 18:06:08.358931 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_57_57_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+705232 18:06:08.359299 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_57_57_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+705232 18:06:08.359416 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_57_57_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+705232 18:06:08.363223 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_57_57_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+705232 18:06:08.363519 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_57_57_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+705232 18:06:08.363783 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_57_57_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+705232 18:06:08.363971 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_57_57_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+705232 18:06:08.364163 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_57_57_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+705232 18:06:08.364346 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_57_57_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+705232 18:06:08.364524 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_57_57_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704293 18:06:08.376756 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x43a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704017 18:06:08.376885 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x214, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704311 18:06:08.386912 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x45e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704413 18:06:08.393770 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_58_58_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704413 18:06:08.393929 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_58_58_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704413 18:06:08.394028 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_58_58_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704413 18:06:08.394357 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_58_58_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704413 18:06:08.394452 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_58_58_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704413 18:06:08.397904 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_58_58_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704413 18:06:08.398185 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_58_58_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704413 18:06:08.398516 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_58_58_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704413 18:06:08.398752 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_58_58_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704413 18:06:08.398980 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_58_58_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704413 18:06:08.399186 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_58_58_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704413 18:06:08.399384 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_58_58_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704365 18:06:08.406152 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4c8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704329 18:06:08.412512 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_58_5/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 228
+704329 18:06:08.412835 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_58_5/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 231
+704329 18:06:08.413019 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_58_5/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 238
+704329 18:06:08.413530 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_58_5/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704329 18:06:08.413703 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_58_5/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704324 18:06:08.417185 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_34_53_4/data.cmrk4", O_RDONLY|O_CLOEXEC) = 148
+704324 18:06:08.417650 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_34_53_4/data.bin", O_RDONLY|O_CLOEXEC) = 148
+704324 18:06:08.418552 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_54_54_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 148
+704324 18:06:08.418999 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_54_54_0/data.bin", O_RDONLY|O_CLOEXEC) = 148
+704324 18:06:08.420022 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_55_55_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 148
+704324 18:06:08.420513 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_55_55_0/data.bin", O_RDONLY|O_CLOEXEC) = 148
+704324 18:06:08.421497 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_56_56_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 148
+704324 18:06:08.421941 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_56_56_0/data.bin", O_RDONLY|O_CLOEXEC) = 148
+704324 18:06:08.423121 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_57_57_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 148
+704324 18:06:08.423843 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_57_57_0/data.bin", O_RDONLY|O_CLOEXEC) = 148
+704324 18:06:08.425576 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_58_58_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 148
+704324 18:06:08.426252 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_58_58_0/data.bin", O_RDONLY|O_CLOEXEC) = 148
+704004 18:06:08.430517 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x202, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704011 18:06:08.436399 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x208, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704147 18:06:08.437370 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x33e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704211 18:06:08.438521 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x396, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704129 18:06:08.441952 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2b6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704092 18:06:08.442550 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2ce, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704421 18:06:08.445559 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_59_59_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704421 18:06:08.445811 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_59_59_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704421 18:06:08.445969 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_59_59_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704421 18:06:08.446467 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_59_59_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704421 18:06:08.446631 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_59_59_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704119 18:06:08.449082 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x320, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704421 18:06:08.450762 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_59_59_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704421 18:06:08.451120 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_59_59_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704421 18:06:08.451457 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_59_59_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 283
+704421 18:06:08.451737 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_59_59_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 284
+704421 18:06:08.452064 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_59_59_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 285
+704252 18:06:08.452350 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3e8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704421 18:06:08.452422 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_59_59_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 286
+704421 18:06:08.452877 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_59_59_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 288
+704274 18:06:08.458682 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x414, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704383 18:06:08.466257 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4ec, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704336 18:06:08.467152 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_58_5/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 148
+704336 18:06:08.467682 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_58_5/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704336 18:06:08.468373 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_58_5/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704336 18:06:08.468864 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_58_5/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704336 18:06:08.469234 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_58_5/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704336 18:06:08.469670 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_58_5/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704336 18:06:08.470209 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_58_5/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+703828 18:06:08.477605 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x9a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705230 18:06:08.494463 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_60_60_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+705230 18:06:08.494633 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_60_60_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+705230 18:06:08.494750 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_60_60_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+705230 18:06:08.495112 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_60_60_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+705230 18:06:08.495215 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_60_60_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704275 18:06:08.498601 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x416, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705230 18:06:08.499307 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_60_60_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+705230 18:06:08.499589 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_60_60_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+705230 18:06:08.499884 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_60_60_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+705230 18:06:08.500108 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_60_60_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+705230 18:06:08.500320 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_60_60_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+705230 18:06:08.500526 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_60_60_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+705230 18:06:08.500733 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_60_60_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704436 18:06:08.502590 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x556, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704414 18:06:08.531237 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_61_61_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704414 18:06:08.531426 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_61_61_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704414 18:06:08.531555 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_61_61_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704414 18:06:08.531946 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_61_61_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704414 18:06:08.532095 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_61_61_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704414 18:06:08.535827 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_61_61_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704414 18:06:08.536055 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_61_61_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704414 18:06:08.536303 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_61_61_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704414 18:06:08.536487 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_61_61_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704414 18:06:08.536658 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_61_61_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704414 18:06:08.536826 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_61_61_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704414 18:06:08.537008 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_61_61_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704286 18:06:08.540029 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x42c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704215 18:06:08.548405 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x39e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704434 18:06:08.559982 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x558, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704438 18:06:08.567623 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_62_62_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704438 18:06:08.567819 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_62_62_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704438 18:06:08.567939 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_62_62_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704438 18:06:08.568316 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_62_62_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704438 18:06:08.568433 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_62_62_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704438 18:06:08.572736 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_62_62_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704438 18:06:08.572978 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_62_62_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704438 18:06:08.573282 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_62_62_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704438 18:06:08.573490 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_62_62_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704438 18:06:08.573694 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_62_62_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704438 18:06:08.573907 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_62_62_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704438 18:06:08.574119 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_62_62_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+703824 18:06:08.583252 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x92, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703789 18:06:08.597876 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704107 18:06:08.599910 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x30a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704414 18:06:08.606359 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_63_63_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704414 18:06:08.606568 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_63_63_0/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704414 18:06:08.606714 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_63_63_0/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704414 18:06:08.607118 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_63_63_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704414 18:06:08.607242 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_63_63_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704414 18:06:08.611109 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_63_63_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704414 18:06:08.611396 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_63_63_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704414 18:06:08.611702 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_63_63_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704414 18:06:08.611912 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_63_63_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704414 18:06:08.612123 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_63_63_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704414 18:06:08.612324 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_63_63_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704414 18:06:08.612531 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_insert_all_63_63_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704080 18:06:08.623531 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x288, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704327 18:06:08.627685 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_63_6/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 228
+704327 18:06:08.628001 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_63_6/skp_idx_vec_idx.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 231
+704327 18:06:08.628226 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_63_6/skp_idx_vec_idx.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 238
+704327 18:06:08.629041 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_63_6/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704327 18:06:08.629233 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_63_6/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704329 18:06:08.631704 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_34_58_5/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+703840 18:06:08.631901 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xb2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704329 18:06:08.632306 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_34_58_5/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704329 18:06:08.633336 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_59_59_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704329 18:06:08.633797 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_59_59_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704329 18:06:08.634957 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_60_60_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704329 18:06:08.635400 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_60_60_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704329 18:06:08.636427 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_61_61_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704329 18:06:08.636839 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_61_61_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704329 18:06:08.637765 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_62_62_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704329 18:06:08.638049 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_62_62_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704329 18:06:08.638729 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_63_63_0/data.cmrk4", O_RDONLY|O_CLOEXEC) = 275
+704329 18:06:08.639001 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/all_63_63_0/data.bin", O_RDONLY|O_CLOEXEC) = 275
+704328 18:06:08.659287 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_63_6/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 148
+704328 18:06:08.659551 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_63_6/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704328 18:06:08.659899 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_63_6/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704328 18:06:08.660133 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_63_6/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704328 18:06:08.660341 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_63_6/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704328 18:06:08.660547 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_63_6/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704328 18:06:08.660762 openat(AT_FDCWD, "/var/lib/clickhouse/store/071/071715e9-87b9-4043-a7b0-f8a3af997bce/tmp_merge_all_34_63_6/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704047 18:06:08.667788 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x24e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704082 18:06:08.670196 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x28a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704214 18:06:08.674424 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x39c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704307 18:06:08.703682 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x455, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703770 18:06:08.743774 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x26, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703959 18:06:08.800941 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1a0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703848 18:06:08.815417 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xc2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703895 18:06:08.830272 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x120, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704435 18:06:08.833778 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x550, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703827 18:06:08.833983 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x98, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704228 18:06:08.861268 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3b8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704315 18:06:08.880495 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x466, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704381 18:06:08.888983 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4e8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704179 18:06:08.902489 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x340, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703939 18:06:08.903767 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x178, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704039 18:06:08.908946 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x23e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703942 18:06:08.912965 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x17e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704183 18:06:08.914011 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x352, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704227 18:06:08.922942 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3b6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704035 18:06:08.928844 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x236, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703853 18:06:08.948754 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xcc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704002 18:06:08.967204 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1f8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703974 18:06:08.969231 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1be, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704397 18:06:08.973647 openat(AT_FDCWD, "/", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 148
+704397 18:06:08.974503 openat(AT_FDCWD, "/etc", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 228
+704397 18:06:08.975325 openat(AT_FDCWD, "/etc/clickhouse-server", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 231
+704397 18:06:08.977447 openat(AT_FDCWD, "/var/lib/clickhouse", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 148
+703998 18:06:08.998103 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1ee, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703779 18:06:09.054213 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x38, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704301 18:06:09.057156 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x44a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704137 18:06:09.067451 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x354, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703826 18:06:09.071904 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x96, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703830 18:06:09.073571 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x9e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704169 18:06:09.074021 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x326, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703919 18:06:09.098475 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x150, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704394 18:06:09.124005 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 238
+704394 18:06:09.124576 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/skp_idx_event_time_index.idx2", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666 <unfinished ...>
+704164 18:06:09.124798 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x314, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704394 18:06:09.124837 <... openat resumed>) = 271
+704394 18:06:09.124962 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/skp_idx_event_time_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704394 18:06:09.125668 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/skp_idx_event_time_microseconds_index.idx2", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704394 18:06:09.125856 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/skp_idx_event_time_microseconds_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704394 18:06:09.126036 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/skp_idx_query_id_index.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704394 18:06:09.126235 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/skp_idx_query_id_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704394 18:06:09.126772 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/skp_idx_initial_query_id_index.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704394 18:06:09.126965 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/skp_idx_initial_query_id_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704394 18:06:09.127232 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704394 18:06:09.127459 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704394 18:06:09.130187 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/partition.dat", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704394 18:06:09.130662 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/minmax_event_date.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704394 18:06:09.130875 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 283
+704394 18:06:09.131063 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/ttl.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 284
+704394 18:06:09.131257 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 285
+704394 18:06:09.131576 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 286
+704394 18:06:09.131767 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 288
+704394 18:06:09.131954 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 292
+704394 18:06:09.132153 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 293
+704394 18:06:09.132339 openat(AT_FDCWD, "/var/lib/clickhouse/store/44a/44a11f17-4095-45e8-8724-249d75f9ee7a/tmp_insert_202610_11_11_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 294
+703983 18:06:09.146368 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1d0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704425 18:06:09.150611 openat(AT_FDCWD, "/var/lib/clickhouse/store/f3d/f3df6335-ae03-4810-9866-d6a5f0e57c79/tmp_insert_202610_17_17_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 238
+704425 18:06:09.150808 openat(AT_FDCWD, "/var/lib/clickhouse/store/f3d/f3df6335-ae03-4810-9866-d6a5f0e57c79/tmp_insert_202610_17_17_0/skp_idx_event_time_index.idx2", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704425 18:06:09.151025 openat(AT_FDCWD, "/var/lib/clickhouse/store/f3d/f3df6335-ae03-4810-9866-d6a5f0e57c79/tmp_insert_202610_17_17_0/skp_idx_event_time_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704425 18:06:09.151582 openat(AT_FDCWD, "/var/lib/clickhouse/store/f3d/f3df6335-ae03-4810-9866-d6a5f0e57c79/tmp_insert_202610_17_17_0/skp_idx_event_time_microseconds_index.idx2", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704425 18:06:09.151745 openat(AT_FDCWD, "/var/lib/clickhouse/store/f3d/f3df6335-ae03-4810-9866-d6a5f0e57c79/tmp_insert_202610_17_17_0/skp_idx_event_time_microseconds_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704425 18:06:09.151908 openat(AT_FDCWD, "/var/lib/clickhouse/store/f3d/f3df6335-ae03-4810-9866-d6a5f0e57c79/tmp_insert_202610_17_17_0/skp_idx_query_id_index.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704425 18:06:09.152071 openat(AT_FDCWD, "/var/lib/clickhouse/store/f3d/f3df6335-ae03-4810-9866-d6a5f0e57c79/tmp_insert_202610_17_17_0/skp_idx_query_id_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704425 18:06:09.152564 openat(AT_FDCWD, "/var/lib/clickhouse/store/f3d/f3df6335-ae03-4810-9866-d6a5f0e57c79/tmp_insert_202610_17_17_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704425 18:06:09.152716 openat(AT_FDCWD, "/var/lib/clickhouse/store/f3d/f3df6335-ae03-4810-9866-d6a5f0e57c79/tmp_insert_202610_17_17_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704425 18:06:09.155322 openat(AT_FDCWD, "/var/lib/clickhouse/store/f3d/f3df6335-ae03-4810-9866-d6a5f0e57c79/tmp_insert_202610_17_17_0/partition.dat", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704425 18:06:09.155734 openat(AT_FDCWD, "/var/lib/clickhouse/store/f3d/f3df6335-ae03-4810-9866-d6a5f0e57c79/tmp_insert_202610_17_17_0/minmax_event_date.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 283
+704425 18:06:09.156038 openat(AT_FDCWD, "/var/lib/clickhouse/store/f3d/f3df6335-ae03-4810-9866-d6a5f0e57c79/tmp_insert_202610_17_17_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 284
+704425 18:06:09.156303 openat(AT_FDCWD, "/var/lib/clickhouse/store/f3d/f3df6335-ae03-4810-9866-d6a5f0e57c79/tmp_insert_202610_17_17_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 285
+704425 18:06:09.157013 openat(AT_FDCWD, "/var/lib/clickhouse/store/f3d/f3df6335-ae03-4810-9866-d6a5f0e57c79/tmp_insert_202610_17_17_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 286
+704425 18:06:09.157349 openat(AT_FDCWD, "/var/lib/clickhouse/store/f3d/f3df6335-ae03-4810-9866-d6a5f0e57c79/tmp_insert_202610_17_17_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 288
+704425 18:06:09.157606 openat(AT_FDCWD, "/var/lib/clickhouse/store/f3d/f3df6335-ae03-4810-9866-d6a5f0e57c79/tmp_insert_202610_17_17_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 292
+704425 18:06:09.157843 openat(AT_FDCWD, "/var/lib/clickhouse/store/f3d/f3df6335-ae03-4810-9866-d6a5f0e57c79/tmp_insert_202610_17_17_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 293
+704425 18:06:09.158121 openat(AT_FDCWD, "/var/lib/clickhouse/store/f3d/f3df6335-ae03-4810-9866-d6a5f0e57c79/tmp_insert_202610_17_17_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 294
+704392 18:06:09.160206 openat(AT_FDCWD, "/var/lib/clickhouse/store/fcd/fcd61c5e-c8ee-46a3-91de-3a87b6e22304/tmp_insert_202610_17_17_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 295
+704392 18:06:09.160403 openat(AT_FDCWD, "/var/lib/clickhouse/store/fcd/fcd61c5e-c8ee-46a3-91de-3a87b6e22304/tmp_insert_202610_17_17_0/skp_idx_event_time_index.idx2", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 296
+704392 18:06:09.160580 openat(AT_FDCWD, "/var/lib/clickhouse/store/fcd/fcd61c5e-c8ee-46a3-91de-3a87b6e22304/tmp_insert_202610_17_17_0/skp_idx_event_time_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 297
+704392 18:06:09.161243 openat(AT_FDCWD, "/var/lib/clickhouse/store/fcd/fcd61c5e-c8ee-46a3-91de-3a87b6e22304/tmp_insert_202610_17_17_0/skp_idx_event_time_microseconds_index.idx2", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 298
+704392 18:06:09.161437 openat(AT_FDCWD, "/var/lib/clickhouse/store/fcd/fcd61c5e-c8ee-46a3-91de-3a87b6e22304/tmp_insert_202610_17_17_0/skp_idx_event_time_microseconds_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 299
+704392 18:06:09.161619 openat(AT_FDCWD, "/var/lib/clickhouse/store/fcd/fcd61c5e-c8ee-46a3-91de-3a87b6e22304/tmp_insert_202610_17_17_0/skp_idx_query_id_index.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 300
+704392 18:06:09.161777 openat(AT_FDCWD, "/var/lib/clickhouse/store/fcd/fcd61c5e-c8ee-46a3-91de-3a87b6e22304/tmp_insert_202610_17_17_0/skp_idx_query_id_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 301
+704392 18:06:09.162275 openat(AT_FDCWD, "/var/lib/clickhouse/store/fcd/fcd61c5e-c8ee-46a3-91de-3a87b6e22304/tmp_insert_202610_17_17_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 302
+704392 18:06:09.162438 openat(AT_FDCWD, "/var/lib/clickhouse/store/fcd/fcd61c5e-c8ee-46a3-91de-3a87b6e22304/tmp_insert_202610_17_17_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 303
+703791 18:06:09.164519 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x50, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704392 18:06:09.165991 openat(AT_FDCWD, "/var/lib/clickhouse/store/fcd/fcd61c5e-c8ee-46a3-91de-3a87b6e22304/tmp_insert_202610_17_17_0/partition.dat", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704392 18:06:09.166446 openat(AT_FDCWD, "/var/lib/clickhouse/store/fcd/fcd61c5e-c8ee-46a3-91de-3a87b6e22304/tmp_insert_202610_17_17_0/minmax_event_date.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704392 18:06:09.166815 openat(AT_FDCWD, "/var/lib/clickhouse/store/fcd/fcd61c5e-c8ee-46a3-91de-3a87b6e22304/tmp_insert_202610_17_17_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704392 18:06:09.167222 openat(AT_FDCWD, "/var/lib/clickhouse/store/fcd/fcd61c5e-c8ee-46a3-91de-3a87b6e22304/tmp_insert_202610_17_17_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704392 18:06:09.167724 openat(AT_FDCWD, "/var/lib/clickhouse/store/fcd/fcd61c5e-c8ee-46a3-91de-3a87b6e22304/tmp_insert_202610_17_17_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704392 18:06:09.168088 openat(AT_FDCWD, "/var/lib/clickhouse/store/fcd/fcd61c5e-c8ee-46a3-91de-3a87b6e22304/tmp_insert_202610_17_17_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704392 18:06:09.168503 openat(AT_FDCWD, "/var/lib/clickhouse/store/fcd/fcd61c5e-c8ee-46a3-91de-3a87b6e22304/tmp_insert_202610_17_17_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704392 18:06:09.168899 openat(AT_FDCWD, "/var/lib/clickhouse/store/fcd/fcd61c5e-c8ee-46a3-91de-3a87b6e22304/tmp_insert_202610_17_17_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 284
+704392 18:06:09.169254 openat(AT_FDCWD, "/var/lib/clickhouse/store/fcd/fcd61c5e-c8ee-46a3-91de-3a87b6e22304/tmp_insert_202610_17_17_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704318 18:06:09.170523 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x46c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703838 18:06:09.175389 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xae, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704433 18:06:09.175641 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 148
+704433 18:06:09.175819 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/skp_idx_event_time_index.idx2", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 228
+704433 18:06:09.175943 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/skp_idx_event_time_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 231
+704433 18:06:09.176575 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/skp_idx_event_time_microseconds_index.idx2", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 238
+704433 18:06:09.176697 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/skp_idx_event_time_microseconds_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704433 18:06:09.176805 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/skp_idx_query_id_index.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 288
+704433 18:06:09.176915 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/skp_idx_query_id_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 292
+704433 18:06:09.177258 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/skp_idx_initial_query_id_index.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704433 18:06:09.177395 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/skp_idx_initial_query_id_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704433 18:06:09.177505 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704433 18:06:09.177610 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704433 18:06:09.180442 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/partition.dat", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704433 18:06:09.180786 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/minmax_event_date.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704433 18:06:09.181171 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704433 18:06:09.181480 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704433 18:06:09.182115 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704433 18:06:09.182388 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704433 18:06:09.182778 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704433 18:06:09.182976 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 284
+704433 18:06:09.183194 openat(AT_FDCWD, "/var/lib/clickhouse/store/dd8/dd8243a8-839c-4658-bbea-f05edfe12be8/tmp_insert_202610_11_11_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 293
+704096 18:06:09.191519 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2c2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704391 18:06:09.197175 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4fc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704300 18:06:09.201284 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x448, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704231 18:06:09.202007 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3be, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704065 18:06:09.218008 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x272, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704157 18:06:09.223532 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2fc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703932 18:06:09.247785 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x16a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704216 18:06:09.255030 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3a0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704308 18:06:09.280667 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x458, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704041 18:06:09.283525 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x242, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704403 18:06:09.293683 openat(AT_FDCWD, "/", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 148
+704254 18:06:09.293940 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3ec, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704403 18:06:09.294255 openat(AT_FDCWD, "/etc", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 228
+704403 18:06:09.295049 openat(AT_FDCWD, "/etc/clickhouse-server", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 231
+704403 18:06:09.296382 openat(AT_FDCWD, "/var/lib/clickhouse", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 148
+704052 18:06:09.303049 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x258, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704064 18:06:09.316704 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x270, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704289 18:06:09.325074 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x432, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704367 18:06:09.368231 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4cc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703938 18:06:09.370218 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x176, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704212 18:06:09.371177 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x398, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704432 18:06:09.376035 openat(AT_FDCWD, "/var/lib/clickhouse/store/b44/b441303b-5062-454b-b52f-a09dfca64fa7/tmp_insert_202610_17_17_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 238
+704432 18:06:09.376392 openat(AT_FDCWD, "/var/lib/clickhouse/store/b44/b441303b-5062-454b-b52f-a09dfca64fa7/tmp_insert_202610_17_17_0/skp_idx_event_time_index.idx2", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704432 18:06:09.376634 openat(AT_FDCWD, "/var/lib/clickhouse/store/b44/b441303b-5062-454b-b52f-a09dfca64fa7/tmp_insert_202610_17_17_0/skp_idx_event_time_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704432 18:06:09.377402 openat(AT_FDCWD, "/var/lib/clickhouse/store/b44/b441303b-5062-454b-b52f-a09dfca64fa7/tmp_insert_202610_17_17_0/skp_idx_event_time_microseconds_index.idx2", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704432 18:06:09.377609 openat(AT_FDCWD, "/var/lib/clickhouse/store/b44/b441303b-5062-454b-b52f-a09dfca64fa7/tmp_insert_202610_17_17_0/skp_idx_event_time_microseconds_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704432 18:06:09.377832 openat(AT_FDCWD, "/var/lib/clickhouse/store/b44/b441303b-5062-454b-b52f-a09dfca64fa7/tmp_insert_202610_17_17_0/skp_idx_query_id_index.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704432 18:06:09.378084 openat(AT_FDCWD, "/var/lib/clickhouse/store/b44/b441303b-5062-454b-b52f-a09dfca64fa7/tmp_insert_202610_17_17_0/skp_idx_query_id_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704432 18:06:09.378692 openat(AT_FDCWD, "/var/lib/clickhouse/store/b44/b441303b-5062-454b-b52f-a09dfca64fa7/tmp_insert_202610_17_17_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704432 18:06:09.378883 openat(AT_FDCWD, "/var/lib/clickhouse/store/b44/b441303b-5062-454b-b52f-a09dfca64fa7/tmp_insert_202610_17_17_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704432 18:06:09.382998 openat(AT_FDCWD, "/var/lib/clickhouse/store/b44/b441303b-5062-454b-b52f-a09dfca64fa7/tmp_insert_202610_17_17_0/partition.dat", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704432 18:06:09.383481 openat(AT_FDCWD, "/var/lib/clickhouse/store/b44/b441303b-5062-454b-b52f-a09dfca64fa7/tmp_insert_202610_17_17_0/minmax_event_date.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704432 18:06:09.383828 openat(AT_FDCWD, "/var/lib/clickhouse/store/b44/b441303b-5062-454b-b52f-a09dfca64fa7/tmp_insert_202610_17_17_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704432 18:06:09.384180 openat(AT_FDCWD, "/var/lib/clickhouse/store/b44/b441303b-5062-454b-b52f-a09dfca64fa7/tmp_insert_202610_17_17_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704432 18:06:09.384887 openat(AT_FDCWD, "/var/lib/clickhouse/store/b44/b441303b-5062-454b-b52f-a09dfca64fa7/tmp_insert_202610_17_17_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 283
+704432 18:06:09.385292 openat(AT_FDCWD, "/var/lib/clickhouse/store/b44/b441303b-5062-454b-b52f-a09dfca64fa7/tmp_insert_202610_17_17_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 284
+704432 18:06:09.385644 openat(AT_FDCWD, "/var/lib/clickhouse/store/b44/b441303b-5062-454b-b52f-a09dfca64fa7/tmp_insert_202610_17_17_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 285
+704432 18:06:09.385966 openat(AT_FDCWD, "/var/lib/clickhouse/store/b44/b441303b-5062-454b-b52f-a09dfca64fa7/tmp_insert_202610_17_17_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 286
+704432 18:06:09.386308 openat(AT_FDCWD, "/var/lib/clickhouse/store/b44/b441303b-5062-454b-b52f-a09dfca64fa7/tmp_insert_202610_17_17_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 288
+704209 18:06:09.430881 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x392, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703867 18:06:09.438614 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xe8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704267 18:06:09.446389 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x406, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704403 18:06:09.462603 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x510, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703995 18:06:09.498098 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1e6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704234 18:06:09.505667 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3c4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704370 18:06:09.526251 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4d2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704178 18:06:09.544405 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x338, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703821 18:06:09.546152 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x8c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703760 18:06:09.562641 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x12, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704272 18:06:09.567555 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x410, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704181 18:06:09.577910 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x348, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703852 18:06:09.583519 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xca, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704140 18:06:09.588054 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2d0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704297 18:06:09.605516 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x442, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703906 18:06:09.661905 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x136, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703797 18:06:09.669943 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x5c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703952 18:06:09.681260 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x192, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704125 18:06:09.698699 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x342, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704159 18:06:09.699421 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x33c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703876 18:06:09.705097 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xfa, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704224 18:06:09.732611 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3b0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703900 18:06:09.735288 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x12a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704378 18:06:09.736002 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4e2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703991 18:06:09.738782 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1e0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704317 18:06:09.825876 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x46a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704000 18:06:09.873706 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1f2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704271 18:06:09.880498 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x40e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703911 18:06:09.885262 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x140, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703822 18:06:09.908852 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x8e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704148 18:06:09.919771 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2e8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704192 18:06:09.950692 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x36e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704167 18:06:10.009385 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x31e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703899 18:06:10.010687 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x128, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704201 18:06:10.031555 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x382, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704206 18:06:10.043223 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x38c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704402 18:06:10.061981 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x51e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703926 18:06:10.065212 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x15e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704033 18:06:10.075517 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x234, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704032 18:06:10.095896 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x232, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703784 18:06:10.106571 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x42, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704003 18:06:10.130132 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1f6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703832 18:06:10.162623 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xa2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704099 18:06:10.164451 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x31c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704188 18:06:10.181406 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x366, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704037 18:06:10.187258 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x23a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704244 18:06:10.188667 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3d8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704400 18:06:10.211322 openat(AT_FDCWD, "/var/lib/clickhouse/store/be7/be76e85c-6323-4143-86f7-02f816332ecf/tmp_insert_202610_18_18_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 238
+704400 18:06:10.211560 openat(AT_FDCWD, "/var/lib/clickhouse/store/be7/be76e85c-6323-4143-86f7-02f816332ecf/tmp_insert_202610_18_18_0/skp_idx_event_time_index.idx2", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704400 18:06:10.211737 openat(AT_FDCWD, "/var/lib/clickhouse/store/be7/be76e85c-6323-4143-86f7-02f816332ecf/tmp_insert_202610_18_18_0/skp_idx_event_time_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704400 18:06:10.212241 openat(AT_FDCWD, "/var/lib/clickhouse/store/be7/be76e85c-6323-4143-86f7-02f816332ecf/tmp_insert_202610_18_18_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704400 18:06:10.212417 openat(AT_FDCWD, "/var/lib/clickhouse/store/be7/be76e85c-6323-4143-86f7-02f816332ecf/tmp_insert_202610_18_18_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704400 18:06:10.214929 openat(AT_FDCWD, "/var/lib/clickhouse/store/be7/be76e85c-6323-4143-86f7-02f816332ecf/tmp_insert_202610_18_18_0/partition.dat", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704400 18:06:10.215467 openat(AT_FDCWD, "/var/lib/clickhouse/store/be7/be76e85c-6323-4143-86f7-02f816332ecf/tmp_insert_202610_18_18_0/minmax_event_date.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704400 18:06:10.215787 openat(AT_FDCWD, "/var/lib/clickhouse/store/be7/be76e85c-6323-4143-86f7-02f816332ecf/tmp_insert_202610_18_18_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704400 18:06:10.216109 openat(AT_FDCWD, "/var/lib/clickhouse/store/be7/be76e85c-6323-4143-86f7-02f816332ecf/tmp_insert_202610_18_18_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704400 18:06:10.216450 openat(AT_FDCWD, "/var/lib/clickhouse/store/be7/be76e85c-6323-4143-86f7-02f816332ecf/tmp_insert_202610_18_18_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+704400 18:06:10.216744 openat(AT_FDCWD, "/var/lib/clickhouse/store/be7/be76e85c-6323-4143-86f7-02f816332ecf/tmp_insert_202610_18_18_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704400 18:06:10.217108 openat(AT_FDCWD, "/var/lib/clickhouse/store/be7/be76e85c-6323-4143-86f7-02f816332ecf/tmp_insert_202610_18_18_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704400 18:06:10.217474 openat(AT_FDCWD, "/var/lib/clickhouse/store/be7/be76e85c-6323-4143-86f7-02f816332ecf/tmp_insert_202610_18_18_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704400 18:06:10.217778 openat(AT_FDCWD, "/var/lib/clickhouse/store/be7/be76e85c-6323-4143-86f7-02f816332ecf/tmp_insert_202610_18_18_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 283
+703851 18:06:10.241883 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xc8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703860 18:06:10.274301 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xda, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704431 18:06:10.294954 openat(AT_FDCWD, "/etc/clickhouse-server/config.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 148
+704156 18:06:10.295534 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2f8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704435 18:06:10.303918 openat(AT_FDCWD, "/etc/clickhouse-server/users.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 148
+703801 18:06:10.317628 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x64, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704213 18:06:10.330382 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x39a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703766 18:06:10.339382 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1d, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704280 18:06:10.342082 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x420, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703755 18:06:10.363930 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703815 18:06:10.377813 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x80, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703743 18:06:10.380110 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703914 18:06:10.386866 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x146, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703845 18:06:10.387755 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xbc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704098 18:06:10.409099 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2e6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704239 18:06:10.438372 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3ce, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703920 18:06:10.454434 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x152, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704151 18:06:10.460803 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2ee, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703788 18:06:10.471516 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703982 18:06:10.478082 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1ce, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703834 18:06:10.503969 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xa6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704423 18:06:10.525783 openat(AT_FDCWD, "/var/lib/clickhouse/store/db4/db48c485-7b5c-4789-a85f-c1de5a8be9a3/tmp_insert_202610_17_17_0/primary.cidx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 238
+704423 18:06:10.526346 openat(AT_FDCWD, "/var/lib/clickhouse/store/db4/db48c485-7b5c-4789-a85f-c1de5a8be9a3/tmp_insert_202610_17_17_0/skp_idx_event_time_index.idx2", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 271
+704423 18:06:10.526511 openat(AT_FDCWD, "/var/lib/clickhouse/store/db4/db48c485-7b5c-4789-a85f-c1de5a8be9a3/tmp_insert_202610_17_17_0/skp_idx_event_time_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 272
+704423 18:06:10.526676 openat(AT_FDCWD, "/var/lib/clickhouse/store/db4/db48c485-7b5c-4789-a85f-c1de5a8be9a3/tmp_insert_202610_17_17_0/skp_idx_event_time_microseconds_index.idx2", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 273
+704423 18:06:10.526831 openat(AT_FDCWD, "/var/lib/clickhouse/store/db4/db48c485-7b5c-4789-a85f-c1de5a8be9a3/tmp_insert_202610_17_17_0/skp_idx_event_time_microseconds_index.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 274
+704423 18:06:10.527298 openat(AT_FDCWD, "/var/lib/clickhouse/store/db4/db48c485-7b5c-4789-a85f-c1de5a8be9a3/tmp_insert_202610_17_17_0/data.bin", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 275
+704423 18:06:10.527460 openat(AT_FDCWD, "/var/lib/clickhouse/store/db4/db48c485-7b5c-4789-a85f-c1de5a8be9a3/tmp_insert_202610_17_17_0/data.cmrk4", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 276
+704426 18:06:10.535748 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x53c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704423 18:06:10.561529 openat(AT_FDCWD, "/var/lib/clickhouse/store/db4/db48c485-7b5c-4789-a85f-c1de5a8be9a3/tmp_insert_202610_17_17_0/partition.dat", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 277
+704423 18:06:10.561967 openat(AT_FDCWD, "/var/lib/clickhouse/store/db4/db48c485-7b5c-4789-a85f-c1de5a8be9a3/tmp_insert_202610_17_17_0/minmax_event_date.idx", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 278
+704423 18:06:10.562303 openat(AT_FDCWD, "/var/lib/clickhouse/store/db4/db48c485-7b5c-4789-a85f-c1de5a8be9a3/tmp_insert_202610_17_17_0/count.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 279
+703771 18:06:10.562556 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x28, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704423 18:06:10.562637 openat(AT_FDCWD, "/var/lib/clickhouse/store/db4/db48c485-7b5c-4789-a85f-c1de5a8be9a3/tmp_insert_202610_17_17_0/serialization.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 280
+704235 18:06:10.569765 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3c6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704423 18:06:10.583306 openat(AT_FDCWD, "/var/lib/clickhouse/store/db4/db48c485-7b5c-4789-a85f-c1de5a8be9a3/tmp_insert_202610_17_17_0/columns.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 281
+704423 18:06:10.587479 openat(AT_FDCWD, "/var/lib/clickhouse/store/db4/db48c485-7b5c-4789-a85f-c1de5a8be9a3/tmp_insert_202610_17_17_0/columns_substreams.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 282
+704423 18:06:10.596292 openat(AT_FDCWD, "/var/lib/clickhouse/store/db4/db48c485-7b5c-4789-a85f-c1de5a8be9a3/tmp_insert_202610_17_17_0/metadata_version.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 283
+704423 18:06:10.596646 openat(AT_FDCWD, "/var/lib/clickhouse/store/db4/db48c485-7b5c-4789-a85f-c1de5a8be9a3/tmp_insert_202610_17_17_0/default_compression_codec.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 284
+704423 18:06:10.596900 openat(AT_FDCWD, "/var/lib/clickhouse/store/db4/db48c485-7b5c-4789-a85f-c1de5a8be9a3/tmp_insert_202610_17_17_0/checksums.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 285
+703971 18:06:10.623174 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1b8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703842 18:06:10.623437 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xb6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704172 18:06:10.631791 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x32c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703782 18:06:10.652461 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703996 18:06:10.683720 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1ea, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704176 18:06:10.690778 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x334, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703839 18:06:10.703310 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xb0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703804 18:06:10.723977 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x6a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704340 18:06:10.776202 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x496, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703874 18:06:10.780027 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xf6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703778 18:06:10.788806 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x36, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704030 18:06:10.796938 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x22e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703969 18:06:10.798891 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1b4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703893 18:06:10.815702 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x11c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703961 18:06:10.820704 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1a4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704298 18:06:10.846092 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x444, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704345 18:06:10.857636 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4a0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704218 18:06:10.862966 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3a4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704347 18:06:10.867277 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4a4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704045 18:06:10.879181 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x24a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704284 18:06:10.887525 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x428, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703856 18:06:10.891158 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xd2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703963 18:06:10.918309 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1a8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703841 18:06:10.922800 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xb4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704225 18:06:10.935262 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3b2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704282 18:06:10.947537 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x424, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704132 18:06:10.948296 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x378, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704439 18:06:10.966503 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x55c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704429 18:06:10.986397 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x54c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704420 18:06:10.988612 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x530, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704046 18:06:10.990408 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x24c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704180 18:06:11.007466 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x344, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704248 18:06:11.017583 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3e0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703871 18:06:11.018675 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xf0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703757 18:06:11.076243 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703869 18:06:11.078503 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xec, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703881 18:06:11.096385 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x104, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703888 18:06:11.118822 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x112, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704165 18:06:11.127884 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x318, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703928 18:06:11.159429 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x162, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703913 18:06:11.166598 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x144, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703808 18:06:11.173801 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x72, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704220 18:06:11.174132 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3a8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703945 18:06:11.182482 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x184, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703941 18:06:11.186587 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x17c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704253 18:06:11.254405 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3ea, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703795 18:06:11.261816 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x58, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704226 18:06:11.274507 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3b4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704305 18:06:11.276904 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x452, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703981 18:06:11.284935 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1cc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703812 18:06:11.293033 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x7a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704197 18:06:11.298222 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x37a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703908 18:06:11.301470 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x13a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704019 18:06:11.301715 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x218, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704189 18:06:11.306190 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x368, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704014 18:06:11.320230 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x20e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703803 18:06:11.324813 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x68, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704021 18:06:11.334873 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x21c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704085 18:06:11.365980 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2a8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704229 18:06:11.379244 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3ba, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704118 18:06:11.390136 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2a4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703810 18:06:11.411777 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x76, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703897 18:06:11.426512 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x124, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703890 18:06:11.431287 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x116, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703931 18:06:11.431909 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x168, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704364 18:06:11.432143 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4c6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703817 18:06:11.437423 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x84, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704075 18:06:11.450862 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x286, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703816 18:06:11.490019 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x82, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704093 18:06:11.499713 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2d4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704265 18:06:11.507577 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x402, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704124 18:06:11.538619 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2ac, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703809 18:06:11.540753 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x74, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703894 18:06:11.559265 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x11e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704091 18:06:11.560873 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2cc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704256 18:06:11.578996 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3f0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704388 18:06:11.583532 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4f6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704291 18:06:11.586150 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x436, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704144 18:06:11.596304 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2e2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704095 18:06:11.612459 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2d8, si_overrun=0, si_int=0, si_ptr=NULL} ---

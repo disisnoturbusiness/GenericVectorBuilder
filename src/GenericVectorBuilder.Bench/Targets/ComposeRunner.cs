@@ -48,14 +48,50 @@ public static class ComposeRunner
    /// Why "--orphans=false": four engine files (elasticsearch, opensearch, typesense, vespa) have no
    /// project name of their own and share the folder's, so without it compose 2.40 also lists the
    /// other three engines' containers and a stopped engine looks running whenever another one is.
+   /// Why it throws when compose itself fails: the older version answered "not running" for a failed
+   /// "compose ps" (a daemon that did not answer, a sudo that wanted a password), and run-all then
+   /// started an engine that was in fact up, or took a running engine for one it had started and
+   /// stopped it afterwards. A question that could not be asked has no answer, so it is an error.
+   /// Called for every target of the run at its start (see EngineLifecycle.SnapshotAsync), so a
+   /// failure there ends the whole run before anything is measured, not one target.
    /// </summary>
    /// <param name="composePath">Compose file.</param>
    /// <param name="ct">Cancellation.</param>
    /// <returns>True when running.</returns>
-   public static async Task<bool> IsRunningAsync( string composePath, CancellationToken ct )
+   /// <exception cref="InvalidOperationException">Compose could not be asked or answered with a failure.</exception>
+   public static Task<bool> IsRunningAsync( string composePath, CancellationToken ct )
    {
-      string? ids = await Shell.TryOutputAsync( "sudo", new[] { "docker", "compose", "-f", composePath, "ps", "-q", "--status", "running", "--orphans=false" }, ct );
-      return !string.IsNullOrWhiteSpace( ids );
+      return IsRunningAsync( composePath, ( arguments, limit, token ) => Shell.RunAsync( "sudo", arguments, limit, token ), ct );
+   }
+
+   /// <summary>
+   /// The same question through a given command runner, so a test can make "compose ps" fail, time
+   /// out or answer without Docker.
+   /// </summary>
+   /// <param name="composePath">Compose file.</param>
+   /// <param name="run">Runs "sudo" with the given arguments within the given time and returns its result.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>True when running.</returns>
+   /// <exception cref="InvalidOperationException">The command did not start, did not finish in time, or exited with a failure.</exception>
+   public static async Task<bool> IsRunningAsync( string composePath, Func<IEnumerable<string>, TimeSpan, CancellationToken, Task<ShellResult>> run, CancellationToken ct )
+   {
+      string file = Path.GetFileName( composePath );
+      ShellResult ps;
+      try
+      {
+         ps = await run( new[] { "-n", "docker", "compose", "-f", composePath, "ps", "-q", "--status", "running", "--orphans=false" }, QUERY_TIMEOUT, ct );
+      }
+      catch( Exception ex ) when( ex is TimeoutException or System.ComponentModel.Win32Exception )
+      {
+         throw new InvalidOperationException( $"Could not ask docker compose whether {file} is running: {ex.Message}" );
+      }
+
+      if( ps.ExitCode != 0 )
+      {
+         throw new InvalidOperationException( $"docker compose ps for {file} failed with exit code {ps.ExitCode}, so it is not known whether the engine is running: {Last( ps.Error, 300 )}" );
+      }
+
+      return !string.IsNullOrWhiteSpace( ps.Output );
    }
 
    /// <summary>

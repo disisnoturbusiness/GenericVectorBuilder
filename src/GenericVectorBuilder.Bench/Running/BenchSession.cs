@@ -116,16 +116,19 @@ public sealed class BenchSession : IDisposable
       int seed = _options.Seed ?? RunOrder.SeedFromTime( started );
       IReadOnlyList<string> order = RunOrder.ShuffleTargets( _options.Targets.Count > 0 ? _options.Targets : _factory.Names, seed );
       _log( $"Seed {seed} ({( _options.Seed.HasValue ? "from --seed" : "from the start time" )}); target order: {string.Join( ", ", order )}" );
+      RunStamp stamp = RunStamp.Read( requireCommit: _options.Command == "run-all" );
+      _log( $"Build {stamp.Commit ?? stamp.InformationalVersion}; boot {stamp.BootId} (kernel started {stamp.BootTimeUtc})" );
       using MachineControl machine = await MachineControl.StartAsync( MachineConditions.ForRun( _options ), MachineOptions(), _system, _log, ct );
       BenchReport report = await NewReportAsync( started, seed, ct );
-      string folder = Path.Combine( _options.OutFolder ?? Path.Combine( _repoRoot, "bench-results" ), $"{started:yyyyMMdd-HHmmss}-{_options.Pipeline}" );
+      string suffix = _options.SettingsOnly ? "-settings-only" : string.Empty;
+      string folder = Path.Combine( _options.OutFolder ?? Path.Combine( _repoRoot, "bench-results" ), $"{started:yyyyMMdd-HHmmss}-{_options.Pipeline}{suffix}" );
       try
       {
-         await MeasureTargetsAsync( report, folder, order, seed, machine, ct );
+         await MeasureTargetsAsync( report, folder, order, seed, machine, stamp, ct );
       }
       finally
       {
-         await FinishMachineAsync( machine, report, folder );
+         await FinishMachineAsync( machine, report, folder, stamp );
       }
 
       _log( $"Results: {Path.Combine( folder, "results.md" )}" );
@@ -134,18 +137,25 @@ public sealed class BenchSession : IDisposable
 
    /// <summary>
    /// Reads the rows, prepares the queries, then measures every target in order, rewriting the
-   /// results after each.
+   /// results after each. A settings-only run reads no rows and prepares no queries: it starts each
+   /// engine, reads its settings, image and data folder, and stops it.
    /// </summary>
    /// <param name="report">The run's report.</param>
    /// <param name="folder">The run's results folder.</param>
    /// <param name="order">Targets in run order.</param>
    /// <param name="seed">The run's seed.</param>
    /// <param name="machine">Machine control (on or off).</param>
+   /// <param name="stamp">Which build and boot made the run.</param>
    /// <param name="ct">Cancellation.</param>
-   private async Task MeasureTargetsAsync( BenchReport report, string folder, IReadOnlyList<string> order, int seed, MachineControl machine, CancellationToken ct )
+   private async Task MeasureTargetsAsync( BenchReport report, string folder, IReadOnlyList<string> order, int seed, MachineControl machine, RunStamp stamp, CancellationToken ct )
    {
-      PipelineData data = await ReadDataAsync( report, ct );
-      SearchRunner? runner = _options.Command == "replicate" ? null : await PrepareSearchAsync( data, report, seed, ct );
+      if( _options.SettingsOnly && _options.IsGolden )
+      {
+         report.QueriesFileSha256 = await GoldenQueries.HashFileAsync( _options.GoldenFile, ct );
+      }
+
+      PipelineData? data = _options.SettingsOnly ? null : await ReadDataAsync( report, ct );
+      SearchRunner? runner = _options.Command == "replicate" || data == null ? null : await PrepareSearchAsync( data, report, seed, ct );
       List<(string Name, BenchTarget? Target, string? Error)> targets = order.Select( Create ).ToList();
       Action<string> log = machine.WrapLog( _log );
       var lifecycle = new EngineLifecycle( machine.WrapHost( _host ), _options.Command == "run-all", log, machine.EngineCpus );
@@ -157,12 +167,15 @@ public sealed class BenchSession : IDisposable
       {
          log( $"== {name}" );
          report.TargetOrder.Add( name );
-         report.Targets.Add( target == null ? new TargetReport { Name = name, Error = error } : await MeasureOneAsync( measurer, machine, connections, target, data, runner, ct ) );
-         WriteResults( report, folder, machine );
+         report.Targets.Add( target == null ? new TargetReport { Name = name, Error = error }
+            : data == null ? await measurer.SettingsOnlyAsync( target, ct )
+            : await MeasureOneAsync( measurer, machine, connections, target, data, runner, ct ) );
+         RecordRecallHits( report, report.Targets[^1] );
+         WriteResults( report, folder, machine, stamp );
       }
 
       report.Notes.AddRange( RunFlags( report ) );
-      await DropEmptyDatabaseAsync( _options.Command == "run-all" && !_options.Keep, report );
+      await DropEmptyDatabaseAsync( _options.Command == "run-all" && !_options.Keep && !_options.SettingsOnly, report );
    }
 
    /// <summary>
@@ -203,8 +216,33 @@ public sealed class BenchSession : IDisposable
    }
 
    /// <summary>
+   /// Writes the whole number of hits behind a target's recall into its search record. When recall x queries x top is
+   /// not a whole number (some queries went unanswered, so the mean is over fewer) the hits are not recorded and the
+   /// target's notes say why, because a rounded guess would look like a count.
+   /// </summary>
+   /// <param name="report">The run (its query count and top).</param>
+   /// <param name="result">The target just measured.</param>
+   private static void RecordRecallHits( BenchReport report, TargetReport result )
+   {
+      if( result.Search?.Recall is not double recall )
+      {
+         return;
+      }
+
+      int? hits = SearchReport.HitsFrom( recall, report.QueryCount, report.Top );
+      if( hits is int count )
+      {
+         result.Search.RecallHits = count;
+         return;
+      }
+
+      result.Notes.Add( $"WARNING: recall {recall:0.0000} x {report.QueryCount} queries x top {report.Top} is not a whole number of hits, so recallHits is not recorded (the mean was probably taken over fewer queries than the set, see the answered-queries warning)." );
+   }
+
+   /// <summary>
    /// Machine control settings for this command: on for bench and run-all unless
-   /// --no-machine-control; replicate times no searches and only records the machine.
+   /// --no-machine-control or --settings-only (which times nothing, so it must not touch the governor,
+   /// the clock or any CPU pin); replicate times no searches and only records the machine.
    /// </summary>
    /// <returns>The settings.</returns>
    private MachineControlOptions MachineOptions()
@@ -212,8 +250,8 @@ public sealed class BenchSession : IDisposable
       bool timed = _options.Command is "bench" or "run-all";
       return new MachineControlOptions
       {
-         Enabled = timed && _options.MachineControl,
-         DisabledReason = timed ? "--no-machine-control" : $"{_options.Command} times no searches",
+         Enabled = timed && _options.MachineControl && !_options.SettingsOnly,
+         DisabledReason = _options.SettingsOnly ? "--settings-only times nothing" : timed ? "--no-machine-control" : $"{_options.Command} times no searches",
          StateFile = _options.MachineStateFile,
       };
    }
@@ -226,7 +264,8 @@ public sealed class BenchSession : IDisposable
    /// <param name="machine">Machine control.</param>
    /// <param name="report">The run.</param>
    /// <param name="folder">The run's folder.</param>
-   private async Task FinishMachineAsync( MachineControl machine, BenchReport report, string folder )
+   /// <param name="stamp">Which build and boot made the run.</param>
+   private async Task FinishMachineAsync( MachineControl machine, BenchReport report, string folder, RunStamp stamp )
    {
       await machine.RestoreAsync();
       machine.Annotate( report );
@@ -237,7 +276,7 @@ public sealed class BenchSession : IDisposable
 
       try
       {
-         WriteResults( report, folder, machine );
+         WriteResults( report, folder, machine, stamp );
       }
       catch( Exception ex ) when( ex is IOException or UnauthorizedAccessException or InvalidDataException )
       {
@@ -246,15 +285,20 @@ public sealed class BenchSession : IDisposable
    }
 
    /// <summary>
-   /// Writes results.json and results.md, then the machine conditions into results.json.
+   /// Writes results.json and results.md, then the machine conditions into results.json, then the
+   /// build and boot stamp beside them. Why in this order: machine control replaces the whole
+   /// "conditions" object each time it writes, so anything added to it has to come after.
    /// </summary>
    /// <param name="report">The run.</param>
    /// <param name="folder">The run's folder.</param>
    /// <param name="machine">Machine control.</param>
-   private static void WriteResults( BenchReport report, string folder, MachineControl machine )
+   /// <param name="stamp">Which build and boot made the run.</param>
+   private static void WriteResults( BenchReport report, string folder, MachineControl machine, RunStamp stamp )
    {
       ResultsWriter.Write( report, folder );
       MachineFlags.WriteInto( folder, machine.Conditions );
+      ResultsWriter.AddCondition( folder, "build", stamp.BuildJson() );
+      ResultsWriter.AddCondition( folder, "boot", stamp.BootJson() );
    }
 
    /// <summary>
@@ -329,9 +373,18 @@ public sealed class BenchSession : IDisposable
    /// <returns>The search runner.</returns>
    private async Task<SearchRunner> PrepareSearchAsync( PipelineData data, BenchReport report, int seed, CancellationToken ct )
    {
-      QuerySet queries = _options.IsGolden
-         ? await GoldenQueries.LoadAsync( _options.GoldenFile, _options.Pipeline, _settings, GvbSettings.Expand( GOLDEN_CACHE ), ct )
-         : QuerySet.Random( data, _options.RandomCount );
+      QuerySet queries;
+      if( _options.IsGolden )
+      {
+         GoldenLoad golden = await GoldenQueries.LoadWithHashAsync( _options.GoldenFile, _options.Pipeline, _settings, GvbSettings.Expand( GOLDEN_CACHE ), ct );
+         queries = golden.Queries;
+         report.QueriesFileSha256 = golden.FileSha256;
+      }
+      else
+      {
+         queries = QuerySet.Random( data, _options.RandomCount );
+      }
+
       _log( $"Queries: {queries.Description}" );
       TruthSet truth = BruteForce.Compute( data, queries, _options.Top );
       _log( $"Exact answer of {queries.Count} queries by brute force in {truth.Seconds:0.0} s" );
@@ -365,9 +418,11 @@ public sealed class BenchSession : IDisposable
          Concurrency = _options.Concurrency,
          SecondsPerLevel = _options.Seconds,
       };
-      if( MachineFacts.IsBusy( report.Machine.LoadAverage ) )
+      report.SettingsOnly = _options.SettingsOnly;
+      report.Notes.Add( $"Load average at start: {report.Machine.LoadAverage} on {report.Machine.LogicalCpus} logical CPUs (1/5/15 min). It counts this benchmark's own earlier work and the engines it started, so it is recorded here and never judged; each timed pass is judged by the outside load machine control measures (conditions.passes)." );
+      if( _options.SettingsOnly )
       {
-         report.Notes.Add( $"WARNING: load average {report.Machine.LoadAverage} on {report.Machine.LogicalCpus} logical CPUs when the run started. Other work was competing for the CPU, so absolute latency and QPS are worse than this box can do; compare engines only within one run, and rerun on a quiet box before quoting numbers." );
+         report.Notes.Add( "Settings-only run (--settings-only): each engine was started, bound and read for its settings, its image and its data folder, and stopped again. Nothing was loaded, searched or reset, machine control was off, and no figure here is a measurement." );
       }
 
       report.Notes.AddRange( MethodNotes( seed ) );
@@ -396,11 +451,12 @@ public sealed class BenchSession : IDisposable
       yield return "Index proof: each engine's own report of its index (indexState) is read after the load and again after the last pass. A target whose index was not ready after the load was still measured and carries a WARNING; an engine that reports nothing counts as not ready.";
       yield return "Search settings: each searched target records the settings its own index description states (searchSettings: the build parameters and the effort per query, such as m, ef_construction and ef_search), read after the load; consolidating never averages runs whose settings differ.";
       yield return "Durability: each target's crash-safety setting as configured here (durability). Engines that do not force writes to disk on every commit load faster for that reason.";
+      yield return "Engine record: right after each engine was bound, its settings (engineSettings: the container's limits and what the engine itself reports, each entry saying how it was obtained), its image against the id pinned in deploy/bench/image-pins.json (image; another id ends that target with an error) and the size of its data folder (dataFolder: at the start, after any reset, and at the end) were recorded. In run-all, ClickHouse's system log tables are truncated before its load, and the reset is written into its dataFolder.";
       yield return $"Latency is client-side wall time around each search (network and driver included), every search of the default@1 window, one searcher, the queries cycled; a window with fewer than {SearchRunner.MIN_LATENCY_SAMPLES} searches, a p50 above {SearchRunner.SKEW_LIMIT} x its mean, or a mean above its p99 is flagged.";
       yield return $"QPS: N searchers back to back for {_options.Seconds} s per level; completed searches divided by the window's elapsed time.";
       yield return $"Recall@{_options.Top}: share of the exact top {_options.Top} (brute force in memory) that the engine returned. A hit whose exact similarity ties the {_options.Top}th best (within 1e-5) also counts, because duplicate rows embed to identical vectors.";
       yield return "Routes: a container engine (the benchmark's own SQL Server and Qdrant containers included) is reached at its container's own address on its Docker network, never through the published 127.0.0.1 port (docker-proxy); the native comparison targets (sql-native, qdrant-native) are native services reached directly over loopback. Each target's addresses and the connections the client held open after its passes are in its notes and in conditions.connections.";
-      yield return "RAM of compose engines, the benchmark's own SQL Server and Qdrant containers (sql, sql-diskann, qdrant, qdrant-hnsw) included, is docker stats of the engine's containers; for the native comparison targets (sql-native, qdrant-native) it is the whole native process, including every other database or collection it serves. Disk is the table's reserved pages (SQL), the collection folder (Qdrant), or for other engines what the load added to the engine's data folder (engines that keep data in memory until a snapshot show almost nothing).";
+      yield return "RAM of compose engines, the benchmark's own SQL Server and Qdrant containers (sql, sql-diskann, qdrant, qdrant-hnsw) included, is docker stats of the engine's containers; for the native comparison targets (sql-native, qdrant-native) it is the whole native process, including every other database or collection it serves. Disk is the table's reserved pages (SQL), the collection folder (Qdrant), or for other engines what the load added to the engine's data folder (engines that keep data in memory until a snapshot show almost nothing); when the folder was smaller after the load than before it, no figure is given.";
       yield return _options.Command == "run-all"
          ? "Engines: run-all starts an engine that is down and stops it afterwards only if it was not running when the run began; an engine that was already running is left running."
          : "Engines: this command starts and stops nothing; every engine had to be running already.";

@@ -1,0 +1,138 @@
+##### MSG 3749 user 2026-10-05T04:55:37.616Z
+===== VERDICT
+BLOCK
+
+Three things would mislead anyone reading the published numbers. The arithmetic, the observer claims and the five v5 fixes all check out against the raw files, with two small slips in the runs report.
+
+**Blocking**
+
+1. **DuckDB and sqlite-vec QPS@8 are not concurrent searches. Not disclosed.**
+   - Each sink holds one connection behind a gate that lets one search through at a time (`SemaphoreSlim(1,1)`):
+     - `src/GenericVectorBuilder.Engines/Sinks/DuckDbStore.cs:32`, waited on in `DuckDbSink.KnnAsync` (line 307).
+     - `SqliteVecStore.cs:31`, waited on in `SqliteVecSink.KnnAsync` (line 328).
+   - So the 8 searchers queue on one connection:
+     - QPS ratio 8/1 is 0.99 for duckdb and 0.98 for sqlitevec.
+     - p50 at 8 searchers is 28.3 ms for duckdb (3.5 x 8) and 14.8 ms for sqlitevec (1.85 x 8).
+     - QPS x client CPU per search gives the same CPU use at both levels: duckdb 1.36 vs 1.38 CPUs, sqlitevec 1.05 vs 1.05.
+   - They are still banded in "QPS with 8 searchers at once": duckdb band 16 (last), sqlitevec band 13.
+   - The only flag says "embedded ... shares the client CPUs". Nothing in the published files mentions the gate (grep of `consolidated.md` and `results.md` finds nothing).
+
+2. **The Vespa QPS@8 median (977) is mostly a cold-engine number, and the settle step does not catch JVM warm-up.**
+   - The @8 pass ran first in runs 502 and 503 (914.6 and 977.3 QPS). In run 501 it ran after the 60 s exact pass (1550.0).
+   - The engine was saturated in all three (3.82 to 3.94 CPUs). Engine CPU per search was 4.31 and 4.03 ms when cold against 2.47 ms when warm, from the observer's cgroup counters.
+   - The settle step declared Vespa settled at a p50 well above its timed p50:
+
+     | engine | settled p50 vs timed p50 |
+     |---|---|
+     | Vespa | 2.60 to 3.20 ms vs 1.87 to 1.90 ms (27 to 42% higher) |
+     | Elasticsearch | 13 to 25% higher |
+     | OpenSearch | 18 to 51% higher |
+
+   - Elasticsearch QPS@8 shows the same effect: 2335 only in run 503, the one run where @8 was its first pass.
+   - Published: a spread flag (x1.695) with no cause given. Vespa is banded 8 with OpenSearch and Milvus only because 2 of 3 runs were cold. A warm 1550 would clear OpenSearch's maximum (1479) by 4.8%.
+   - Cause inferred, not proven: JVM warm-up, with only 20 warm-up searches before an 8-searcher pass.
+
+3. **MongoDB is dropped from the main report with no explanation there.**
+   - `consolidated.md` lists mongodb in all three target orders, but shows "targets 18" and "Runs dropped (none)".
+   - No note says MongoDB was refused for its segment layout (4 vs 2 segments) or points to `mongodb-4-segments` and `mongodb-2-segments`.
+
+**Fix before or with publishing (not misleading on their own)**
+
+4. **Stale method note in the published notes** (`BenchSession.cs:387`): "warm-up and timed pass run back to back" is false for each target's first pass. `SearchRunner.RunAsync` runs `CheckSettleAsync` (a 2 s one-searcher trial, plus 30 to 120 s if extended) between that pass's warm-up and its timing, and repeats the warm-up only after an extension. That is exactly the situation of the cold Vespa @8 passes.
+5. **Stale MariaDB durability text.** It cites `mariadb.compose.yaml` and says the crash test was skipped "because gvb-mariadb is shared". The bench used gvbbench-mariadb from `mariadb-bench.compose.yaml`. That file sets the same `innodb-flush-log-at-trx-commit=2`, so the stated setting is still correct.
+6. **"search settings: missing" for all 18 targets.** run-all writes no searchSettings field; comparability is actually checked through the index text (`Consolidator.cs:209-210`). As worded, the note "every listed target's search settings matched" checks nothing.
+7. **Client CPU sentence.** "Where it is close to the latency, the client library is a large part of what is measured" is wrong for the embedded engines: duckdb shows 4.82 ms against a 3.50 ms p50, and sqlitevec 1.94 against 1.82. That CPU is the engine running inside the client process, not a client library.
+8. **ClickHouse keeps state between runs.** Its data folder grew 1418, 2754, 3675, then 6170 MB (`run5.log`), and nothing trims its system logs.
+   - In run 503's default@1 pass, ClickHouse used 2.04 CPUs (11.5 ms engine CPU per search, against 6.8 ms in the other runs) and p50 was 5.20 ms.
+   - The link between the growing logs and that slow pass is inferred. The median is unaffected.
+   - 4.75 GB is left on disk, and `milvus.broken-20261005` (10 GB) is still there too.
+9. **The web page still serves `published-2026-10-04`** (`BenchResultsEndpoints.cs:25`).
+
+**Checked and holding**
+
+- **Recompute from the three `results.json` files.** Medians, minimums and maximums of p50, QPS@1, QPS@8, client CPU @1/@8 and recall for all 18 targets match `consolidated.json` with zero difference. The MongoDB subfolder values match the raw runs.
+- **Bands rebuilt from the stated rule** (no overlapping ranges, medians at least 3% apart) are identical: 15, 13 and 16 bands. Narrowest boundaries: 3.06% (OpenSearch to Chroma, p50), 3.42% (SQL to Typesense, QPS@1), 4.99% (Qdrant-HNSW to Qdrant, QPS@8).
+- **The five v5 items, in the data:**
+  1. **Milvus:** present in all 3 runs. 3 creates and 3 starts, so no retries. Start to healthy 5.0 s each time. The fix was `snapshot-count` 1000 plus moving the old folder aside.
+  2. **3% band gap:** published, and confirmed by the recompute.
+  3. **Framing and client CPU:** the client CPU column is in all three band tables, and the framing paragraph is present.
+  4. **Outside-load accounting:** includes irq, softirq and steal. The tool and the observer agree within -0.013 to +0.024 CPU once dockerd is counted the tool's way. The tool's highest reading was 0.256 during a pass and 0.298 just before one. No busy-box flags.
+  5. **Bench MariaDB:** the target used gvbbench-mariadb, created pinned to 2-3,6-7 all 3 times, with 0 docker update events.
+- **Observer claims, recomputed from `watch.jsonl`:**
+  - Governor: 19,205 samples in the 156 passes, all performance. Schedutil only at the 4 run boundaries.
+  - Threads: engine 646,705 ticks on the engine CPUs and 0 off; client 330,445 on its CPUs and 0 off. Every allowed list correct, and no engine thread ran off the engine CPUs at any point in the session.
+  - Container probes inside each container: cpuset 2-3,6-7, nproc 4.
+  - No docker-proxy: client peers only `172.22.0.2:*` and `127.0.0.1:1433`, 0 docker-proxy connections in 3,722 samples, docker-proxy CPU at most 0.0005.
+  - Outside load: including the observer, median 0.117 [-0.072, 0.263]; excluding it, median 0.084, max 0.225. The scheduler-based estimate gives median 0.148 [-0.109, 0.296].
+  - irq+softirq+steal at 8 searchers: median 0.088, max 0.378 (pgvector).
+  - Typesense @8 readings negative in all runs (-0.064, -0.072, -0.043), and the tool flagged it.
+  - Client CPU, observer against tool: median 0.2%, max 3.3% apart.
+- **gvb-mariadb untouched:**
+  - 499 inspections, all identical. 0 container events other than exec. 5 execs that were not health checks, all the observer's read-only status queries.
+  - Connections rose 18170 to 21114 (+2944 = 2 x 1470 health checks + 4 reads). Com_select rose only 2948; any benchmark pass would add tens of thousands.
+  - Com_insert, Com_delete and the create/drop/alter counts unchanged. `gvb_eshoponweb` update time unchanged; 0 bench objects.
+  - One weak spot: the "no socket on 3306" check left no record of how many samples it took, because `watch5.py` only writes non-empty results. The file is readable as dan, so the reads probably worked.
+- **Native SQL Server and Qdrant:**
+  - PIDs, start times and 0 restarts unchanged; affinity AUTO with 8 schedulers online; collections unchanged; threads allowed on 0-7.
+  - Native CPU during passes 0.010 to 0.028.
+- **Tests and code:** the second test run passed 397/397 and 296/296, and the build had 0 warnings and 0 errors. Main matches the lane's end file list; only `MachineControl.cs` changed. The runs used the dll built at 02:31:11, after the 02:30:50 patch.
+
+**Mistakes in the runs report** (not in the published files)
+
+- It says 51 creates; the raw events show 54 across 16 names (gvb-mssql and gvb-qdrant 6 each, the rest 3).
+- It says the native SQL connection stayed open "through the first 6 passes of each run". It stayed open through 6, 11 and 3 passes (7.3, 7.3 and 2.1 minutes).
+
+Scratch scripts are in /tmp/claude-1000/-home-dan/e7459ec0-5486-47b7-aa16-06d9255e9383/scratchpad/ (recompute.py, bands.py, order.py, settle.py, obs.py, obs2.py, obs3.py).
+===== RUNS (tail)
+on-LISTEN socket on 3306 in any 1 Hz sample.
+   - The Connections counter rose by 2,944. That is exactly 2 per health check × 1,470 checks plus my 4 reads (ratio 1.9994).
+   - Com_insert, update, delete, create_table, drop_table and alter_table did not change.
+   - gvb_eshoponweb update_time stayed 2026-10-04 14:20:42, and there are 0 gvbbench objects.
+8. **Native SQL Server and Qdrant untouched: pass, with one note.**
+   - Process ids (1448, 1688), start times and restart counts (0) never changed. SQL Server stayed on affinity AUTO with 8 schedulers online, and all threads stayed on CPUs 0-7.
+   - There are no GvbBench databases, and native Qdrant has the same 4 collections.
+   - Note: each run reads its 524 source rows from native SQL Server at start (read-only by design). The idle pooled connection stayed open about 7 minutes, through the first 6 passes of each run. Native CPU during passes was 0.009 to 0.028.
+9. **Nothing left behind: pass, with one note.**
+   - The same 3 containers as before (gvb-mariadb, forager-sidecar-sim, forager-mariadb-b1), the same networks, governor schedutil, no state file.
+   - No bench, observer or docker-events processes; no `/tmp/gvb-cpuset-*` files.
+   - No bench objects on disk: the mssql, qdrant, mariadb-bench, clickhouse and sqlitevec folders are clean, and no new duckdb files.
+   - Note: the ClickHouse data folder grew by 4.75 GB (1,418 to 6,170 MB). All of it is ClickHouse's own system.text_log and system.query_log, which have no retention limit. The mariadb-bench folder (150 MB) is new; it is the bench container's data folder.
+
+**6. Every flag the tool raised**
+- All 3 runs: duckdb and sqlitevec are embedded, so they share the client CPUs.
+- All 3 runs: elasticsearch index not ready after the load and after the searches. At 524 vectors and 1,024 dimensions Lucene builds no HNSW graph, so its searches scan every vector.
+- Accounting mismatch on typesense default@8 in all runs (-0.071, -0.060, -0.051), and on typesense exact's pre-warm-up window in runs 501 (-0.096) and 502 (-0.057).
+- Consolidation spread flags: clickhouse QPS@1 ×1.156, vespa QPS@8 ×1.695.
+- Engine notes: sql, qdrant and sqlitevec are exact by design; oracle is capped (Oracle Free uses 2 CPUs); elasticsearch scans all vectors.
+- Exit codes when stopped: milvus 134 (expected), mongodb 137 (killed after the stop timeout), and oracle, qdrant, opensearch and elasticsearch 143.
+- No busy-box flags, waits, errors, restore problems or sampling errors.
+
+**7. Still open, not touched**
+- The web page still reads `published-2026-10-04` (`BenchResultsEndpoints.PUBLISHED_FOLDER`).
+- `EngineHost.cs` drops the Milvus retry notes when no cpuset is passed. It didn't happen here.
+- Stale text remains in `BenchSession.cs:387` ("back to back"), the `MachineControl.cs:65` class doc, `MariaDbSink.cs` and `deploy/engines/README.md`.
+- The warm-up before an 8-searcher pass is only 20 searches. That is the likely cause of the Vespa order effect.
+
+Files are in /home/dan/ForClaude/GenericVectorBuilder/bench-results:
+- 20261005-023459-eshoponweb
+- 20261005-031556-eshoponweb
+- 20261005-035711-eshoponweb
+- published-2026-10-05/consolidated.json
+- published-2026-10-05/consolidated.md
+- published-2026-10-05/mongodb-4-segments
+- published-2026-10-05/mongodb-2-segments
+
+Observer data is in /home/dan/gvb-work/lanes/v5-final/observer:
+- watch5.py
+- watch.jsonl
+- analysis.txt
+- analysis.json
+- session.txt
+- session.json
+- run5.log (start, between-run and end state)
+Mon Oct  5 04:55:37 AM UTC 2026
+      8 schedutil
+forager-sidecar-sim
+forager-mariadb-b1
+gvb-mariadb
+Shell cwd was reset to /home/dan

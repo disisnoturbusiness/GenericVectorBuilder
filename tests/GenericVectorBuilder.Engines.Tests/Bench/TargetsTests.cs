@@ -438,7 +438,7 @@ public class TargetsTests
 
 /// <summary>
 /// Compiles the repository's Bench target sources with the test scenarios (TargetsScenarios.cs,
-/// TargetsContainerScenarios.cs and TargetsPinnedScenarios.cs) once, and calls the scenarios by
+/// TargetsContainerScenarios.cs, TargetsPinnedScenarios.cs and TargetsSettingsScenarios.cs) once, and calls the scenarios by
 /// name. Shared by the pure and the live target tests.
 /// </summary>
 internal static class TargetsHarness
@@ -448,9 +448,13 @@ internal static class TargetsHarness
    private const string SCENARIOS_TYPE = "GenericVectorBuilder.Bench.UnderTest.TargetsScenarios";
    private const string CONTAINER_TYPE = "GenericVectorBuilder.Bench.UnderTest.TargetsContainerScenarios";
    private const string PINNED_TYPE = "GenericVectorBuilder.Bench.UnderTest.TargetsPinnedScenarios";
+   private const string SETTINGS_TYPE = "GenericVectorBuilder.Bench.UnderTest.TargetsSettingsScenarios";
    private const string IMPLICIT_USINGS = "global using System; global using System.Collections.Generic; global using System.IO; global using System.Linq; "
       + "global using System.Net.Http; global using System.Threading; global using System.Threading.Tasks;";
    private static readonly Lazy<Assembly> COMPILED = new( Compile );
+
+   /// <summary>Longest a settings scenario may take.</summary>
+   public static readonly TimeSpan SCENARIO_LIMIT = TimeSpan.FromMinutes( 3 );
 
    #endregion Data Members
 
@@ -504,6 +508,23 @@ internal static class TargetsHarness
    public static dynamic CallPinned( string method, params object?[] arguments )
    {
       return COMPILED.Value.GetType( PINNED_TYPE )!.GetMethod( method )!.Invoke( null, arguments )!;
+   }
+
+   /// <summary>
+   /// Calls a method of the settings, image, data-folder and ClickHouse-reset scenarios and waits for it
+   /// for at most <see cref="SCENARIO_LIMIT"/>. These scenarios run their own asynchronous work to the end
+   /// before they return, so the call runs on a pool thread and the test fails, instead of hanging, when the
+   /// code under test never returns.
+   /// </summary>
+   /// <param name="method">Method name.</param>
+   /// <param name="arguments">Arguments.</param>
+   /// <returns>The result, usable as dynamic or cast.</returns>
+   public static dynamic CallSettings( string method, params object?[] arguments )
+   {
+      MethodInfo call = COMPILED.Value.GetType( SETTINGS_TYPE )!.GetMethod( method )!;
+      Task<object?> run = Task.Run( () => call.Invoke( null, arguments ) );
+      Assert.True( run.Wait( SCENARIO_LIMIT ), $"{method} did not finish within {SCENARIO_LIMIT.TotalMinutes:0} minutes" );
+      return run.Result!;
    }
 
    /// <summary>
@@ -569,7 +590,7 @@ internal static class TargetsHarness
       List<SyntaxTree> trees = Directory.EnumerateFiles( Path.Combine( bench, "Targets" ), "*.cs" ).Select( f => CSharpSyntaxTree.ParseText( File.ReadAllText( f ), parse, f ) ).ToList();
       string scenarios = Path.Combine( root, "tests", "GenericVectorBuilder.Engines.Tests", "Bench", "TargetsScenarios.cs" );
       trees.Add( CSharpSyntaxTree.ParseText( File.ReadAllText( scenarios ), parse.WithPreprocessorSymbols( "BENCH_UNDER_TEST" ), scenarios ) );
-      foreach( string file in new[] { "TargetsContainerScenarios.cs", "TargetsPinnedScenarios.cs" } )
+      foreach( string file in new[] { "TargetsContainerScenarios.cs", "TargetsPinnedScenarios.cs", "TargetsSettingsScenarios.cs" } )
       {
          string path = Path.Combine( root, "tests", "GenericVectorBuilder.Engines.Tests", "Bench", file );
          trees.Add( CSharpSyntaxTree.ParseText( File.ReadAllText( path ), parse.WithPreprocessorSymbols( "BENCH_UNDER_TEST" ), path ) );

@@ -200,6 +200,34 @@ public class ComposeTests
    }
 
    /// <summary>
+   /// "Is this engine running" asks "sudo -n docker compose ... ps -q --status running --orphans=false" with a 2-minute limit and says yes for
+   /// any container id printed and no for none. Why the exact words: "--orphans=false" keeps the four engine files that share a project
+   /// name from seeing each other's containers, and "-n" keeps sudo from waiting for a password.
+   /// </summary>
+   [Fact]
+   public void IsRunning_AnswersFromWhatComposeListsWithTheExactCommand()
+   {
+      string[] yes = ComposeHarness.Call( "IsRunning", "0|4f2d0c6a1b7e\n|" );
+      Assert.Equal( new[] { "running|True", "call|sudo -n docker compose -f /x/deploy/engines/redis.compose.yaml ps -q --status running --orphans=false (limit 2 min)" }, yes );
+      Assert.Equal( "running|False", ( (string[])ComposeHarness.Call( "IsRunning", "0||" ) )[0] );
+      Assert.Equal( "running|False", ( (string[])ComposeHarness.Call( "IsRunning", "0|  \n |" ) )[0] );
+   }
+
+   /// <summary>
+   /// "Is this engine running" fails loud when compose itself fails: a failed "compose ps" is no answer, and the older code took it for "not
+   /// running", which would have run-all start an engine that was up (or stop one it took for its own). The error names the file, the exit code
+   /// and the end of compose's message; a command that outlives its limit and a sudo that cannot start are errors that name the file too.
+   /// </summary>
+   [Fact]
+   public void IsRunning_AFailedComposePsIsAnErrorAndNeverNo()
+   {
+      Assert.Equal( "error|docker compose ps for redis.compose.yaml failed with exit code 1, so it is not known whether the engine is running: permission denied while trying to connect to the docker API", ( (string[])ComposeHarness.Call( "IsRunning", "1||permission denied while trying to connect to the docker API" ) )[0] );
+      Assert.Equal( "error|docker compose ps for redis.compose.yaml failed with exit code 1, so it is not known whether the engine is running: sudo: a password is required", ( (string[])ComposeHarness.Call( "IsRunning", "1|4f2d0c6a1b7e|sudo: a password is required" ) )[0] );
+      Assert.Equal( "error|Could not ask docker compose whether redis.compose.yaml is running: sudo docker compose ps did not finish within 2 minutes.", ( (string[])ComposeHarness.Call( "IsRunning", "timeout" ) )[0] );
+      Assert.Equal( "error|Could not ask docker compose whether redis.compose.yaml is running: No such file or directory", ( (string[])ComposeHarness.Call( "IsRunning", "missing" ) )[0] );
+   }
+
+   /// <summary>
    /// The Milvus compose file keeps its image and its data folder (the folder is the benchmark's only Milvus
    /// state, so a start from an empty folder is always possible), and its health check waits longer than the
    /// 300-second session lease: a restart can find the previous run's lease still alive, which holds the

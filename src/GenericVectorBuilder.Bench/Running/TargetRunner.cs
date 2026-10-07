@@ -21,6 +21,14 @@ namespace GenericVectorBuilder.Bench.Running;
 /// of the engine silently missing from the table.
 /// Why it is its own class: <see cref="BenchSession"/> needs SQL Server and the real engines,
 /// and this flow is tested with fake targets.
+/// What it records about the engine itself, in this order: right after the engine is bound, its
+/// settings (<see cref="TargetReport.EngineSettings"/>), the container image checked against the pinned id
+/// (<see cref="TargetReport.Image"/>, a different id is the target's error) and the size of its data folder;
+/// then, for ClickHouse in run-all, the reset of its system log tables (before anything is loaded, so the
+/// copy's disk figure starts after it); after the last pass and before the copy is dropped, the data folder
+/// again, and for DuckDB and sqlite-vec their bench file's settings. Why before the load: a read after it
+/// would sit between the load and the searches, and a read that fails must stop the target before hours of
+/// loading, not after. <see cref="SettingsOnlyAsync"/> runs the first part alone, for the pilot.
 /// </summary>
 public sealed class TargetRunner
 {
@@ -32,6 +40,11 @@ public sealed class TargetRunner
    private readonly BenchOptions _options;
    private readonly EngineLifecycle _lifecycle;
    private readonly Action<string> _log;
+   private IEngineProbe? _defaultProbe;
+   private EngineSettingsReader? _defaultReader;
+   private ImagePins? _defaultPins;
+   private DataFolderState? _defaultFolders;
+   private ClickHouseStartState? _defaultClickHouse;
 
    #endregion Data Members
 
@@ -73,6 +86,32 @@ public sealed class TargetRunner
    public Func<OutsideLoadSample?>? OutsideLoad { get; init; }
 
    /// <summary>
+   /// Runs Docker commands and web reads for the image check; null for the real one. Tests pass a fake.
+   /// </summary>
+   public IEngineProbe? Probe { get; init; }
+
+   /// <summary>
+   /// Reads each engine's settings; null for one built on <see cref="Probe"/> (or the real probe). Tests pass a fake.
+   /// </summary>
+   public EngineSettingsReader? SettingsReader { get; init; }
+
+   /// <summary>
+   /// The pinned image ids; null to load deploy/bench/image-pins.json from beside the program the first
+   /// time a container target needs it (a missing file is then that target's error). Tests pass a table.
+   /// </summary>
+   public ImagePins? Pins { get; init; }
+
+   /// <summary>
+   /// Measures data folders; null for the real one (sudo du). Tests pass a fake runner.
+   /// </summary>
+   public DataFolderState? Folders { get; init; }
+
+   /// <summary>
+   /// Resets ClickHouse's log tables; null for the real one. Tests pass a fake client.
+   /// </summary>
+   public ClickHouseStartState? ClickHouse { get; init; }
+
+   /// <summary>
    /// Loads and/or searches one target, never letting its failure stop the others.
    /// </summary>
    /// <param name="target">The target.</param>
@@ -90,6 +129,12 @@ public sealed class TargetRunner
          await target.BindAsync( ct );
          result.Engine = target.Engine;
          result.Durability = target.Durability;
+         ContainerDescription? container = await RecordStartAsync( target, result, ct );
+         if( _options.Command == "run-all" )
+         {
+            await ResetStartStateAsync( target, container, result, ct );
+         }
+
          if( _options.Command != "bench" )
          {
             diskBefore = await DiskBeforeLoadAsync( target, ct );
@@ -105,6 +150,7 @@ public sealed class TargetRunner
 
          result.Ram = await target.MeasureRamAsync( _options.Collection, ct );
          result.Disk = Growth( diskBefore, await target.MeasureDiskAsync( _options.Collection, ct ) );
+         await RecordEndAsync( target, result, ct );
       }
       catch( Exception ex ) when( ex is not OperationCanceledException || !ct.IsCancellationRequested )
       {
@@ -117,6 +163,47 @@ public sealed class TargetRunner
          result.Engine = target.Engine;
          result.Durability = target.Durability;
          await TidyAsync( target, result );
+      }
+
+      return result;
+   }
+
+   /// <summary>
+   /// The settings-only measurement of one target: starts its engine when run-all must, binds to it,
+   /// reads its settings, its image and the size of its data folder (see <see cref="RecordStartAsync"/> and
+   /// <see cref="RecordEndAsync"/>), and stops the engine again if this run started it. Nothing is
+   /// loaded, searched, truncated or dropped.
+   /// Why it exists: the settings readers talk to nineteen engines and the only proof that each works
+   /// is to run each one; the pilot does that before a run of hours depends on them.
+   /// A failed read is the target's error and never stops the others, as in a real run.
+   /// </summary>
+   /// <param name="target">The target.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The target's results, with no search or load.</returns>
+   public async Task<TargetReport> SettingsOnlyAsync( BenchTarget target, CancellationToken ct )
+   {
+      var result = new TargetReport { Name = target.Name, Engine = target.Engine, Hosting = target.Hosting, Durability = target.Durability };
+      try
+      {
+         await _lifecycle.EnsureRunningAsync( target, result.Notes, ct );
+         await target.BindAsync( ct );
+         result.Engine = target.Engine;
+         result.Durability = target.Durability;
+         await RecordStartAsync( target, result, ct );
+         await RecordEndAsync( target, result, ct );
+         result.Notes.Add( "Settings-only run: the engine's settings, image and data folder were read; nothing was loaded, searched or reset." );
+      }
+      catch( Exception ex ) when( ex is not OperationCanceledException || !ct.IsCancellationRequested )
+      {
+         result.Error = ex.Message;
+         _log( $"  {target.Name} FAILED: {result.Error}" );
+      }
+      finally
+      {
+         result.Index = target.Index;
+         result.Engine = target.Engine;
+         result.Durability = target.Durability;
+         await _lifecycle.ReleaseAsync( target, result.Notes );
       }
 
       return result;
@@ -426,19 +513,173 @@ public sealed class TargetRunner
    /// leftovers, logs), so the growth is the fair footprint of this copy. When no "before"
    /// size exists (a table or collection folder that the load created) the reading is
    /// already this copy's own size and is kept as is.
+   /// When the folder is smaller after the load than before it (an engine that deletes old
+   /// files while it loads: ClickHouse rotating its logs, Milvus compacting), the growth is not
+   /// zero, it is not known: the reading then has no bytes and its text says by how much the folder
+   /// shrank. The older code clamped it to "0 B added", which is a measurement that was never made;
+   /// 16 target runs between v5 and v7 carry it (v7 run 154837 among them). Disk is not ranked, but
+   /// a printed zero was read as "adds nothing".
    /// </summary>
    /// <param name="before">Reading before the load, or null.</param>
    /// <param name="after">Reading after the load.</param>
    /// <returns>The reading to report.</returns>
-   private static Measurement Growth( Measurement? before, Measurement after )
+   public static Measurement Growth( Measurement? before, Measurement after )
    {
       if( before?.Bytes is not long start || after.Bytes is not long end )
       {
          return after;
       }
 
-      long grown = Math.Max( 0, end - start );
+      if( end < start )
+      {
+         return Measurement.None( $"not measured: the folder was {Measurement.Format( start - end )} smaller after the load than before it, so the load's own growth cannot be told ({after.Text}, {Measurement.Format( start )} before)" );
+      }
+
+      long grown = end - start;
       return new Measurement( grown, $"{Measurement.Format( grown )} added by this load ({after.Text}, {Measurement.Format( start )} before)" );
+   }
+
+   /// <summary>
+   /// Reads what the engine is running with right after it was bound, in this order: its container as
+   /// Docker describes it, its settings, the image against the pinned id, and its data folder's size.
+   /// The settings and the image are recorded before any check can fail, so a failed target still shows
+   /// what was read; an image that is not the pinned one then ends the target with the reason.
+   /// </summary>
+   /// <param name="target">The target, bound.</param>
+   /// <param name="result">Target results.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The container, or null for a target that has none.</returns>
+   /// <exception cref="InvalidOperationException">A read failed, the image is not the pinned one, or the data folder does not match the container's mounts.</exception>
+   private async Task<ContainerDescription?> RecordStartAsync( BenchTarget target, TargetReport result, CancellationToken ct )
+   {
+      ContainerDescription? container = await DescribeContainerAsync( target, ct );
+      EngineSettingsReader reader = UseReader();
+      result.EngineSettings = ( await reader.ReadAsync( target, container, ct ) ).Select( s => new EngineSetting { Key = s.Key, Value = s.Value, How = s.How } ).ToList();
+      if( container != null )
+      {
+         ImagePins pins = Pins ?? ( _defaultPins ??= ImagePins.LoadDefault() );
+         ImageFacts image = await pins.ReadAsync( UseProbe(), target.Name, container, ct );
+         result.Image = new ImageRecord { Ref = image.Ref, Id = image.Id, PinnedId = image.PinnedId, LastTagTimeUtc = image.LastTagTimeUtc };
+         if( image.Problem != null )
+         {
+            throw new InvalidOperationException( image.Problem );
+         }
+      }
+
+      string? folder = DataFolderState.FolderFor( target );
+      if( folder != null )
+      {
+         if( container != null )
+         {
+            DataFolderState.VerifyAgainstMounts( folder, container );
+         }
+
+         result.DataFolder = new DataFolderRecord { Path = folder, BytesAtStart = await UseFolders().BytesAsync( folder, ct ) };
+      }
+
+      return container;
+   }
+
+   /// <summary>
+   /// The container a container target runs in, as "docker inspect" describes it, or null for a
+   /// target that has none (embedded engines, the native servers, and the fake targets of tests).
+   /// </summary>
+   /// <param name="target">The target.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <returns>The description, or null.</returns>
+   /// <exception cref="InvalidOperationException">The route names more than one container, Docker has none of that name, or its answer is not an inspect result.</exception>
+   private static async Task<ContainerDescription?> DescribeContainerAsync( BenchTarget target, CancellationToken ct )
+   {
+      if( target.Container == null )
+      {
+         return null;
+      }
+
+      IReadOnlyList<string> names = target.Container.Route.Containers;
+      if( names.Count != 1 )
+      {
+         throw new InvalidOperationException( $"{target.Name} reaches {names.Count} containers; the settings reader handles one, so it must be taught the others before it records anything for them." );
+      }
+
+      string json = await target.Container.Inspector.InspectAsync( names[0], ct ) ?? throw new InvalidOperationException( $"Docker has no container {names[0]} for {target.Name}." );
+      return ContainerDescription.Parse( json, EngineSettingsReader.ENV_KEYS );
+   }
+
+   /// <summary>
+   /// ClickHouse only, in run-all only: truncates its system log tables so every session starts from
+   /// the same state, and records what was done in the data-folder record. Runs after the bind and the
+   /// start-of-run size, and before anything is loaded.
+   /// </summary>
+   /// <param name="target">The target.</param>
+   /// <param name="container">Its container, or null.</param>
+   /// <param name="result">Target results (their data-folder record is filled in).</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <exception cref="InvalidOperationException">The reset failed, or the target has no address or data folder to reset through.</exception>
+   private async Task ResetStartStateAsync( BenchTarget target, ContainerDescription? container, TargetReport result, CancellationToken ct )
+   {
+      if( target.Name != "clickhouse" || _options.SettingsOnly || container == null )
+      {
+         return;
+      }
+
+      DataFolderRecord folder = result.DataFolder ?? throw new InvalidOperationException( "ClickHouse has no recorded data folder to reset against." );
+      ContainerAddress address = target.Connections.FirstOrDefault( c => c.Container == container.Name )
+         ?? throw new InvalidOperationException( $"{target.Name} has no recorded address for container {container.Name}, so its log tables cannot be reset." );
+      ClickHouseStartState reset = ClickHouse ?? ( _defaultClickHouse ??= new ClickHouseStartState() );
+      DataFolderState meter = UseFolders();
+      ClickHouseReset done = await reset.ResetAsync( address, token => meter.BytesAsync( folder.Path, token ), folder.BytesAtStart ?? 0, ct );
+      folder.Reset = done.Describe();
+      folder.BytesAfterReset = done.FolderBytesAfter;
+      _log( $"  {target.Name}: {folder.Reset}" );
+   }
+
+   /// <summary>
+   /// After the last pass and before the copy is dropped: the data folder's size again, the embedded
+   /// engine's bench file size, and the embedded engines' file settings.
+   /// </summary>
+   /// <param name="target">The target.</param>
+   /// <param name="result">Target results.</param>
+   /// <param name="ct">Cancellation.</param>
+   /// <exception cref="InvalidOperationException">A read failed.</exception>
+   private async Task RecordEndAsync( BenchTarget target, TargetReport result, CancellationToken ct )
+   {
+      if( result.DataFolder is DataFolderRecord folder )
+      {
+         folder.BytesAtEnd = await UseFolders().BytesAsync( folder.Path, ct );
+         folder.BenchFileBytes = DataFolderState.BenchFileBytes( target, _options.Collection );
+      }
+
+      string? file = DataFolderState.BenchFile( target, _options.Collection );
+      EngineSettingsReader reader = UseReader();
+      IReadOnlyList<SettingRead> more = await reader.ReadEmbeddedFileAsync( target, file != null && File.Exists( file ) ? file : null, ct );
+      result.EngineSettings?.AddRange( more.Select( s => new EngineSetting { Key = s.Key, Value = s.Value, How = s.How } ) );
+   }
+
+   /// <summary>
+   /// The probe handed to the runner, else the real one (made once).
+   /// </summary>
+   /// <returns>The probe.</returns>
+   private IEngineProbe UseProbe()
+   {
+      return Probe ?? ( _defaultProbe ??= new DockerEngineProbe() );
+   }
+
+   /// <summary>
+   /// The settings reader handed to the runner, else one on the probe (made once).
+   /// </summary>
+   /// <returns>The reader.</returns>
+   private EngineSettingsReader UseReader()
+   {
+      return SettingsReader ?? ( _defaultReader ??= new EngineSettingsReader( UseProbe() ) );
+   }
+
+   /// <summary>
+   /// The data-folder measurer handed to the runner, else the real one (made once).
+   /// </summary>
+   /// <returns>The measurer.</returns>
+   private DataFolderState UseFolders()
+   {
+      return Folders ?? ( _defaultFolders ??= new DataFolderState() );
    }
 
    /// <summary>

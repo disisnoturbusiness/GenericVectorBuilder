@@ -838,6 +838,7 @@ public sealed class FakeMachine : IMachineSystem
    private double _ownBase;
    private DateTime _ownChange = DateTime.UtcNow;
    private string _counters = string.Empty;
+   private readonly Dictionary<string, (double Cpus, double Base, DateTime Changed)> _groupRates = new( StringComparer.Ordinal );
 
    #endregion Data Members
 
@@ -918,6 +919,12 @@ public sealed class FakeMachine : IMachineSystem
       }
    }
 
+   /// <summary>When set, every path read is added to <see cref="Reads"/> (with the read time), so a test can see when a file was read.</summary>
+   public bool TrackReads { get; set; }
+
+   /// <summary>Paths read while <see cref="TrackReads"/> was on, with when.</summary>
+   public List<(DateTime At, string Path)> Reads { get; } = new();
+
    /// <summary>True to make ALTER SERVER CONFIGURATION fail as a real SQL error would.</summary>
    public bool RejectSqlAlter { get; set; }
 
@@ -932,6 +939,9 @@ public sealed class FakeMachine : IMachineSystem
 
    /// <summary>False for a box without the msr module: rdmsr and wrmsr then fail as they do there.</summary>
    public bool MsrLoaded { get; set; } = true;
+
+   /// <summary>What "lscpu -e" prints; linus7795's by default.</summary>
+   public string Lscpu { get; set; } = MachineControlScenarios.LINUS_LSCPU;
 
    /// <summary>
    /// The fake linus7795: 8 CPUs on schedutil, turbo on (intel_pstate no_turbo 0, every CPU's
@@ -954,7 +964,44 @@ public sealed class FakeMachine : IMachineSystem
       machine.AddProcess( machine.ProcessId, "dotnet", 4242, 3, "0-7", "/user.slice/bench.scope" );
       machine.SetCounters( 0, 0, 0 );
       machine.AddIdleStates();
+      machine.AddThrottleCounters();
       return machine;
+   }
+
+   /// <summary>
+   /// The thermal throttle counters and topology of linus7795 on every CPU: core and package
+   /// counters at 0, siblings 0,4 / 1,5 / 2,6 / 3,7, one package.
+   /// </summary>
+   public void AddThrottleCounters()
+   {
+      for( int cpu = 0; cpu < 8; cpu++ )
+      {
+         SetThrottle( cpu, 0, 0 );
+         Set( ThermalThrottle.SiblingsPath( cpu ), string.Create( CultureInfo.InvariantCulture, $"{cpu % 4},{cpu % 4 + 4}\n" ) );
+         Set( ThermalThrottle.PackageIdPath( cpu ), "0\n" );
+      }
+   }
+
+   /// <summary>
+   /// Sets one CPU's thermal throttle counters.
+   /// </summary>
+   /// <param name="cpu">Logical CPU.</param>
+   /// <param name="core">core_throttle_count.</param>
+   /// <param name="package">package_throttle_count.</param>
+   public void SetThrottle( int cpu, long core, long package )
+   {
+      Set( ThermalThrottle.CorePath( cpu ), core.ToString( CultureInfo.InvariantCulture ) + "\n" );
+      Set( ThermalThrottle.PackagePath( cpu ), package.ToString( CultureInfo.InvariantCulture ) + "\n" );
+   }
+
+   /// <summary>
+   /// Sets a cgroup's CPU usage (usage_usec of its cpu.stat).
+   /// </summary>
+   /// <param name="group">The cgroup folder.</param>
+   /// <param name="usec">Microseconds.</param>
+   public void SetGroupUsage( string group, long usec )
+   {
+      Set( group + "/cpu.stat", string.Create( CultureInfo.InvariantCulture, $"usage_usec {usec}\nuser_usec 0\n" ) );
    }
 
    /// <summary>
@@ -1052,7 +1099,7 @@ public sealed class FakeMachine : IMachineSystem
       {
          lock( _lock )
          {
-            _files["/proc/stat"] = () => string.Create( CultureInfo.InvariantCulture, $"cpu  {(long)( _busyBase + ( DateTime.UtcNow - _lastChange ).TotalSeconds * 100 * _outsideCpus + OwnTicks() + Drift() )} 0 0 99999 0 0 0 0 0 0\n" );
+            _files["/proc/stat"] = () => string.Create( CultureInfo.InvariantCulture, $"cpu  {(long)( _busyBase + ( DateTime.UtcNow - _lastChange ).TotalSeconds * 100 * _outsideCpus + OwnTicks() + Drift() + _groupRates.Keys.Sum( GroupTicks ) )} 0 0 99999 0 0 0 0 0 0\n" );
             _files[$"/proc/{ProcessId}/stat"] = () => Stat( ProcessId, "dotnet", 4242, (long)OwnTicks(), 0, 0 );
          }
       }
@@ -1116,7 +1163,30 @@ public sealed class FakeMachine : IMachineSystem
    {
       lock( _lock )
       {
+         if( TrackReads )
+         {
+            Reads.Add( ( DateTime.UtcNow, path ) );
+         }
+
          return _files.TryGetValue( path, out Func<string>? read ) ? read() : null;
+      }
+   }
+
+   /// <summary>
+   /// Makes a cgroup burn CPUs from now on: its cpu.stat usage_usec grows at that rate in real
+   /// time, and /proc/stat's busy time grows with it (as the kernel counts it), so the sampler sees
+   /// it as the cgroup's work. Integrates over time like <see cref="OutsideCpus"/>.
+   /// </summary>
+   /// <param name="group">The cgroup folder.</param>
+   /// <param name="cpus">CPUs it uses from now on.</param>
+   public void SetGroupRate( string group, double cpus )
+   {
+      lock( _lock )
+      {
+         DateTime now = DateTime.UtcNow;
+         ( double rate, double baseTicks, DateTime changed ) = _groupRates.GetValueOrDefault( group, ( 0, 0, now ) );
+         _groupRates[group] = ( cpus, baseTicks + ( now - changed ).TotalSeconds * 100 * rate, now );
+         _files[group + "/cpu.stat"] = () => string.Create( CultureInfo.InvariantCulture, $"usage_usec {(long)( GroupTicks( group ) * 10_000 )}\nuser_usec 0\n" );
       }
    }
 
@@ -1207,7 +1277,7 @@ public sealed class FakeMachine : IMachineSystem
       string line = string.Join( " ", a );
       return a[0] switch
       {
-         "lscpu" => Ok( MachineControlScenarios.LINUS_LSCPU ),
+         "lscpu" => Ok( Lscpu ),
          "getconf" => Ok( "100\n" ),
          "sh" => Write( a[^1], a[^2] ),
          "taskset" when a.Length == 4 => Ok( $"pid {a[3]}'s current affinity list: {ProcessInfo.ThreadAffinities( this, int.Parse( a[3], CultureInfo.InvariantCulture ) ).Keys.FirstOrDefault() ?? "0-7"}\n" ),
@@ -1352,6 +1422,17 @@ public sealed class FakeMachine : IMachineSystem
    private double OwnTicks()
    {
       return _ownBase + ( DateTime.UtcNow - _ownChange ).TotalSeconds * 100 * _ownCpus;
+   }
+
+   /// <summary>
+   /// Ticks a cgroup has used so far (see <see cref="SetGroupRate"/>).
+   /// </summary>
+   /// <param name="group">The cgroup folder.</param>
+   /// <returns>Ticks.</returns>
+   private double GroupTicks( string group )
+   {
+      ( double rate, double baseTicks, DateTime changed ) = _groupRates[group];
+      return baseTicks + ( DateTime.UtcNow - changed ).TotalSeconds * 100 * rate;
    }
 
    /// <summary>

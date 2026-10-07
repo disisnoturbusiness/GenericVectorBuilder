@@ -4,114 +4,81 @@ using System.Text.Json.Nodes;
 namespace GenericVectorBuilder.Engines.Tests.Bench;
 
 /// <summary>
-/// The client's CPU per search in the consolidate command: read from a run's search section
-/// (search.clientCpuMsPerSearch, an object keyed by concurrency level), summarized over the runs,
-/// and printed beside the latency and the QPS it belongs to, in consolidated.json and
-/// consolidated.md. Results that do not carry it show nothing: no column, no line, no empty
-/// numbers.
-/// Why shown at all: for the fastest engines the client's own CPU per search (0.49 to 0.87 ms in
-/// the v4 review) is about as large as the latency, so the speed order partly reflects each
-/// engine's .NET client library.
+/// The measured costs of the why table: engine and client CPU per search at one and eight searchers
+/// and engine CPUs busy at eight, medians over the newest session's runs, blank unless every run
+/// recorded the figure; an embedded engine's client CPU includes the engine's own work and a
+/// sentence bound to its hosting field says so; the range sentence names the lowest and highest.
 /// </summary>
-public sealed partial class ConsolidateTests
+public sealed class ConsolidateClientCpuTests : IDisposable
 {
    #region Data Members
 
-   private const string CLIENT_CPU_LINE = "Client CPU per search is the CPU time the test's .NET client itself used for each search, measured in the same pass as the figure beside it. Where it is close to the latency, the client library is a large part of what is measured. For an embedded engine (DuckDB, sqlite-vec) the engine runs inside the client process, so its figure is the engine's own CPU time, not client overhead.";
+   private readonly SyntheticBench _bench = new();
 
    #endregion Data Members
 
    #region Public Methods
 
    /// <summary>
-   /// A target whose runs carry the figure gets a median, min, max and per-run values at each level
-   /// it was recorded for; a target that does not carry it has none, and a level one run left out
-   /// is summarized from the runs that have it. Both spellings of a level ("8" and "default@8") are
-   /// read.
+   /// Costs are the medians of the newest session's three runs; one run without engine CPU leaves engine CPU blank with its recorded reason.
    /// </summary>
+   /// <returns>A task.</returns>
    [Fact]
-   public void ClientCpu_IsSummarizedPerLevel_AndAbsentWhereNotRecorded()
+   public async Task Costs_AreNewestSessionMedians_AndBlankUnlessEveryRunRecordedThem()
    {
-      WriteCpuRuns();
-
-      JsonElement json = Consolidate( "--targets", "fast,plain", Path.Combine( _root, "r?" ) );
-
-      JsonElement fast = json.GetProperty( "targetSummaries" )[0].GetProperty( "clientCpuMsPerSearch" );
-      JsonElement one = fast.GetProperty( "1" );
-      Assert.Equal( 0.5, one.GetProperty( "median" ).GetDouble(), 9 );
-      Assert.Equal( 0.45, one.GetProperty( "min" ).GetDouble(), 9 );
-      Assert.Equal( 0.55, one.GetProperty( "max" ).GetDouble(), 9 );
-      Assert.Equal( 3, one.GetProperty( "n" ).GetInt32() );
-      JsonElement eight = fast.GetProperty( "8" );
-      Assert.Equal( 2, eight.GetProperty( "n" ).GetInt32() );
-      Assert.Equal( 0.35, eight.GetProperty( "median" ).GetDouble(), 9 );
-      Assert.Equal( JsonValueKind.Null, eight.GetProperty( "perRun" )[2].ValueKind );
-      Assert.Empty( json.GetProperty( "targetSummaries" )[1].GetProperty( "clientCpuMsPerSearch" ).EnumerateObject() );
-   }
-
-   /// <summary>
-   /// The markdown shows the figure in the per-target table, in a per-run table for each level, and
-   /// as a column of the ranking table it belongs to (the one-searcher figure beside p50 and QPS@1,
-   /// the 8-searcher figure beside QPS@8), with "-" for a target without it and the one definition
-   /// line printed once under the ranking.
-   /// </summary>
-   [Fact]
-   public void ClientCpu_IsShownBesideLatencyAndQps_WhenTheResultsCarryIt()
-   {
-      WriteCpuRuns();
-
-      Consolidate( "--targets", "fast,plain", Path.Combine( _root, "r?" ) );
-
-      string md = File.ReadAllText( Path.Combine( _root, "out", "consolidated.md" ) );
-      Assert.Contains( "client CPU ms/search@1 | client CPU ms/search@8 |", md );
-      Assert.Contains( "| fast | 3 | 1.00 [1.00, 1.00] |", md );
-      Assert.Contains( "0.50 [0.45, 0.55] | 0.35 [0.30, 0.40] |", md );
-      Assert.Contains( "## Per run: client CPU ms per search@1", md );
-      Assert.Contains( "## Per run: client CPU ms per search@8", md );
-      Assert.Contains( "| band | target | median [min, max] | client CPU ms/search | runs | engine notes |", md );
-      string ranking = md[md.IndexOf( "## Request speed", StringComparison.Ordinal )..md.IndexOf( "## Per-engine notes", StringComparison.Ordinal )];
-      Assert.Contains( "| fast | 1.00 [1.00, 1.00] | 0.50 [0.45, 0.55] | 3 | flags: fields-missing", ranking );
-      Assert.Contains( "| plain | 1.00 [1.00, 1.00] | - | 3 | flags: fields-missing", ranking );
-      Assert.Contains( "| fast | 900.0 [900.0, 900.0] | 0.35 [0.30, 0.40] | 3 | flags: fields-missing", ranking );
-      Assert.Equal( 1, ranking.Split( CLIENT_CPU_LINE ).Length - 1 );
-   }
-
-   /// <summary>
-   /// Results that carry no client CPU produce no column, no line and no per-run table: the band
-   /// case's markdown has the word "client CPU" nowhere, and every target's figure is an empty object.
-   /// </summary>
-   [Fact]
-   public void ClientCpu_IsNotShown_WhenNoRunCarriesIt()
-   {
-      WriteBandCase();
-
-      JsonElement json = Consolidate( "--targets", "a,b,c,d,e", Path.Combine( _root, "r?" ) );
-
-      string md = File.ReadAllText( Path.Combine( _root, "out", "consolidated.md" ) );
-      Assert.DoesNotContain( "client CPU", md );
-      Assert.DoesNotContain( "Client CPU", md );
-      Assert.All( json.GetProperty( "targetSummaries" ).EnumerateArray(), t => Assert.Empty( t.GetProperty( "clientCpuMsPerSearch" ).EnumerateObject() ) );
-   }
-
-   /// <summary>
-   /// A negative or non-numeric figure is not a measurement and is skipped, so a damaged field reads
-   /// as not recorded instead of showing a nonsense number.
-   /// </summary>
-   [Fact]
-   public void ClientCpu_IgnoresNegativeAndNonNumericValues()
-   {
-      JsonObject Damaged( object cpu )
+      await ConsolidateHarness.Timed( () =>
       {
-         JsonObject target = Target( "t", 1, 900, 100 );
-         ( (JsonObject)target["search"]! )["clientCpuMsPerSearch"] = JsonSerializer.SerializeToNode( cpu );
-         return target;
-      }
+         string v7 = _bench.WriteSession( "2026-10-06", 701, _ => ConsolidateTests.Pair() );
+         string v8 = _bench.WriteSession( "2026-10-08", 801, _ => ConsolidateTests.Pair(), ( i, run ) =>
+         {
+            foreach( JsonNode? p in run["conditions"]!["passes"]!.AsArray() )
+            {
+               bool alpha = (string)p!["target"]! == "alpha";
+               p["clientCpuMsPerSearch"] = 0.4 + 0.1 * i;
+               p["engineCpuMsPerSearch"] = alpha ? 1.0 + i : ( i == 2 ? null : 2.0 );
+               if( !alpha && i == 2 )
+               {
+                  p["engineCpuNullReason"] = "no cgroup of the engine under test was followed";
+               }
+            }
+         } );
+         ( int exit, JsonElement? json, _ ) = _bench.Consolidate( "--session", "v7=" + v7, "--session", "v8=" + v8 );
+         Assert.True( exit == 0, _bench.LogText() );
+         JsonElement alpha = Costs( json!.Value, "alpha" );
+         Assert.Equal( "v8", alpha.GetProperty( "session" ).GetString() );
+         Assert.Equal( 2.0, alpha.GetProperty( "engineCpuMsPerSearch" ).GetProperty( "1" ).GetDouble(), 9 );
+         Assert.Equal( 0.5, alpha.GetProperty( "clientCpuMsPerSearch" ).GetProperty( "8" ).GetDouble(), 9 );
+         Assert.Equal( 1.5, alpha.GetProperty( "engineCpusBusyAt8" ).GetDouble(), 9 );
+         JsonElement beta = Costs( json.Value, "beta" );
+         Assert.Equal( JsonValueKind.Null, beta.GetProperty( "engineCpuMsPerSearch" ).GetProperty( "1" ).ValueKind );
+         Assert.Equal( "no cgroup of the engine under test was followed", beta.GetProperty( "engineCpuNullReason" ).GetString() );
+         Assert.Equal( "At one searcher, client CPU per search ran from 0.500 ms (alpha) to 0.500 ms (beta).", Sentence( json.Value, "why.range.client" ) );
+      } );
+   }
 
-      WriteRun( "r1", "2026-10-05T10:00:00Z", Damaged( new Dictionary<string, object> { ["1"] = -0.5, ["8"] = "fast" } ) );
-
-      JsonElement json = Consolidate( "--targets", "t", Path.Combine( _root, "r1" ) );
-
-      Assert.Empty( json.GetProperty( "targetSummaries" )[0].GetProperty( "clientCpuMsPerSearch" ).EnumerateObject() );
+   /// <summary>
+   /// An embedded target's client CPU includes the engine's work, and the sentence cites the hosting field of every claim run.
+   /// </summary>
+   /// <returns>A task.</returns>
+   [Fact]
+   public async Task EmbeddedTarget_ClientCpuIncludesTheEngine()
+   {
+      await ConsolidateHarness.Timed( () =>
+      {
+         string runs = _bench.WriteSession( "2026-10-06", 701, _ =>
+         {
+            JsonObject[] pair = ConsolidateTests.Pair();
+            pair[1]["hosting"] = "embedded";
+            return pair;
+         } );
+         ( int exit, JsonElement? json, _ ) = _bench.Consolidate( "--session", "v7=" + runs );
+         Assert.True( exit == 0, _bench.LogText() );
+         Assert.True( Costs( json!.Value, "beta" ).GetProperty( "clientIncludesEngine" ).GetBoolean() );
+         Assert.False( Costs( json.Value, "alpha" ).GetProperty( "clientIncludesEngine" ).GetBoolean() );
+         JsonElement sentence = json.Value.GetProperty( "sentences" ).EnumerateArray().First( s => s.GetProperty( "slot" ).GetString() == "why.embedded" );
+         Assert.Equal( "Hosting embedded is recorded for beta: each runs inside the test's own process, so its client CPU per search includes the engine's own work.", sentence.GetProperty( "text" ).GetString() );
+         Assert.Equal( "results:targets[beta].hosting#embedded", sentence.GetProperty( "sources" )[0].GetProperty( "ref" ).GetString() );
+      } );
    }
 
    #endregion Public Methods
@@ -119,27 +86,38 @@ public sealed partial class ConsolidateTests
    #region Private Methods
 
    /// <summary>
-   /// Three runs of "fast" (client CPU 0.45, 0.50 and 0.55 ms per search with one searcher; with 8
-   /// searchers 0.30 and 0.40 in the first two runs, spelled "default@8", and nothing in the third)
-   /// and of "plain", which records none.
+   /// A target's why costs.
    /// </summary>
-   private void WriteCpuRuns()
+   /// <param name="root">consolidated.json.</param>
+   /// <param name="target">Target.</param>
+   /// <returns>The costs.</returns>
+   private static JsonElement Costs( JsonElement root, string target )
    {
-      double[] one = { 0.45, 0.50, 0.55 };
-      double?[] eight = { 0.30, 0.40, null };
-      for( int run = 0; run < 3; run++ )
-      {
-         JsonObject fast = Target( "fast", 1.0, 900, 100 );
-         var cpu = new JsonObject { ["1"] = one[run] };
-         if( eight[run] is double e )
-         {
-            cpu["default@8"] = e;
-         }
+      return root.GetProperty( "why" ).EnumerateArray().First( w => w.GetProperty( "target" ).GetString() == target ).GetProperty( "costs" );
+   }
 
-         ( (JsonObject)fast["search"]! )["clientCpuMsPerSearch"] = cpu;
-         WriteRun( $"r{run + 1}", $"2026-10-05T1{run}:00:00Z", fast, Target( "plain", 1.0, 800, 90 ) );
-      }
+   /// <summary>
+   /// The text of a slot's sentence.
+   /// </summary>
+   /// <param name="root">consolidated.json.</param>
+   /// <param name="slot">Slot.</param>
+   /// <returns>The text.</returns>
+   private static string Sentence( JsonElement root, string slot )
+   {
+      return root.GetProperty( "sentences" ).EnumerateArray().First( s => s.GetProperty( "slot" ).GetString() == slot ).GetProperty( "text" ).GetString()!;
    }
 
    #endregion Private Methods
+
+   #region IDisposable
+
+   /// <summary>
+   /// Removes the scratch folders.
+   /// </summary>
+   public void Dispose()
+   {
+      _bench.Dispose();
+   }
+
+   #endregion IDisposable
 }

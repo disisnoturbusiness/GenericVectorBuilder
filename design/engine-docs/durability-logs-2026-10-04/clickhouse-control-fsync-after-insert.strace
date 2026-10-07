@@ -1,0 +1,415 @@
+704203 18:06:35.574839 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x386, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704127 18:06:35.575124 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2b2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704053 18:06:35.575360 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x25a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703965 18:06:35.575616 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1ac, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703820 18:06:35.576035 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x8a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703794 18:06:35.576790 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x56, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703886 18:06:35.590643 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x10e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704143 18:06:35.598957 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2da, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704051 18:06:35.608880 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x256, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703955 18:06:35.650603 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x198, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703944 18:06:35.662864 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x182, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704431 18:06:35.666628 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x548, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704202 18:06:35.670716 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x384, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703786 18:06:35.671741 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x46, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704247 18:06:35.686029 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3de, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704304 18:06:35.686232 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x450, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704106 18:06:35.692413 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x306, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704121 18:06:35.749388 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x324, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704208 18:06:35.752903 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x390, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703825 18:06:35.759543 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x94, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704015 18:06:35.814344 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x210, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703776 18:06:35.884405 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x32, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703796 18:06:35.903365 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x5a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704193 18:06:35.924431 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x370, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704149 18:06:35.940232 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2ea, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703857 18:06:35.953014 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xd4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703835 18:06:35.953591 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xa8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704306 18:06:35.961520 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x454, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704158 18:06:35.967462 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x300, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704359 18:06:35.972695 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4bc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703979 18:06:35.978173 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1c8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704277 18:06:35.980249 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x41a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704077 18:06:35.993452 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x292, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704236 18:06:36.009550 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3c8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703775 18:06:36.011714 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x30, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703916 18:06:36.012639 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x14a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703885 18:06:36.021735 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x10c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703811 18:06:36.031420 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x78, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704162 18:06:36.032387 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x30c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704223 18:06:36.041559 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3ae, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704199 18:06:36.053801 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x37e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703780 18:06:36.064609 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704266 18:06:36.084043 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x404, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704026 18:06:36.085246 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x226, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704344 18:06:36.093625 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x49e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703814 18:06:36.097834 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x7e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703993 18:06:36.107526 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1e8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704094 18:06:36.134863 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2d3, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704320 18:06:36.139376 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x470, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704163 18:06:36.173479 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x310, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704142 18:06:36.230935 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2db, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704131 18:06:36.269529 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x346, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704114 18:06:36.310933 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x29e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703761 18:06:36.323362 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x14, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703935 18:06:36.330423 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x170, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704023 18:06:36.355588 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x220, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704353 18:06:36.358592 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4b0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703940 18:06:36.363942 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x17a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704012 18:06:36.364480 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x20a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704263 18:06:36.366007 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3fe, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704059 18:06:36.366442 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x266, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704057 18:06:36.407773 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x262, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704134 18:06:36.425511 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x350, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703950 18:06:36.455345 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x18e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704356 18:06:36.480499 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4b6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703764 18:06:36.487922 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704310 18:06:36.506913 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x45c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704240 18:06:36.507764 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3d0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703879 18:06:36.508203 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x100, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704408 18:06:36.527909 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x522, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703997 18:06:36.529573 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1ec, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704166 18:06:36.559736 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x349, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704268 18:06:36.560960 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x408, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704241 18:06:36.593737 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3d2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703923 18:06:36.598621 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x156, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704261 18:06:36.602279 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3fa, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703918 18:06:36.606206 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x14e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703954 18:06:36.613116 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x196, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703948 18:06:36.632139 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x18a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704262 18:06:36.635161 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3fc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703892 18:06:36.656345 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x11a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703802 18:06:36.683716 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x66, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704222 18:06:36.697825 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3ac, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703880 18:06:36.698288 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x102, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704130 18:06:36.707251 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2b8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703868 18:06:36.719742 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xea, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704343 18:06:36.734683 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x49c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704036 18:06:36.734723 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x238, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704008 18:06:36.736322 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x200, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704299 18:06:36.755858 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x446, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704049 18:06:36.785361 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x252, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703805 18:06:36.787541 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x6c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704255 18:06:36.803140 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3ee, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703756 18:06:36.803913 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xa, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703877 18:06:36.840329 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xfc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704237 18:06:36.852323 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3ca, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704150 18:06:36.860284 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2ec, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704027 18:06:36.863761 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x228, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704087 18:06:36.880736 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2bc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703799 18:06:36.931243 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x60, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703759 18:06:36.931312 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x10, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704152 18:06:36.976903 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x31a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703958 18:06:36.977226 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x19e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704120 18:06:36.996708 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2a6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704108 18:06:37.001845 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x316, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703745 18:06:37.027546 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704100 18:06:37.031342 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x356, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704260 18:06:37.038805 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3f8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704207 18:06:37.051653 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x38e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704198 18:06:37.111377 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x37c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703807 18:06:37.121641 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x70, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704040 18:06:37.123681 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x240, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703858 18:06:37.138744 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xd6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704022 18:06:37.144619 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x21e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704074 18:06:37.163878 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x284, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703833 18:06:37.189649 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xa4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704321 18:06:37.271329 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x472, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704366 18:06:37.280284 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4ca, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704195 18:06:37.306779 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x374, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704354 18:06:37.358665 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4b2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704020 18:06:37.360215 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x21a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704138 18:06:37.364026 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2c3, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704270 18:06:37.402805 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x40c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704302 18:06:37.430190 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x44c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704204 18:06:37.495229 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x388, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704133 18:06:37.510616 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x35a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704348 18:06:37.511341 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4a6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703949 18:06:37.514902 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x18c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704376 18:06:37.541862 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4de, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704115 18:06:37.551485 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2c4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703909 18:06:37.563450 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x13c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703934 18:06:37.564767 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x16e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704174 18:06:37.572115 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x330, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704281 18:06:37.588602 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x422, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703977 18:06:37.604507 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1c4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704058 18:06:37.626469 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x264, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704295 18:06:37.645181 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x43e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704323 18:06:37.650633 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x474, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704288 18:06:37.652870 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x430, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704428 18:06:37.670763 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x542, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703964 18:06:37.671563 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1aa, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703902 18:06:37.689623 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x12e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704371 18:06:37.690136 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4d4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704068 18:06:37.755021 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x278, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703990 18:06:37.765750 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1de, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703976 18:06:37.817085 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1c2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704112 18:06:37.845625 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x29a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703915 18:06:37.878200 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x148, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704384 18:06:37.898986 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4ee, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704056 18:06:37.927290 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x260, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703772 18:06:37.933552 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704246 18:06:37.956925 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3dc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703891 18:06:37.964148 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x118, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703873 18:06:37.979588 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xf4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704113 18:06:38.005706 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x29c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703967 18:06:38.015396 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1b0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704001 18:06:38.052154 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1f4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703994 18:06:38.053602 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1e4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704111 18:06:38.074855 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x298, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703849 18:06:38.132505 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xc4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704126 18:06:38.149712 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2b0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704018 18:06:38.161645 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x216, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703882 18:06:38.177159 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x106, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704390 18:06:38.184857 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4fa, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704010 18:06:38.201160 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x206, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704044 18:06:38.236701 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x248, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704173 18:06:38.238565 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x32e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704104 18:06:38.242298 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2fe, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704419 18:06:38.297531 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x52e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703768 18:06:38.299199 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x22, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704285 18:06:38.304426 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x42a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703836 18:06:38.313642 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xaa, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704141 18:06:38.315279 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2d2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704050 18:06:38.330754 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x254, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703962 18:06:38.332883 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1a6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703947 18:06:38.334626 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x188, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704250 18:06:38.335422 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3e4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704007 18:06:38.349316 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1fe, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703862 18:06:38.351516 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xde, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704293 18:06:38.376864 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x43a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704017 18:06:38.377195 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x214, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704311 18:06:38.387074 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x45e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704365 18:06:38.406261 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4c8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704004 18:06:38.430571 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x202, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704011 18:06:38.436443 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x208, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704147 18:06:38.437333 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x33e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704211 18:06:38.438406 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x396, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704129 18:06:38.441975 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2b6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704092 18:06:38.442565 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2ce, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704119 18:06:38.449299 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x320, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704252 18:06:38.452343 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3e8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704274 18:06:38.458804 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x414, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704383 18:06:38.466315 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4ec, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703828 18:06:38.477617 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x9a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704275 18:06:38.498768 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x416, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704286 18:06:38.540164 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x42c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704215 18:06:38.548603 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x39e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704434 18:06:38.560052 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x558, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703824 18:06:38.583272 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x92, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705233 18:06:38.585769 fdatasync(274)   = 0
+705233 18:06:38.588428 fdatasync(276)   = 0
+705233 18:06:38.589624 fdatasync(277)   = 0
+705233 18:06:38.590701 fdatasync(275)   = 0
+705233 18:06:38.591686 fdatasync(278)   = 0
+705233 18:06:38.592746 fdatasync(279)   = 0
+705233 18:06:38.593751 fdatasync(280)   = 0
+705233 18:06:38.594826 fdatasync(281)   = 0
+705233 18:06:38.595907 fdatasync(282)   = 0
+705233 18:06:38.596953 fdatasync(283)   = 0
+703789 18:06:38.597983 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705233 18:06:38.598013 fdatasync(284)   = 0
+704107 18:06:38.600005 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x30a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705233 18:06:38.602551 fdatasync(274)   = 0
+704080 18:06:38.623600 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x288, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703840 18:06:38.632143 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xb2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704047 18:06:38.667911 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x24e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704421 18:06:38.667952 fdatasync(274)   = 0
+704421 18:06:38.670025 fdatasync(276 <unfinished ...>
+704082 18:06:38.670419 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x28a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704421 18:06:38.671081 <... fdatasync resumed>) = 0
+704421 18:06:38.671265 fdatasync(277)   = 0
+704421 18:06:38.672316 fdatasync(275)   = 0
+704421 18:06:38.673385 fdatasync(278)   = 0
+704214 18:06:38.674493 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x39c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704421 18:06:38.674523 fdatasync(279)   = 0
+704421 18:06:38.675600 fdatasync(280)   = 0
+704421 18:06:38.676604 fdatasync(281)   = 0
+704421 18:06:38.677584 fdatasync(282)   = 0
+704421 18:06:38.678529 fdatasync(283)   = 0
+704421 18:06:38.679535 fdatasync(284)   = 0
+704421 18:06:38.684518 fdatasync(274)   = 0
+704307 18:06:38.703783 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x455, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705231 18:06:38.743486 fdatasync(274 <unfinished ...>
+703770 18:06:38.743764 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x26, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705231 18:06:38.744465 <... fdatasync resumed>) = 0
+705231 18:06:38.745562 fdatasync(276)   = 0
+705231 18:06:38.746617 fdatasync(277)   = 0
+705231 18:06:38.747642 fdatasync(275)   = 0
+705231 18:06:38.748678 fdatasync(278)   = 0
+705231 18:06:38.749757 fdatasync(279)   = 0
+705231 18:06:38.750868 fdatasync(280)   = 0
+705231 18:06:38.752110 fdatasync(281)   = 0
+705231 18:06:38.753200 fdatasync(282)   = 0
+705231 18:06:38.754207 fdatasync(283)   = 0
+705231 18:06:38.755256 fdatasync(284)   = 0
+705231 18:06:38.759450 fdatasync(274)   = 0
+703959 18:06:38.800885 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1a0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705230 18:06:38.804053 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x57e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704421 18:06:38.805395 fdatasync(274)   = 0
+704421 18:06:38.807111 fdatasync(276)   = 0
+704421 18:06:38.807951 fdatasync(277)   = 0
+704421 18:06:38.808851 fdatasync(275)   = 0
+704421 18:06:38.809746 fdatasync(278)   = 0
+704421 18:06:38.810737 fdatasync(279)   = 0
+704421 18:06:38.811865 fdatasync(280)   = 0
+704421 18:06:38.812896 fdatasync(281)   = 0
+704421 18:06:38.813840 fdatasync(282)   = 0
+704421 18:06:38.814737 fdatasync(283 <unfinished ...>
+703848 18:06:38.815401 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xc2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704421 18:06:38.815650 <... fdatasync resumed>) = 0
+704421 18:06:38.815757 fdatasync(284)   = 0
+704421 18:06:38.819279 fdatasync(274)   = 0
+703895 18:06:38.830236 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x120, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704435 18:06:38.833746 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x550, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703827 18:06:38.833970 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x98, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705158 18:06:38.859959 fdatasync(274)   = 0
+704228 18:06:38.860986 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3b8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+705158 18:06:38.861800 fdatasync(276)   = 0
+705158 18:06:38.862808 fdatasync(277)   = 0
+705158 18:06:38.863884 fdatasync(275)   = 0
+705158 18:06:38.865168 fdatasync(278)   = 0
+705158 18:06:38.866119 fdatasync(279)   = 0
+705158 18:06:38.866975 fdatasync(280)   = 0
+705158 18:06:38.868024 fdatasync(281)   = 0
+705158 18:06:38.869006 fdatasync(282)   = 0
+705158 18:06:38.869849 fdatasync(283)   = 0
+705158 18:06:38.870761 fdatasync(284)   = 0
+705158 18:06:38.873651 fdatasync(274)   = 0
+704315 18:06:38.880749 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x466, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704381 18:06:38.888958 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4e8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704179 18:06:38.902355 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x340, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703939 18:06:38.903703 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x178, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704039 18:06:38.908845 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x23e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703942 18:06:38.913031 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x17e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704183 18:06:38.914035 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x352, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704328 18:06:38.917424 fdatasync(148)   = 0
+704227 18:06:38.922896 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3b6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704035 18:06:38.928962 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x236, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703853 18:06:38.948818 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xcc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704002 18:06:38.967270 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1f8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703974 18:06:38.968982 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1be, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703998 18:06:38.998225 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1ee, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703779 18:06:39.054391 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x38, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704301 18:06:39.057252 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x44a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704137 18:06:39.067672 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x354, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703826 18:06:39.072043 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x96, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703830 18:06:39.073705 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x9e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704169 18:06:39.074228 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x326, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703919 18:06:39.098504 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x150, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704164 18:06:39.124755 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x314, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703983 18:06:39.146446 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1d0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703791 18:06:39.164503 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x50, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704318 18:06:39.170555 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x46c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703838 18:06:39.175530 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xae, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704096 18:06:39.191624 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2c2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704391 18:06:39.197241 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4fc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704300 18:06:39.201306 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x448, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704231 18:06:39.202097 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3be, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704065 18:06:39.218050 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x272, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704157 18:06:39.223613 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2fc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703932 18:06:39.248008 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x16a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704216 18:06:39.255010 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3a0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704308 18:06:39.280675 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x458, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704041 18:06:39.283634 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x242, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704254 18:06:39.293937 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3ec, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704052 18:06:39.303055 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x258, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704064 18:06:39.316884 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x270, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704289 18:06:39.325182 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x432, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704367 18:06:39.368295 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4cc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703938 18:06:39.370233 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x176, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704212 18:06:39.371236 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x398, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704209 18:06:39.431020 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x392, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703867 18:06:39.438870 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xe8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704267 18:06:39.446482 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x406, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704403 18:06:39.462835 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x510, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703995 18:06:39.498241 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1e6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704234 18:06:39.505908 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3c4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704370 18:06:39.526200 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4d2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704178 18:06:39.544495 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x338, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703821 18:06:39.546403 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x8c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703760 18:06:39.562856 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x12, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704272 18:06:39.567546 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x410, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704181 18:06:39.577936 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x348, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703852 18:06:39.583669 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xca, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704140 18:06:39.588287 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2d0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704297 18:06:39.605488 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x442, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703906 18:06:39.661983 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x136, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703797 18:06:39.671730 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x5c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703952 18:06:39.681329 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x192, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704125 18:06:39.698652 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x342, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704159 18:06:39.699451 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x33c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703876 18:06:39.705094 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xfa, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704224 18:06:39.732580 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3b0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703900 18:06:39.735248 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x12a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704378 18:06:39.736117 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4e2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703991 18:06:39.738794 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1e0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704317 18:06:39.826034 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x46a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704000 18:06:39.873752 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1f2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704271 18:06:39.880551 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x40e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703911 18:06:39.885299 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x140, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703822 18:06:39.908968 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x8e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704148 18:06:39.919916 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2e8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704192 18:06:39.950767 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x36e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704167 18:06:40.009315 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x31e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703899 18:06:40.010597 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x128, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704201 18:06:40.031563 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x382, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704206 18:06:40.043211 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x38c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704402 18:06:40.062006 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x51e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703926 18:06:40.065249 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x15e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704033 18:06:40.075594 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x234, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704032 18:06:40.095986 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x232, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703784 18:06:40.106587 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x42, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704003 18:06:40.130246 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1f6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703832 18:06:40.162638 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xa2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704099 18:06:40.164483 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x31c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704188 18:06:40.181372 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x366, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704037 18:06:40.187322 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x23a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704244 18:06:40.188790 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3d8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703851 18:06:40.241834 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xc8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703860 18:06:40.274337 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xda, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704156 18:06:40.295584 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2f8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703801 18:06:40.317621 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x64, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704213 18:06:40.330370 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x39a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703766 18:06:40.339458 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1d, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704280 18:06:40.342104 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x420, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703755 18:06:40.363996 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703815 18:06:40.377694 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x80, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703743 18:06:40.379975 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703914 18:06:40.386851 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x146, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703845 18:06:40.387722 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xbc, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704098 18:06:40.409192 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2e6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704239 18:06:40.438429 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3ce, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703920 18:06:40.454442 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x152, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704151 18:06:40.460877 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x2ee, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703788 18:06:40.471537 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703982 18:06:40.478149 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1ce, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703834 18:06:40.503973 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xa6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704426 18:06:40.535780 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x53c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703771 18:06:40.562715 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x28, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704235 18:06:40.569688 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3c6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703971 18:06:40.623308 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1b8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703842 18:06:40.623568 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xb6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704172 18:06:40.631669 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x32c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703782 18:06:40.652225 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703996 18:06:40.683721 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1ea, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704176 18:06:40.690845 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x334, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703839 18:06:40.703192 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xb0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703804 18:06:40.723834 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x6a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704340 18:06:40.776182 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x496, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703874 18:06:40.780152 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xf6, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703778 18:06:40.788919 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x36, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704030 18:06:40.790878 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x22e, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703969 18:06:40.799049 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1b4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703893 18:06:40.815821 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x11c, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703961 18:06:40.820661 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1a4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704298 18:06:40.846133 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x444, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704345 18:06:40.857695 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4a0, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704218 18:06:40.862962 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3a4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704347 18:06:40.868488 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x4a4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704045 18:06:40.879113 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x24a, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704284 18:06:40.888066 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x428, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703856 18:06:40.891281 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xd2, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703963 18:06:40.918317 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x1a8, si_overrun=0, si_int=0, si_ptr=NULL} ---
+703841 18:06:40.922885 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0xb4, si_overrun=0, si_int=0, si_ptr=NULL} ---
+704225 18:06:40.935175 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TIMER, si_timerid=0x3b2, si_overrun=0, si_int=0, si_ptr=NULL} ---

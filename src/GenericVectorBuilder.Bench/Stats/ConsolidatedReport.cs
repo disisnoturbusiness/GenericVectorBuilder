@@ -1,651 +1,1334 @@
-using GenericVectorBuilder.Bench.Report;
-
 namespace GenericVectorBuilder.Bench.Stats;
 
 /// <summary>
-/// Several benchmark runs folded into one set of numbers, written as consolidated.json and
-/// consolidated.md.
-/// Why it keeps the runs used, the runs dropped and every per-run value: a median is only
-/// checkable when the reader can see which runs fed it and which were left out.
+/// consolidated.json of the v8 "big gaps only" report, field for field as the v8c contract
+/// (v8-design/v8c/contract.md, "consolidated.json, P3") names it, serialized camelCase.
+/// Why a model of its own and not the v7 shape: v7 ranked by tie bands; v8 publishes only orders
+/// that hold by the claim rule in each session separately, and every sentence the page prints
+/// travels here with its sources (<see cref="Sentences"/>), so the web page renders fields and
+/// sentences and never writes prose of its own.
+/// Fields beyond the contract (format, mode, status, stopReasons, targets, notInReport,
+/// engineSettings, observer, and the counts inside drift and basis) are additions the page may read;
+/// none changes the meaning of a contract field. A field the runs did not record is null, never a
+/// made-up value.
 /// </summary>
 public sealed class ConsolidatedReport
 {
    #region Public Methods
 
-   /// <summary>When the consolidation was made (UTC, ISO 8601).</summary>
+   /// <summary>Shape marker, "v8c". Why: the web page must tell this shape from the v7 and 4 Oct shapes without guessing.</summary>
+   public string Format { get; set; } = "v8c";
+
+   /// <summary>When the report was written (UTC).</summary>
    public string CreatedUtc { get; set; } = string.Empty;
 
-   /// <summary>The consolidate command line.</summary>
+   /// <summary>The consolidate command line as given.</summary>
    public string CommandLine { get; set; } = string.Empty;
 
-   /// <summary>Targets asked for, in the order given.</summary>
+   /// <summary>"two-session" when two claim sessions were given; "one-session" for one, where no row is ranked.</summary>
+   public string Mode { get; set; } = string.Empty;
+
+   /// <summary>"complete", or "stopped" when guard G2 or G3 stopped the report (no headline then).</summary>
+   public string Status { get; set; } = string.Empty;
+
+   /// <summary>Why the report stopped, one line per guard that fired; empty when complete.</summary>
+   public List<string> StopReasons { get; set; } = new();
+
+   /// <summary>The claim sessions, oldest first.</summary>
+   public List<SessionInfo> Sessions { get; set; } = new();
+
+   /// <summary>Targets with a row, in the order of the first claim run.</summary>
    public List<string> Targets { get; set; } = new();
 
-   /// <summary>Settings every run used shares (pipeline, host, data, queries, levels).</summary>
-   public RunSettings Settings { get; set; } = new();
+   /// <summary>Runs each claim session holds (the rule refuses any other count).</summary>
+   public int RunsPerSession { get; set; }
 
-   /// <summary>Runs used, oldest first; every per-run list in this report follows this order.</summary>
-   public List<RunUsed> Runs { get; set; } = new();
+   /// <summary>Runs behind a ranked row's median: runs per session times sessions.</summary>
+   public int RunsShown { get; set; }
 
-   /// <summary>Runs left out and why.</summary>
-   public List<RunDropped> Dropped { get; set; } = new();
+   /// <summary>Claim runs in all.</summary>
+   public int ClaimRunCount { get; set; }
 
-   /// <summary>
-   /// Targets the runs hold that have no row in this report, each with the reason. Always written,
-   /// empty when there are none. Why: a target dropped from the tables with no word said (MongoDB in
-   /// the v5 report) reads as an engine that was never measured.
-   /// </summary>
-   public List<WithheldTarget> Withheld { get; set; } = new();
+   /// <summary>Container targets with an image id in <see cref="Images"/>.</summary>
+   public int ImageTargets { get; set; }
 
-   /// <summary>One summary per target, in the order asked for.</summary>
-   public List<TargetSummary> TargetSummaries { get; set; } = new();
+   /// <summary>Engines the headline names (0 when it names none, or in one-session or stopped mode).</summary>
+   public int HeadlineNamedCount { get; set; }
 
-   /// <summary>Two targets compared run by run (e.g. sql-diskann against sql).</summary>
-   public List<PairSummary> Pairs { get; set; } = new();
+   /// <summary>The queries: as the runs recorded them, and the copied question file checked against the recorded SHA-256.</summary>
+   public QueriesInfo Queries { get; set; } = new();
 
-   /// <summary>Each engine's exact mode against its default search, run by run.</summary>
-   public List<ExactVsDefault> ExactVsDefault { get; set; } = new();
+   /// <summary>Claim sessions whose runs an unpublished report also used, with the verdict file that names why it was not published.</summary>
+   public List<ReuseNote> Reuse { get; set; } = new();
 
-   /// <summary>Everything a reader must see before trusting a number (index not ready, durability not stated, errors, spread, machine conditions).</summary>
-   public List<Flag> Flags { get; set; } = new();
+   /// <summary>Targets the claim runs hold that have no row, each with its reason.</summary>
+   public List<NotInReport> NotInReport { get; set; } = new();
 
-   /// <summary>Rules the numbers follow that a reader needs next to them, e.g. why load rows/s is not ranked.</summary>
-   public List<string> Notes { get; set; } = new();
+   /// <summary>The threshold basis: runs, left-out runs, exclusions, the moves per metric and the threshold.</summary>
+   public BasisInfo Basis { get; set; } = new();
 
-   /// <summary>
-   /// Tie bands for the request-speed metrics (p50 and QPS at each level): targets whose
-   /// slowest-to-fastest ranges over the runs overlap share a band, so no strict rank is claimed.
-   /// </summary>
-   public List<MetricBands> Bands { get; set; } = new();
+   /// <summary>The threshold the claim rule uses.</summary>
+   public ThresholdInfo Threshold { get; set; } = new();
 
-   #endregion Public Methods
-}
+   /// <summary>One table per ranked metric, in the order p50, QPS@1, QPS@8, exact p50.</summary>
+   public List<MetricTable> Metrics { get; set; } = new();
 
-/// <summary>
-/// The settings that must match before runs can be summarized together.
-/// Why: a median over runs with different query sets or machines mixes two experiments.
-/// </summary>
-public sealed class RunSettings
-{
-   #region Public Methods
+   /// <summary>Guards G2 (an order of the first session whose medians reverse in the second) and G3 (setup changed between sessions).</summary>
+   public GuardsInfo Guards { get; set; } = new();
 
-   /// <summary>Source pipeline.</summary>
-   public string? Pipeline { get; set; }
+   /// <summary>Movement from the first claim session to the second; null in one-session mode.</summary>
+   public DriftInfo? Drift { get; set; }
 
-   /// <summary>The benchmark command every run used (run-all or bench); null when the runs did not record it. Why: runs of different commands load their data differently and are never merged.</summary>
-   public string? Command { get; set; }
+   /// <summary>Recall as whole hits per run.</summary>
+   public List<RecallRow> Recall { get; set; } = new();
 
-   /// <summary>Machine.</summary>
-   public string? Host { get; set; }
+   /// <summary>The clock per session and the dropped mean-based warnings.</summary>
+   public ClockInfo Clock { get; set; } = new();
 
-   /// <summary>Rows used.</summary>
-   public int? Rows { get; set; }
+   /// <summary>The machine the claim runs ran on, from their recorded fields.</summary>
+   public MachineInfo Machine { get; set; } = new();
 
-   /// <summary>Vector length.</summary>
-   public int? Dimension { get; set; }
+   /// <summary>Image ids per container target, from the newest session that recorded them.</summary>
+   public List<ImageInfo> Images { get; set; } = new();
 
-   /// <summary>golden or random.</summary>
-   public string? QueryKind { get; set; }
+   /// <summary>Engine settings per target as the newest session recorded them (key, value, how).</summary>
+   public List<EngineSettingsRow> EngineSettings { get; set; } = new();
 
-   /// <summary>Number of queries.</summary>
-   public int? QueryCount { get; set; }
+   /// <summary>The why table: facts and measured costs per target, in p50 table order.</summary>
+   public List<WhyRow> Why { get; set; } = new();
 
-   /// <summary>Hits per query.</summary>
-   public int? Top { get; set; }
+   /// <summary>Each reported target's recorded search and index settings (searchSettings of its results), in the order of the first claim run.</summary>
+   public List<SearchSettingsRow> SearchSettings { get; set; } = new();
 
-   /// <summary>Concurrency levels.</summary>
-   public List<int> Concurrency { get; set; } = new();
+   /// <summary>The observer summary given with --observer, read for the disclosures; null when none was given.</summary>
+   public ObserverInfo? Observer { get; set; }
 
-   /// <summary>Seconds per concurrency level.</summary>
-   public int? SecondsPerLevel { get; set; }
+   /// <summary>Every sentence consolidated.md or the page prints, in reading order, each with its sources.</summary>
+   public List<SentenceRecord> Sentences { get; set; } = new();
 
-   /// <summary>Build configuration of the benchmark client ("Release" or "Debug"); null when the runs did not record it.</summary>
-   public string? BuildConfiguration { get; set; }
-
-   /// <summary>"on", or "off" with the reason: whether the machine was held steady during the runs (governor, CPU split, quiet-box waits); null when not recorded.</summary>
-   public string? MachineControl { get; set; }
-
-   /// <summary>CPU governor during the runs; null when not recorded.</summary>
-   public string? Governor { get; set; }
-
-   /// <summary>CPU partition (which CPUs the client and the engines could use) as one text; null when not recorded.</summary>
-   public string? CpuPartition { get; set; }
-
-   /// <summary>Fewest untimed warm-up searches in a warm-up before a timed pass (the --warmup minimum, not the whole method); null when not recorded.</summary>
-   public int? WarmupSearches { get; set; }
-
-   /// <summary>
-   /// How each timed pass was warmed up and checked (time based warm-up, settle trial, extension, rehearsal), from the runs' own method notes;
-   /// null when the runs recorded none. Why a record of its own: the count above is only the minimum, and the report must say the method.
-   /// </summary>
-   public WarmupMethod? WarmupMethod { get; set; }
-
-   /// <summary>Seconds each engine's exact mode was allowed; null when not recorded.</summary>
-   public int? ExactSeconds { get; set; }
-
-   /// <summary>Search-effort settings by target (e.g. "hnsw_ef=100"); null where the runs did not record them.</summary>
-   public Dictionary<string, string?> SearchSettings { get; set; } = new();
-
-   /// <summary>Fields above that were derived from the command line or notes instead of recorded, with the source.</summary>
-   public Dictionary<string, string> Derived { get; set; } = new();
+   /// <summary>The audit that ran over every sentence and fact before anything was written.</summary>
+   public AuditInfo Audit { get; set; } = new();
 
    #endregion Public Methods
 }
 
-/// <summary>
-/// One run that fed the numbers.
-/// Why the seed and target order are carried: they say whether the run's order was fixed or
-/// shuffled, which decides whether order can explain a gap.
-/// </summary>
-public sealed class RunUsed
+/// <summary>One claim session: its name and its runs. Why named: the rule is applied in each session separately.</summary>
+public sealed class SessionInfo
 {
    #region Public Methods
 
-   /// <summary>Folder name (the run's label).</summary>
+   /// <summary>Session name as given on the command line ("v7", "v8").</summary>
    public string Name { get; set; } = string.Empty;
 
-   /// <summary>Full folder path.</summary>
-   public string Folder { get; set; } = string.Empty;
-
-   /// <summary>When the run started (UTC).</summary>
-   public string? StartedUtc { get; set; }
-
-   /// <summary>Seed of the run's shuffles; null when the run did not record one.</summary>
-   public int? RunSeed { get; set; }
-
-   /// <summary>Target order actually run; null when not recorded.</summary>
-   public List<string>? TargetOrder { get; set; }
-
-   /// <summary>Load average at the start of the run.</summary>
-   public string? LoadAverage { get; set; }
+   /// <summary>The session's runs, oldest first.</summary>
+   public List<RunRef> Runs { get; set; } = new();
 
    #endregion Public Methods
 }
 
-/// <summary>
-/// A run that was left out and the reason.
-/// Why logged and written: a silently dropped run is how a median gets cherry-picked.
-/// </summary>
-public sealed class RunDropped
+/// <summary>A run used by the report. Why the folder is relative: the page resolves it under its own results folder and never trusts an absolute path.</summary>
+public sealed class RunRef
+{
+   #region Public Methods
+
+   /// <summary>Folder relative to the results folder the session folders were named against (the folder name for a run inside it).</summary>
+   public string Folder { get; set; } = string.Empty;
+
+   /// <summary>runSeed.</summary>
+   public int? Seed { get; set; }
+
+   /// <summary>startedUtc.</summary>
+   public string? StartedUtc { get; set; }
+
+   /// <summary>Lines of the run's results.md that hold a framing sentence this report retired (the latency split), so the page can mark the run page (hole H4); empty when none.</summary>
+   public List<StaleLine> StaleLines { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>A line of a run's results.md that holds a retired framing sentence.</summary>
+public sealed class StaleLine
+{
+   #region Public Methods
+
+   /// <summary>1-based line number in results.md.</summary>
+   public int Line { get; set; }
+
+   /// <summary>The retired words found on that line, as <see cref="ConsolidateFraming.RETIRED"/> lists them.</summary>
+   public string Retired { get; set; } = string.Empty;
+
+   #endregion Public Methods
+}
+
+/// <summary>A target the claim runs hold that has no row, with its reason.</summary>
+public sealed class NotInReport
+{
+   #region Public Methods
+
+   /// <summary>Target name.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>Reason code: "left out by --targets" or "setup differs within a session".</summary>
+   public string Code { get; set; } = string.Empty;
+
+   /// <summary>The fields and runs behind the reason, as data; the page prints it through the target's notInReport sentence.</summary>
+   public string Detail { get; set; } = string.Empty;
+
+   /// <summary>The differing field names, for a setup difference; empty otherwise.</summary>
+   public List<string> Fields { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>The threshold basis (design section 1).</summary>
+public sealed class BasisInfo
+{
+   #region Public Methods
+
+   /// <summary>Every run in the basis, folder order.</summary>
+   public List<BasisRunInfo> Runs { get; set; } = new();
+
+   /// <summary>Every other run of the pipeline found beside the session folders, with the reason it is not in the basis.</summary>
+   public List<LeftOutRun> LeftOut { get; set; } = new();
+
+   /// <summary>The rows of basis-exclusions.json, as read.</summary>
+   public List<ExclusionRow> Exclusions { get; set; } = new();
+
+   /// <summary>The moves of each metric, keyed by metric id.</summary>
+   public Dictionary<string, MetricBasis> PerMetric { get; set; } = new();
+
+   /// <summary>The largest one-engine and pair moves over every metric among the runs without machine control (disclosed, not used).</summary>
+   public MoveMaxima NoMachineControl { get; set; } = new();
+
+   /// <summary>Per exclusion kind: the largest moves with that kind kept in, and the threshold they would give.</summary>
+   public List<KeptIn> ExclusionsKept { get; set; } = new();
+
+   /// <summary>
+   /// Every change of an engine's recorded setup between basis runs, with the field that changed, the move it hides and the threshold
+   /// that move would give. Why: the basis compares an engine's runs only where it recorded one setup, so a change of setup hides its moves.
+   /// </summary>
+   public List<SetupSplit> SetupSplits { get; set; } = new();
+
+   /// <summary>Splits in <see cref="SetupSplits"/>.</summary>
+   public int SetupSplitCount { get; set; }
+
+   /// <summary>The largest one-engine or pair move of the basis, bp.</summary>
+   public int MaxBp { get; set; }
+
+   /// <summary>The move that set <see cref="MaxBp"/>.</summary>
+   public BasisMove? MaxMove { get; set; }
+
+   /// <summary>The threshold, bp.</summary>
+   public int TBp { get; set; }
+
+   /// <summary>The lowest threshold, bp (<see cref="ThresholdBasis.FLOOR_BP"/>).</summary>
+   public int FloorBp { get; set; }
+
+   /// <summary>Thresholds are multiples of this, bp (<see cref="ThresholdBasis.STEP_BP"/>).</summary>
+   public int StepBp { get; set; }
+
+   /// <summary>How far above the largest move the threshold sits at least, bp (<see cref="ThresholdBasis.MARGIN_BP"/>).</summary>
+   public int MarginBp { get; set; }
+
+   /// <summary>The threshold rule as code text.</summary>
+   public string TBpRule { get; set; } = string.Empty;
+
+   /// <summary>Runs in the basis.</summary>
+   public int RunCount { get; set; }
+
+   /// <summary>Runs without machine control behind <see cref="NoMachineControl"/>.</summary>
+   public int NoMachineControlCount { get; set; }
+
+   /// <summary>Runs in <see cref="LeftOut"/>.</summary>
+   public int LeftOutCount { get; set; }
+
+   /// <summary>The move rule as code text.</summary>
+   public string MoveRule { get; set; } = string.Empty;
+
+   #endregion Public Methods
+}
+
+/// <summary>One basis run with its recorded conditions.</summary>
+public sealed class BasisRunInfo
 {
    #region Public Methods
 
    /// <summary>Folder name.</summary>
-   public string Name { get; set; } = string.Empty;
-
-   /// <summary>Full folder path.</summary>
    public string Folder { get; set; } = string.Empty;
 
-   /// <summary>Why it was left out.</summary>
+   /// <summary>runSeed.</summary>
+   public int? Seed { get; set; }
+
+   /// <summary>The session it was given in.</summary>
+   public string Session { get; set; } = string.Empty;
+
+   /// <summary>startedUtc.</summary>
+   public string? StartedUtc { get; set; }
+
+   /// <summary>Its conditions.</summary>
+   public BasisConditionsInfo Conditions { get; set; } = new();
+
+   /// <summary>Lines of its results.md with a retired framing sentence.</summary>
+   public List<StaleLine> StaleLines { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>The conditions of a basis run, as labels (the threshold-basis prototype's wording, "build" for its "binary").</summary>
+public sealed class BasisConditionsInfo
+{
+   #region Public Methods
+
+   /// <summary>Turbo label.</summary>
+   public string Turbo { get; set; } = string.Empty;
+
+   /// <summary>Uncore label.</summary>
+   public string Uncore { get; set; } = string.Empty;
+
+   /// <summary>Warm-up label.</summary>
+   public string Warmup { get; set; } = string.Empty;
+
+   /// <summary>Rehearsal label.</summary>
+   public string Rehearsal { get; set; } = string.Empty;
+
+   /// <summary>Build label: the binary's tree, plus the commit when recorded.</summary>
+   public string Build { get; set; } = string.Empty;
+
+   /// <summary>Machine control as recorded.</summary>
+   public string MachineControl { get; set; } = string.Empty;
+
+   #endregion Public Methods
+}
+
+/// <summary>A run of the pipeline that is not in the basis, with the reason.</summary>
+public sealed class LeftOutRun
+{
+   #region Public Methods
+
+   /// <summary>Folder name.</summary>
+   public string Folder { get; set; } = string.Empty;
+
+   /// <summary>Why it is not in the basis.</summary>
    public string Reason { get; set; } = string.Empty;
 
    #endregion Public Methods
 }
 
-/// <summary>
-/// A target that the runs hold but this report does not show, and why.
-/// Why a record of its own: the report must never leave a measured engine out without a line
-/// saying so, with the evidence the reader needs to judge whether leaving it out was fair.
-/// </summary>
-public sealed class WithheldTarget
+/// <summary>One row of deploy/bench/basis-exclusions.json.</summary>
+public sealed class ExclusionRow
 {
    #region Public Methods
 
-   /// <summary>Target name.</summary>
+   /// <summary>Target.</summary>
    public string Target { get; set; } = string.Empty;
 
-   /// <summary>Why it has no row: "not-listed" (the target is in the runs but not in --targets) or "refused" (a listed target whose engine hosting differs between the runs).</summary>
-   public string Kind { get; set; } = string.Empty;
+   /// <summary>Seeds of the runs whose cells are removed.</summary>
+   public List<int> Seeds { get; set; } = new();
 
-   /// <summary>Runs used that hold a result for it.</summary>
-   public List<string> Runs { get; set; } = new();
-
-   /// <summary>The reason, in words, with the evidence found in the runs (failures, a different segment layout or hosting).</summary>
-   public string Reason { get; set; } = string.Empty;
-
-   #endregion Public Methods
-}
-
-/// <summary>
-/// Everything consolidated for one target.
-/// </summary>
-public sealed class TargetSummary
-{
-   #region Public Methods
-
-   /// <summary>Target name.</summary>
-   public string Name { get; set; } = string.Empty;
-
-   /// <summary>Distinct engine strings seen across the runs (more than one means the engine changed).</summary>
-   public List<string> Engines { get; set; } = new();
-
-   /// <summary>Distinct index descriptions seen across the runs.</summary>
-   public List<string> Indexes { get; set; } = new();
-
-   /// <summary>Distinct hosting values seen.</summary>
-   public List<string> Hosting { get; set; } = new();
-
-   /// <summary>
-   /// Distinct engine settings (non-default, as the runs recorded them) seen across the runs; empty when no run recorded any. More than one
-   /// cannot happen in a shown target: runs that differ are refused for it (<see cref="ConsolidateIdentity"/>).
-   /// </summary>
-   public List<string> EngineSettings { get; set; } = new();
-
-   /// <summary>Distinct lists of engine files with their short SHA-256 seen across the runs; empty when no run recorded any.</summary>
-   public List<string> EngineFiles { get; set; } = new();
-
-   /// <summary>Distinct durability statements (what a crash can lose with the engine's settings) seen across the runs.</summary>
-   public List<string> Durabilities { get; set; } = new();
-
-   /// <summary>Median latency, ms.</summary>
-   public Spread P50Ms { get; set; } = new();
-
-   /// <summary>95th percentile latency, ms.</summary>
-   public Spread P95Ms { get; set; } = new();
-
-   /// <summary>QPS by concurrency level ("1", "8").</summary>
-   public Dictionary<string, Spread> Qps { get; set; } = new();
-
-   /// <summary>Per-run QPS ratio of each higher level to the lowest ("8/1"), computed inside each run.</summary>
-   public Dictionary<string, Spread> QpsRatio { get; set; } = new();
-
-   /// <summary>
-   /// CPU time the benchmark client itself used per search, in milliseconds, by concurrency level
-   /// ("1", "8"); a level appears only when at least one run recorded it, and the dictionary is empty
-   /// when no run did. Why: for the fastest engines it is about as large as the latency, so the speed
-   /// order partly reflects each engine's .NET client library.
-   /// </summary>
-   public Dictionary<string, Spread> ClientCpuMsPerSearch { get; set; } = new();
-
-   /// <summary>Load rows per second.</summary>
-   public Spread LoadRowsPerSecond { get; set; } = new();
-
-   /// <summary>Recall@k.</summary>
-   public Spread Recall { get; set; } = new();
-
-   /// <summary>nDCG@k.</summary>
-   public Spread Ndcg { get; set; } = new();
-
-   /// <summary>Exact-mode median latency, ms.</summary>
-   public Spread ExactP50Ms { get; set; } = new();
-
-   /// <summary>Timed search errors summed over the runs (null when no run wrote the field).</summary>
-   public int? Errors { get; set; }
-
-   /// <summary>Warm-up errors summed over the runs that recorded them (null when none did).</summary>
-   public int? WarmupErrors { get; set; }
-
-   /// <summary>Rank among the listed targets in each run, by metric ("p50Ms", "qps@8", ...).</summary>
-   public Dictionary<string, RankSpread> Ranks { get; set; } = new();
-
-   /// <summary>Carry-through facts from each run used, in run order.</summary>
-   public List<TargetRunFacts> PerRun { get; set; } = new();
-
-   /// <summary>What a reader needs to know about this engine to read its numbers: a CPU cap, an exact-by-design search, a scan where an index was meant; each with where it came from.</summary>
-   public List<EngineNote> EngineNotes { get; set; } = new();
-
-   #endregion Public Methods
-}
-
-/// <summary>
-/// A target's rank in each run and the median of those ranks.
-/// Why ranks per run and not the rank of the medians: a target that is 3rd, 7th and 7th is
-/// not "7th in every run", and the per-run list shows it.
-/// </summary>
-public sealed class RankSpread
-{
-   #region Public Methods
-
-   /// <summary>1 for the best of the listed targets in that run; null when the metric was missing.</summary>
-   public List<int?> PerRun { get; set; } = new();
-
-   /// <summary>Median of the per-run ranks.</summary>
-   public double? Median { get; set; }
-
-   #endregion Public Methods
-}
-
-/// <summary>
-/// What one run recorded about how a target was run.
-/// Why carried through unchanged: pass order, warm-up errors, index proof and durability decide
-/// whether a target's numbers are comparable at all.
-/// </summary>
-public sealed class TargetRunFacts
-{
-   #region Public Methods
-
-   /// <summary>Run label.</summary>
-   public string Run { get; set; } = string.Empty;
-
-   /// <summary>Position of the target in the run's target order (1 = first); null when not recorded.</summary>
-   public int? OrderInRun { get; set; }
-
-   /// <summary>Passes in the order run; null when not recorded.</summary>
-   public List<string>? PassOrder { get; set; }
-
-   /// <summary>Warm-up searches that failed; null when not recorded.</summary>
-   public int? WarmupErrors { get; set; }
-
-   /// <summary>Timed searches that failed.</summary>
-   public int? Errors { get; set; }
-
-   /// <summary>Exact-mode recall (should be 1.0; anything else means the engine's exact mode or the yardstick is wrong).</summary>
-   public double? ExactRecall { get; set; }
-
-   /// <summary>Index state after the load; null when not recorded.</summary>
-   public IndexStateFacts? AfterLoad { get; set; }
-
-   /// <summary>Index state after the searches; null when not recorded.</summary>
-   public IndexStateFacts? AfterSearch { get; set; }
-
-   /// <summary>Segment layout the engine reported after the load, e.g. "2 segments"; null when the engine reported none.</summary>
-   public string? SegmentLayoutAfterLoad { get; set; }
-
-   /// <summary>Segment layout the engine reported after the searches; null when the engine reported none.</summary>
-   public string? SegmentLayoutAfterSearch { get; set; }
-
-   /// <summary>Durability statement; null when not recorded.</summary>
-   public string? Durability { get; set; }
-
-   /// <summary>What the load's index step reported; null when the run wrote none. Why carried: for runs made before indexState existed it is the only index evidence.</summary>
-   public string? LoadIndexNote { get; set; }
-
-   /// <summary>The target's search-effort settings in this run; null when not recorded.</summary>
-   public string? SearchSettings { get; set; }
-
-   /// <summary>True when the engine was idle and warm before it was timed; null when not recorded.</summary>
-   public bool? Settled { get; set; }
-
-   /// <summary>The run's own words on settling; null when not recorded.</summary>
-   public string? SettleDetail { get; set; }
-
-   /// <summary>Mean latency of one search at a time, ms: as recorded, or 1000 / QPS at one searcher; null when neither exists.</summary>
-   public double? MeanMs { get; set; }
-
-   /// <summary>Where <see cref="MeanMs"/> came from: "recorded" or "1000 / QPS@1".</summary>
-   public string? MeanSource { get; set; }
-
-   #endregion Public Methods
-}
-
-/// <summary>
-/// An engine's account of its index, as carried into the consolidated report.
-/// </summary>
-public sealed class IndexStateFacts
-{
-   #region Public Methods
-
-   /// <summary>True when the engine said searches used the finished index; null when not written.</summary>
-   public bool? Ready { get; set; }
-
-   /// <summary>Vectors covered by the index.</summary>
-   public long? IndexedVectors { get; set; }
-
-   /// <summary>Vectors stored.</summary>
-   public long? TotalVectors { get; set; }
-
-   /// <summary>The engine's evidence text.</summary>
-   public string? Detail { get; set; }
-
-   #endregion Public Methods
-}
-
-/// <summary>
-/// Target A against target B, computed inside each run and then summarized.
-/// Why never a ratio of separate medians: two medians can come from different runs, and the
-/// gap between them can be larger or smaller than the gap in any single run.
-/// </summary>
-public sealed class PairSummary
-{
-   #region Public Methods
-
-   /// <summary>Target A (the numerator of every ratio).</summary>
-   public string A { get; set; } = string.Empty;
-
-   /// <summary>Target B (the denominator).</summary>
-   public string B { get; set; } = string.Empty;
-
-   /// <summary>The paired values of each run.</summary>
-   public List<PairRun> Runs { get; set; } = new();
-
-   /// <summary>A p50 / B p50, per run then summarized.</summary>
-   public Spread P50Ratio { get; set; } = new();
-
-   /// <summary>A p95 / B p95.</summary>
-   public Spread P95Ratio { get; set; } = new();
-
-   /// <summary>A QPS / B QPS by level.</summary>
-   public Dictionary<string, Spread> QpsRatio { get; set; } = new();
-
-   /// <summary>A recall minus B recall.</summary>
-   public Spread RecallDifference { get; set; } = new();
-
-   /// <summary>A nDCG minus B nDCG.</summary>
-   public Spread NdcgDifference { get; set; } = new();
-
-   /// <summary>Runs where A had the lower p50.</summary>
-   public int RunsALowerP50 { get; set; }
-
-   /// <summary>Runs where A had the higher QPS, by level.</summary>
-   public Dictionary<string, int> RunsAHigherQps { get; set; } = new();
-
-   /// <summary>Runs where A ran before B (from the target order); null when no run recorded its order.</summary>
-   public int? RunsARanFirst { get; set; }
-
-   #endregion Public Methods
-}
-
-/// <summary>
-/// One run's values for a pair.
-/// </summary>
-public sealed class PairRun
-{
-   #region Public Methods
-
-   /// <summary>Run label.</summary>
-   public string Run { get; set; } = string.Empty;
-
-   /// <summary>A p50, ms.</summary>
-   public double? AP50Ms { get; set; }
-
-   /// <summary>B p50, ms.</summary>
-   public double? BP50Ms { get; set; }
-
-   /// <summary>A p50 / B p50.</summary>
-   public double? P50Ratio { get; set; }
-
-   /// <summary>A p95 / B p95.</summary>
-   public double? P95Ratio { get; set; }
-
-   /// <summary>A QPS by level.</summary>
-   public Dictionary<string, double?> AQps { get; set; } = new();
-
-   /// <summary>B QPS by level.</summary>
-   public Dictionary<string, double?> BQps { get; set; } = new();
-
-   /// <summary>A QPS / B QPS by level.</summary>
-   public Dictionary<string, double?> QpsRatio { get; set; } = new();
-
-   /// <summary>A recall minus B recall.</summary>
-   public double? RecallDifference { get; set; }
-
-   /// <summary>A nDCG minus B nDCG.</summary>
-   public double? NdcgDifference { get; set; }
-
-   /// <summary>A's position in the run's target order (1 = first); null when not recorded.</summary>
-   public int? AOrder { get; set; }
-
-   /// <summary>B's position in the run's target order; null when not recorded.</summary>
-   public int? BOrder { get; set; }
-
-   #endregion Public Methods
-}
-
-/// <summary>
-/// One target's exact mode against its default search, run by run.
-/// Why per run: the dead draft printed a median of each and the direction it implied was wrong
-/// for most runs.
-/// </summary>
-public sealed class ExactVsDefault
-{
-   #region Public Methods
-
-   /// <summary>Target name.</summary>
-   public string Target { get; set; } = string.Empty;
-
-   /// <summary>The paired values of each run that timed the exact mode.</summary>
-   public List<ExactRun> Runs { get; set; } = new();
-
-   /// <summary>Exact p50 / default p50.</summary>
-   public Spread Ratio { get; set; } = new();
-
-   /// <summary>Exact p50 minus default p50, ms.</summary>
-   public Spread DifferenceMs { get; set; } = new();
-
-   /// <summary>Runs where the exact p50 was higher than the default p50.</summary>
-   public int RunsExactSlower { get; set; }
-
-   /// <summary>The pair of passes this target declared as its fair default comparison, e.g. "default@1 vs exact"; null when it declared none.</summary>
-   public string? DeclaredPair { get; set; }
-
-   /// <summary>What makes the declared pair fair, in the target's words (e.g. "same table, only the search method differs"); null when it declared none.</summary>
-   public string? Note { get; set; }
-
-   #endregion Public Methods
-}
-
-/// <summary>
-/// One run's exact and default p50 for a target.
-/// </summary>
-public sealed class ExactRun
-{
-   #region Public Methods
-
-   /// <summary>Run label.</summary>
-   public string Run { get; set; } = string.Empty;
-
-   /// <summary>Default search p50, ms.</summary>
-   public double? DefaultP50Ms { get; set; }
-
-   /// <summary>Exact mode p50, ms.</summary>
-   public double? ExactP50Ms { get; set; }
-
-   /// <summary>Exact minus default, ms.</summary>
-   public double? DifferenceMs { get; set; }
-
-   /// <summary>Exact / default.</summary>
-   public double? Ratio { get; set; }
-
-   /// <summary>Exact-mode recall.</summary>
-   public double? ExactRecall { get; set; }
-
-   /// <summary>True when the exact pass ran before the default@1 latency pass; null when the pass order was not recorded.</summary>
-   public bool? ExactRanFirst { get; set; }
-
-   #endregion Public Methods
-}
-
-/// <summary>
-/// Something a reader must see before trusting a target's numbers.
-/// </summary>
-public sealed class Flag
-{
-   #region Public Methods
-
-   /// <summary>Target name.</summary>
-   public string Target { get; set; } = string.Empty;
-
-   /// <summary>Kind, e.g. "index-not-ready-after-load", "spread" or "governor-not-performance".</summary>
-   public string Kind { get; set; } = string.Empty;
-
-   /// <summary>Runs it applies to.</summary>
-   public List<string> Runs { get; set; } = new();
-
-   /// <summary>Evidence from the result files (the engine's detail text, counts), never a cause.</summary>
-   public string Detail { get; set; } = string.Empty;
-
-   #endregion Public Methods
-}
-
-/// <summary>
-/// The tie bands of one request-speed metric.
-/// Why bands and not ranks: three runs of a target give a range, and two targets whose ranges
-/// overlap cannot be told apart on that metric; a strict rank would claim a difference the
-/// runs do not show.
-/// </summary>
-public sealed class MetricBands
-{
-   #region Public Methods
-
-   /// <summary>Metric key, e.g. "p50Ms" or "qps@8"; the same key the per-run ranks use.</summary>
+   /// <summary>Metric ("*" for all, or one of p50, qps1, qps8, exact).</summary>
    public string Metric { get; set; } = string.Empty;
 
-   /// <summary>Reader-facing title, e.g. "p50 latency, one search at a time (lower is faster)".</summary>
-   public string Title { get; set; } = string.Empty;
-
-   /// <summary>True when a larger value is faster (QPS); false for latency.</summary>
-   public bool HigherIsBetter { get; set; }
-
-   /// <summary>Runs behind each range. Below 2 there is no spread, so no bands are drawn and the entries show this run's order only.</summary>
-   public int Runs { get; set; }
-
-   /// <summary>True when bands were drawn (two runs or more).</summary>
-   public bool Banded { get; set; }
-
-   /// <summary>Targets, band by band, best band first; inside a band by median, which is not a ranking. Targets without a value come last.</summary>
-   public List<BandEntry> Entries { get; set; } = new();
-
-   #endregion Public Methods
-}
-
-/// <summary>
-/// One target's place in a metric's tie bands.
-/// </summary>
-public sealed class BandEntry
-{
-   #region Public Methods
-
-   /// <summary>Target name.</summary>
-   public string Target { get; set; } = string.Empty;
-
-   /// <summary>Band number (1 is the fastest band); null when the metric has no value or only one run was used.</summary>
-   public int? Band { get; set; }
-
-   /// <summary>Position inside the band by median (1 = best median); this order is not a ranking. With one run it is the position in that run.</summary>
-   public int? OrderInBand { get; set; }
-
-   /// <summary>Median over the runs.</summary>
-   public double? Median { get; set; }
-
-   /// <summary>Smallest value over the runs.</summary>
-   public double? Min { get; set; }
-
-   /// <summary>Largest value over the runs.</summary>
-   public double? Max { get; set; }
-
-   /// <summary>Runs that had a value.</summary>
-   public int N { get; set; }
-
-   #endregion Public Methods
-}
-
-/// <summary>
-/// One thing to know about an engine before reading its numbers.
-/// Why the source is carried: a note read from the result files and a note from earlier probes
-/// (written down here because the run did not record it) must not look the same.
-/// </summary>
-public sealed class EngineNote
-{
-   #region Public Methods
-
-   /// <summary>Kind: "cpu-cap", "exact-by-design" or "scans-all-vectors".</summary>
+   /// <summary>"method defect" or "unrecorded config change".</summary>
    public string Kind { get; set; } = string.Empty;
 
-   /// <summary>The note, one or two sentences.</summary>
+   /// <summary>The row's own reason text, as written in the file (data; the page prints the source's evidence instead).</summary>
+   public string Why { get; set; } = string.Empty;
+
+   /// <summary>Repository path of the verdict that names the defect.</summary>
+   public string Source { get; set; } = string.Empty;
+
+   /// <summary>The verdict item, when the row names one.</summary>
+   public int? Item { get; set; }
+
+   /// <summary>Phrases the source file must hold, as the row lists them.</summary>
+   public List<string> Evidence { get; set; } = new();
+
+   /// <summary>The words of the verdict item that carry the row's seeds; the phrase a sentence cites is the evidence phrase that holds them. Empty when the row names none.</summary>
+   public string SeedEvidence { get; set; } = string.Empty;
+
+   #endregion Public Methods
+}
+
+/// <summary>The moves of one metric.</summary>
+public sealed class MetricBasis
+{
+   #region Public Methods
+
+   /// <summary>Largest one-engine move over the basis.</summary>
+   public BasisMove? OneEngine { get; set; }
+
+   /// <summary>Largest pair move over the basis.</summary>
+   public BasisMove? Pair { get; set; }
+
+   /// <summary>Largest one-engine move between runs at the same settings.</summary>
+   public BasisMove? OneEngineSameSettings { get; set; }
+
+   /// <summary>Largest pair move between runs at the same settings.</summary>
+   public BasisMove? PairSameSettings { get; set; }
+
+   /// <summary>Largest one-engine move with each exclusion kind kept in.</summary>
+   public List<KeptIn> OneEngineExclusionsKept { get; set; } = new();
+
+   /// <summary>Largest pair move with each exclusion kind kept in.</summary>
+   public List<KeptIn> PairExclusionsKept { get; set; } = new();
+
+   /// <summary>Largest one-engine move among the runs without machine control.</summary>
+   public BasisMove? OneEngineNoMachineControl { get; set; }
+
+   /// <summary>Largest pair move among the runs without machine control.</summary>
+   public BasisMove? PairNoMachineControl { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>A largest one-engine move and a largest pair move.</summary>
+public sealed class MoveMaxima
+{
+   #region Public Methods
+
+   /// <summary>The one-engine move.</summary>
+   public BasisMove? OneEngine { get; set; }
+
+   /// <summary>The pair move.</summary>
+   public BasisMove? Pair { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>
+/// One change of an engine's recorded setup between two groups of basis runs: the fields that differ, the runs on each side, and the
+/// moves across the change that the basis leaves out, with the threshold the largest would give.
+/// </summary>
+public sealed class SetupSplit
+{
+   #region Public Methods
+
+   /// <summary>The engine (target name).</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>The names of the recorded fields that differ (engine, index, searchSettings, durability, engineFiles, engineSettings, imageId, hosting).</summary>
+   public List<string> Fields { get; set; } = new();
+
+   /// <summary>Each differing field's recorded text on the two sides, as data.</summary>
+   public List<FieldChange> Changes { get; set; } = new();
+
+   /// <summary>The group of runs whose first run is the earlier.</summary>
+   public SplitSide Before { get; set; } = new();
+
+   /// <summary>The other group of runs.</summary>
+   public SplitSide After { get; set; } = new();
+
+   /// <summary>The largest one-engine move across the change, over the four metrics; null when no two runs qualify.</summary>
+   public BasisMove? OneEngine { get; set; }
+
+   /// <summary>The largest pair move across the change (the other engine at one setup in both runs), over the four metrics; null when none qualifies.</summary>
+   public BasisMove? Pair { get; set; }
+
+   /// <summary>The same moves per metric id.</summary>
+   public Dictionary<string, SplitMetric> PerMetric { get; set; } = new();
+
+   /// <summary>The threshold the basis would give with this change's moves counted, bp.</summary>
+   public int TBpIfCounted { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>One side of a setup split: the sessions and runs that recorded one setup.</summary>
+public sealed class SplitSide
+{
+   #region Public Methods
+
+   /// <summary>The sessions of the runs, in order of first run.</summary>
+   public List<string> Sessions { get; set; } = new();
+
+   /// <summary>The runs (folder names).</summary>
+   public List<string> Runs { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>One recorded field of an engine that differs between two sides of a split.</summary>
+public sealed class FieldChange
+{
+   #region Public Methods
+
+   /// <summary>The field's name.</summary>
+   public string Field { get; set; } = string.Empty;
+
+   /// <summary>Its recorded text on the earlier side, or "not recorded".</summary>
+   public string Before { get; set; } = string.Empty;
+
+   /// <summary>Its recorded text on the later side, or "not recorded".</summary>
+   public string After { get; set; } = string.Empty;
+
+   #endregion Public Methods
+}
+
+/// <summary>The moves across a setup split for one metric.</summary>
+public sealed class SplitMetric
+{
+   #region Public Methods
+
+   /// <summary>The largest one-engine move across the change.</summary>
+   public BasisMove? OneEngine { get; set; }
+
+   /// <summary>The largest pair move across the change.</summary>
+   public BasisMove? Pair { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>One target's recorded search and index settings.</summary>
+public sealed class SearchSettingsRow
+{
+   #region Public Methods
+
+   /// <summary>The target.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>The run whose record this is: the newest claim session's first run that recorded settings for the target.</summary>
+   public string Run { get; set; } = string.Empty;
+
+   /// <summary>The settings as recorded, sorted by key.</summary>
+   public List<SearchSettingEntry> Settings { get; set; } = new();
+
+   /// <summary>The recorded clause of the target's index text that states its per-query effort, when that clause carries more than a number; null otherwise.</summary>
+   public string? Clause { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>One recorded search setting.</summary>
+public sealed class SearchSettingEntry
+{
+   #region Public Methods
+
+   /// <summary>The setting's key as recorded.</summary>
+   public string Key { get; set; } = string.Empty;
+
+   /// <summary>Its value as recorded.</summary>
+   public string Value { get; set; } = string.Empty;
+
+   #endregion Public Methods
+}
+
+/// <summary>Moves with one exclusion kind kept in.</summary>
+public sealed class KeptIn
+{
+   #region Public Methods
+
+   /// <summary>The exclusion kind kept in.</summary>
+   public string Kind { get; set; } = string.Empty;
+
+   /// <summary>Largest one-engine move.</summary>
+   public BasisMove? OneEngine { get; set; }
+
+   /// <summary>Largest pair move.</summary>
+   public BasisMove? Pair { get; set; }
+
+   /// <summary>The threshold the larger of the two would give (overall entries only).</summary>
+   public int? TBpIfKept { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>One basis move: its size, the target or pair, the two runs, their values and every recorded difference between them.</summary>
+public sealed class BasisMove
+{
+   #region Public Methods
+
+   /// <summary>Metric id.</summary>
+   public string Metric { get; set; } = string.Empty;
+
+   /// <summary>The move in bp, rounded up.</summary>
+   public int MoveBp { get; set; }
+
+   /// <summary>The move as max/min - 1, unrounded.</summary>
+   public double Move { get; set; }
+
+   /// <summary>The target of a one-engine move.</summary>
+   public string? Target { get; set; }
+
+   /// <summary>The pair "a/b" of a pair move.</summary>
+   public string? Pair { get; set; }
+
+   /// <summary>The two runs (folder names).</summary>
+   public List<string> Runs { get; set; } = new();
+
+   /// <summary>The two seeds, in the order of <see cref="Runs"/>.</summary>
+   public List<int?> Seeds { get; set; } = new();
+
+   /// <summary>The two values (one engine) or the two same-run ratios a/b (pair).</summary>
+   public List<double> Values { get; set; } = new();
+
+   /// <summary>Runs that held both engines of a pair at their identity.</summary>
+   public int? RunsWithBoth { get; set; }
+
+   /// <summary>Every recorded difference between the two runs, in the prototype's wording.</summary>
+   public List<string> Differences { get; set; } = new();
+
+   /// <summary>The names of the differing fields (turbo, uncore, warmup, rehearsal, build, machineControl, median MHz, and "whether searchSettings was recorded" when one run recorded none).</summary>
+   public List<string> DifferenceNames { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>The threshold.</summary>
+public sealed class ThresholdInfo
+{
+   #region Public Methods
+
+   /// <summary>Threshold, bp.</summary>
+   public int TBp { get; set; }
+
+   /// <summary>1 + TBp / 10000.</summary>
+   public double Ratio { get; set; }
+
+   /// <summary>The claim rule as code text.</summary>
+   public string Rule { get; set; } = string.Empty;
+
+   #endregion Public Methods
+}
+
+/// <summary>One metric's table.</summary>
+public sealed class MetricTable
+{
+   #region Public Methods
+
+   /// <summary>Metric id: "p50Ms", "qps1", "qps8" or "exactP50Ms".</summary>
+   public string Metric { get; set; } = string.Empty;
+
+   /// <summary>True for latency.</summary>
+   public bool LowerIsBetter { get; set; }
+
+   /// <summary>Rows in order of the median of every run shown.</summary>
+   public List<MetricRow> Rows { get; set; } = new();
+
+   /// <summary>Exact table only: the targets with no exact pass, each with its search fact.</summary>
+   public List<NoExactPass> NoExactPass { get; set; } = new();
+
+   /// <summary>Pairs of ranked rows ordered by the rule.</summary>
+   public int OrderedPairs { get; set; }
+
+   /// <summary>Pairs of ranked rows compared.</summary>
+   public int ComparedPairs { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>A target that has no exact pass, with the search fact that says how its default search runs.</summary>
+public sealed class NoExactPass
+{
+   #region Public Methods
+
+   /// <summary>Target.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>The search fact's mode (exact or approximate), or null when the sheet has none.</summary>
+   public string? Mode { get; set; }
+
+   /// <summary>The search fact's text.</summary>
+   public string? FactText { get; set; }
+
+   /// <summary>The search fact's source.</summary>
+   public string? FactSource { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>One row of a metric table.</summary>
+public sealed class MetricRow
+{
+   #region Public Methods
+
+   /// <summary>Target.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>The name shown: the target name as the runs record it.</summary>
+   public string Display { get; set; } = string.Empty;
+
+   /// <summary>"ranked", or "one-session" (shown with one session's figures, not ranked).</summary>
+   public string Status { get; set; } = string.Empty;
+
+   /// <summary>Per session: min, max and every run's value.</summary>
+   public Dictionary<string, SessionFigures> PerSession { get; set; } = new();
+
+   /// <summary>Median of every run shown (6 in two-session mode, 3 otherwise).</summary>
+   public double Median { get; set; }
+
+   /// <summary>Targets this row is not separated from, in table order.</summary>
+   public List<string> NotSeparatedFrom { get; set; } = new();
+
+   /// <summary>Flags, each with its code and its sentence.</summary>
+   public List<RowFlag> Flags { get; set; } = new();
+
+   /// <summary>
+   /// How the engine searched in the passes this row's figures come from: "exact" when its search fact says every vector is scanned, "approximate" when it says an index is
+   /// used; the fact sheet's mode, taken from measured state where the runs hold it. Null in the exact table (every row there is the engine's exact mode) and when no search fact exists.
+   /// Why on the row: a scan (Qdrant, SQL Server, sqlite-vec, Elasticsearch at 524 vectors) ranks among graph engines in the p50 and QPS tables, and a reader must see which.
+   /// </summary>
+   public string? SearchMode { get; set; }
+
+   /// <summary>The row's note sentence (the Redis in-memory note), or null.</summary>
+   public string? Note { get; set; }
+
+   /// <summary>The sources of <see cref="Note"/>, as the audit checked them; empty when there is no note.</summary>
+   public List<SourceRecord> NoteSources { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>One session's figures for a row.</summary>
+public sealed class SessionFigures
+{
+   #region Public Methods
+
+   /// <summary>Lowest run value.</summary>
+   public double Min { get; set; }
+
+   /// <summary>Highest run value.</summary>
+   public double Max { get; set; }
+
+   /// <summary>Every run's value, oldest run first.</summary>
+   public List<double> Runs { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>A flag on a row.</summary>
+public sealed class RowFlag
+{
+   #region Public Methods
+
+   /// <summary>Code (<see cref="ConsolidateFlags.CODES"/>).</summary>
+   public string Code { get; set; } = string.Empty;
+
+   /// <summary>The flag's sentence, audited like every sentence of sentences[]; the page prints it here, so it is not repeated there.</summary>
    public string Text { get; set; } = string.Empty;
 
-   /// <summary>"results" when the result files say it, "known" when it is a known product limit the run did not record.</summary>
+   /// <summary>The sources of <see cref="Text"/>, as the audit checked them.</summary>
+   public List<SourceRecord> Sources { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>The guards.</summary>
+public sealed class GuardsInfo
+{
+   #region Public Methods
+
+   /// <summary>G2.</summary>
+   public GuardG2 G2 { get; set; } = new();
+
+   /// <summary>G3.</summary>
+   public GuardG3 G3 { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>Guard G2: a pair ordered in the first session alone whose medians are reversed in the second stops the report.</summary>
+public sealed class GuardG2
+{
+   #region Public Methods
+
+   /// <summary>True when it fired.</summary>
+   public bool Stopped { get; set; }
+
+   /// <summary>The pairs that fired it.</summary>
+   public List<ReversedPair> Pairs { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>A pair that fired G2.</summary>
+public sealed class ReversedPair
+{
+   #region Public Methods
+
+   /// <summary>Metric id.</summary>
+   public string Metric { get; set; } = string.Empty;
+
+   /// <summary>The target ordered ahead in <see cref="OrderedIn"/>.</summary>
+   public string A { get; set; } = string.Empty;
+
+   /// <summary>The target it was ahead of.</summary>
+   public string B { get; set; } = string.Empty;
+
+   /// <summary>The session where A was ahead by the rule.</summary>
+   public string OrderedIn { get; set; } = string.Empty;
+
+   /// <summary>The session where B's median is better than A's.</summary>
+   public string ReversedIn { get; set; } = string.Empty;
+
+   /// <summary>A's and B's medians in <see cref="ReversedIn"/>.</summary>
+   public List<double> MediansReversed { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>Guard G3: targets whose recorded setup differs between the sessions.</summary>
+public sealed class GuardG3
+{
+   #region Public Methods
+
+   /// <summary>True when more than <see cref="Consolidator.MAX_SETUP_CHANGES"/> targets changed.</summary>
+   public bool Stopped { get; set; }
+
+   /// <summary>The changed targets with their fields.</summary>
+   public List<SetupChange> Targets { get; set; } = new();
+
+   /// <summary>How many targets changed.</summary>
+   public int ChangedCount { get; set; }
+
+   /// <summary>Most changed targets before the report stops (<see cref="Consolidator.MAX_SETUP_CHANGES"/>).</summary>
+   public int Limit { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>A target whose setup changed between the sessions.</summary>
+public sealed class SetupChange
+{
+   #region Public Methods
+
+   /// <summary>Target.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>The fields that differ.</summary>
+   public List<string> Fields { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>Drift from the first claim session to the second.</summary>
+public sealed class DriftInfo
+{
+   #region Public Methods
+
+   /// <summary>First session.</summary>
+   public string From { get; set; } = string.Empty;
+
+   /// <summary>Second session.</summary>
+   public string To { get; set; } = string.Empty;
+
+   /// <summary>Per ranked target and metric: the move of its session median, bp (positive = larger in the second session).</summary>
+   public List<DriftMove> PerTarget { get; set; } = new();
+
+   /// <summary>Median of the absolute moves, bp.</summary>
+   public int MedianAbsMoveBp { get; set; }
+
+   /// <summary>The largest absolute move.</summary>
+   public DriftMove? Largest { get; set; }
+
+   /// <summary>The largest absolute move, bp, without its sign.</summary>
+   public int LargestAbsMoveBp { get; set; }
+
+   /// <summary>The lower end of the close-to-line band, bp above level (2500 at the 35% threshold).</summary>
+   public int CloseFromBp { get; set; }
+
+   /// <summary>Pairs in <see cref="CloseToLine"/>.</summary>
+   public int CloseCount { get; set; }
+
+   /// <summary>Orders that held in one session and not in the other.</summary>
+   public List<UnconfirmedOrder> UnconfirmedOrders { get; set; } = new();
+
+   /// <summary>Unordered pairs whose lower ratio in every session lies within <see cref="ClaimRule.CLOSE_BELOW_BP"/> below the line, in one direction.</summary>
+   public List<CloseToLine> CloseToLine { get; set; } = new();
+
+   /// <summary>How close above the line, bp, an ordered pair still counts as on it (<see cref="ClaimRule.ON_LINE_BP"/>).</summary>
+   public int OnLineBp { get; set; }
+
+   /// <summary>Pairs in <see cref="OnLine"/>.</summary>
+   public int OnLineCount { get; set; }
+
+   /// <summary>Ordered pairs whose lowest per-session ratio clears the line by <see cref="OnLineBp"/> or less: published orders that a hair's drift would remove.</summary>
+   public List<CloseToLine> OnLine { get; set; } = new();
+
+   /// <summary>How many unconfirmed orders held in the first session alone.</summary>
+   public int UnconfirmedFromFirst { get; set; }
+
+   /// <summary>How many unconfirmed orders held in the second session alone.</summary>
+   public int UnconfirmedFromSecond { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>One drift move.</summary>
+public sealed class DriftMove
+{
+   #region Public Methods
+
+   /// <summary>Target.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>Metric id.</summary>
+   public string Metric { get; set; } = string.Empty;
+
+   /// <summary>Move, bp, rounded half away from zero.</summary>
+   public int MoveBp { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>An order that held in one session only.</summary>
+public sealed class UnconfirmedOrder
+{
+   #region Public Methods
+
+   /// <summary>Metric id.</summary>
+   public string Metric { get; set; } = string.Empty;
+
+   /// <summary>The target ahead.</summary>
+   public string A { get; set; } = string.Empty;
+
+   /// <summary>The target behind.</summary>
+   public string B { get; set; } = string.Empty;
+
+   /// <summary>The session where it held.</summary>
+   public string Session { get; set; } = string.Empty;
+
+   #endregion Public Methods
+}
+
+/// <summary>A pair close below the line.</summary>
+public sealed class CloseToLine
+{
+   #region Public Methods
+
+   /// <summary>Metric id.</summary>
+   public string Metric { get; set; } = string.Empty;
+
+   /// <summary>The target ahead in every session.</summary>
+   public string A { get; set; } = string.Empty;
+
+   /// <summary>The target behind.</summary>
+   public string B { get; set; } = string.Empty;
+
+   /// <summary>The lowest per-session ratio, bp.</summary>
+   public int MinRatioBp { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>Recall of one target.</summary>
+public sealed class RecallRow
+{
+   #region Public Methods
+
+   /// <summary>Target.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>Hits per run, by session.</summary>
+   public Dictionary<string, List<int>> Hits { get; set; } = new();
+
+   /// <summary>queryCount x top.</summary>
+   public int Of { get; set; }
+
+   /// <summary>True when any two runs differ by one hit or more.</summary>
+   public bool Differs { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>The clock block.</summary>
+public sealed class ClockInfo
+{
+   #region Public Methods
+
+   /// <summary>Per session.</summary>
+   public Dictionary<string, SessionClock> PerSession { get; set; } = new();
+
+   /// <summary>Recorded mean-based clock warnings the median rule does not raise.</summary>
+   public List<DroppedWarning> DroppedWarnings { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>One session's clock.</summary>
+public sealed class SessionClock
+{
+   #region Public Methods
+
+   /// <summary>True when every run held the clock.</summary>
+   public bool Pinned { get; set; }
+
+   /// <summary>The pinned clock, MHz, when every run agrees.</summary>
+   public int? PinnedMhz { get; set; }
+
+   /// <summary>no_turbo during the runs (1 = off), when every run agrees.</summary>
+   public int? NoTurbo { get; set; }
+
+   /// <summary>MSR 0x620 during the runs, when every run agrees.</summary>
+   public string? Uncore { get; set; }
+
+   /// <summary>Every CPU's ceiling before the runs, MHz, when every run agrees.</summary>
+   public int? CeilingBeforeMhz { get; set; }
+
+   /// <summary>The clock tolerance, bp, when every run agrees.</summary>
+   public int? ToleranceBp { get; set; }
+
+   /// <summary>Passes off the pinned clock by the median rule.</summary>
+   public int ClockOffPasses { get; set; }
+
+   /// <summary>Passes with a CPU group not read.</summary>
+   public int ClockUnreadPasses { get; set; }
+
+   /// <summary>Passes evaluated.</summary>
+   public int PassesEvaluated { get; set; }
+
+   /// <summary>True when the values were read from the machine-control note (v5 to v7), not conditions.clock.</summary>
+   public bool LegacyParsed { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>A dropped mean-based warning.</summary>
+public sealed class DroppedWarning
+{
+   #region Public Methods
+
+   /// <summary>Run folder.</summary>
+   public string Run { get; set; } = string.Empty;
+
+   /// <summary>The warning, verbatim.</summary>
+   public string Text { get; set; } = string.Empty;
+
+   /// <summary>Target.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>Pass.</summary>
+   public string Pass { get; set; } = string.Empty;
+
+   /// <summary>Recomputed engine-group median, MHz.</summary>
+   public int? EngineMedianMhz { get; set; }
+
+   /// <summary>Recomputed client-group median, MHz.</summary>
+   public int? ClientMedianMhz { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>The machine block.</summary>
+public sealed class MachineInfo
+{
+   #region Public Methods
+
+   /// <summary>machine.cpu.</summary>
+   public string? Cpu { get; set; }
+
+   /// <summary>machine.logicalCpus.</summary>
+   public int? LogicalCpus { get; set; }
+
+   /// <summary>machine.ramGiB.</summary>
+   public double? RamGiB { get; set; }
+
+   /// <summary>machine.os of the newest run.</summary>
+   public string? Os { get; set; }
+
+   /// <summary>machine.dotNet of the newest run.</summary>
+   public string? DotNet { get; set; }
+
+   /// <summary>conditions.governor.</summary>
+   public string? Governor { get; set; }
+
+   /// <summary>The CPU partition.</summary>
+   public string? Partition { get; set; }
+
+   /// <summary>Fields that differ between the claim runs without refusing (os, dotNet), as "field: value (runs); value (runs)".</summary>
+   public List<string> Differences { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>One container target's image.</summary>
+public sealed class ImageInfo
+{
+   #region Public Methods
+
+   /// <summary>Target.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>The image reference.</summary>
+   public string? Ref { get; set; }
+
+   /// <summary>The image id.</summary>
+   public string Id { get; set; } = string.Empty;
+
+   /// <summary>When the reference was last tagged on this box.</summary>
+   public string? LastTagTimeUtc { get; set; }
+
+   /// <summary>True when that was before the first run of the first claim session started; null when unknown.</summary>
+   public bool? BeforeFirstV7Start { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>A target's engine settings in one session.</summary>
+public sealed class EngineSettingsRow
+{
+   #region Public Methods
+
+   /// <summary>Target.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>Session they were read in.</summary>
+   public string Session { get; set; } = string.Empty;
+
+   /// <summary>The settings.</summary>
+   public List<EngineSettingEntry> Settings { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>One engine setting.</summary>
+public sealed class EngineSettingEntry
+{
+   #region Public Methods
+
+   /// <summary>Key.</summary>
+   public string Key { get; set; } = string.Empty;
+
+   /// <summary>Value.</summary>
+   public string Value { get; set; } = string.Empty;
+
+   /// <summary>How it was read or set.</summary>
+   public string How { get; set; } = string.Empty;
+
+   #endregion Public Methods
+}
+
+/// <summary>A row of the why table.</summary>
+public sealed class WhyRow
+{
+   #region Public Methods
+
+   /// <summary>Target.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>Facts from engine-facts.json, validated.</summary>
+   public List<WhyFact> Facts { get; set; } = new();
+
+   /// <summary>Measured costs.</summary>
+   public WhyCosts Costs { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>One fact.</summary>
+public sealed class WhyFact
+{
+   #region Public Methods
+
+   /// <summary>index, search, storage, protocol, cap or set-by-setup.</summary>
+   public string Kind { get; set; } = string.Empty;
+
+   /// <summary>The fact's text.</summary>
+   public string Text { get; set; } = string.Empty;
+
+   /// <summary>Its source.</summary>
    public string Source { get; set; } = string.Empty;
+
+   /// <summary>recorded, measured, documented or set-by-code.</summary>
+   public string Confidence { get; set; } = string.Empty;
+
+   /// <summary>Search rows: exact or approximate.</summary>
+   public string? Mode { get; set; }
+
+   /// <summary>Where the source resolved ("path:line", the runs, the saved page).</summary>
+   public string Where { get; set; } = string.Empty;
+
+   #endregion Public Methods
+}
+
+/// <summary>Measured costs of one target: medians over the runs of <see cref="Session"/>.</summary>
+public sealed class WhyCosts
+{
+   #region Public Methods
+
+   /// <summary>The session the costs come from (the newest).</summary>
+   public string Session { get; set; } = string.Empty;
+
+   /// <summary>Engine cgroup CPU per search, ms, by searchers ("1", "8"); null when not measured.</summary>
+   public Dictionary<string, double?> EngineCpuMsPerSearch { get; set; } = new();
+
+   /// <summary>Why engine CPU is null, as recorded.</summary>
+   public string? EngineCpuNullReason { get; set; }
+
+   /// <summary>The client's CPU per search, ms, by searchers.</summary>
+   public Dictionary<string, double?> ClientCpuMsPerSearch { get; set; } = new();
+
+   /// <summary>True for an embedded target, whose client CPU includes the engine's own work.</summary>
+   public bool ClientIncludesEngine { get; set; }
+
+   /// <summary>Engine CPUs busy during the eight-searcher pass.</summary>
+   public double? EngineCpusBusyAt8 { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>The observer summary given with --observer.</summary>
+public sealed class ObserverInfo
+{
+   #region Public Methods
+
+   /// <summary>The path as given.</summary>
+   public string Path { get; set; } = string.Empty;
+
+   /// <summary>Its SHA-256.</summary>
+   public string Sha256 { get; set; } = string.Empty;
+
+   /// <summary>Its schema field.</summary>
+   public string? Schema { get; set; }
+
+   /// <summary>Per run of the newest session the summary covers.</summary>
+   public List<ObserverRun> Runs { get; set; } = new();
+
+   /// <summary>Highest observer CPU over every pass of those runs, CPUs.</summary>
+   public double? CpuMax { get; set; }
+
+   /// <summary>Largest APERF/MPERF deviation from the pinned clock over those runs, bp.</summary>
+   public double? AperfWorstDeviationBp { get; set; }
+
+   /// <summary>Every MSR 0x620 value the observer saw in those runs.</summary>
+   public List<string> Msr620ValuesSeen { get; set; } = new();
+
+   /// <summary>True when the summary says timers were covered for every run.</summary>
+   public bool TimersCovered { get; set; }
+
+   /// <summary>Passes during which a systemd timer fired, over those runs.</summary>
+   public int PassesWithTimerFired { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>What the observer summary says about one run.</summary>
+public sealed class ObserverRun
+{
+   #region Public Methods
+
+   /// <summary>Run folder.</summary>
+   public string Folder { get; set; } = string.Empty;
+
+   /// <summary>Highest observer CPU over the run's passes, CPUs.</summary>
+   public double? ObserverCpuMax { get; set; }
+
+   /// <summary>Largest APERF/MPERF deviation from the pinned clock over the passes, bp.</summary>
+   public double? AperfWorstDeviationBp { get; set; }
+
+   /// <summary>MSR 0x620 values the observer saw.</summary>
+   public List<string> Msr620ValuesSeen { get; set; } = new();
+
+   /// <summary>Passes during which a systemd timer fired, as the summary lists them.</summary>
+   public int? PassesWithTimerFired { get; set; }
+
+   /// <summary>True when the summary says timers were covered.</summary>
+   public bool? TimersCovered { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>A sentence and its sources, as the contract writes it.</summary>
+public sealed class SentenceRecord
+{
+   #region Public Methods
+
+   /// <summary>Where the sentence is printed.</summary>
+   public string Slot { get; set; } = string.Empty;
+
+   /// <summary>The sentence.</summary>
+   public string Text { get; set; } = string.Empty;
+
+   /// <summary>Its sources.</summary>
+   public List<SourceRecord> Sources { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>A source of a sentence.</summary>
+public sealed class SourceRecord
+{
+   #region Public Methods
+
+   /// <summary>results, file, doc, consolidated, quote or absent.</summary>
+   public string Kind { get; set; } = string.Empty;
+
+   /// <summary>The reference.</summary>
+   public string Ref { get; set; } = string.Empty;
+
+   /// <summary>The value the sentence carries for this source.</summary>
+   public string Value { get; set; } = string.Empty;
+
+   #endregion Public Methods
+}
+
+/// <summary>The audit.</summary>
+public sealed class AuditInfo
+{
+   #region Public Methods
+
+   /// <summary>Sentences checked: every one of sentences[] and every row note and flag text.</summary>
+   public int SentencesChecked { get; set; }
+
+   /// <summary>Of those, the row notes and flag texts, which travel on their rows and not in sentences[].</summary>
+   public int RowSentencesChecked { get; set; }
+
+   /// <summary>Fact rows validated.</summary>
+   public int FactsChecked { get; set; }
+
+   /// <summary>Failures (always empty in a written report: a failure writes nothing).</summary>
+   public List<string> Failures { get; set; } = new();
+
+   /// <summary>SHA-256 of engine-facts.json.</summary>
+   public string FactsSha256 { get; set; } = string.Empty;
+
+   /// <summary>SHA-256 of basis-exclusions.json.</summary>
+   public string ExclusionsSha256 { get; set; } = string.Empty;
+
+   /// <summary>SHA-256 of the observer summary given, or null.</summary>
+   public string? ObserverSha256 { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>The queries block.</summary>
+public sealed class QueriesInfo
+{
+   #region Public Methods
+
+   /// <summary>The queries line of the first claim run, verbatim.</summary>
+   public string? Recorded { get; set; }
+
+   /// <summary>Repository path of the copied question file.</summary>
+   public string CopyPath { get; set; } = string.Empty;
+
+   /// <summary>SHA-256 of the copy, or null when the repository has none.</summary>
+   public string? CopySha256 { get; set; }
+
+   /// <summary>Claim runs whose recorded queriesFileSha256 equals the copy's.</summary>
+   public List<string> MatchingRuns { get; set; } = new();
+
+   /// <summary>Claim runs that recorded no queriesFileSha256.</summary>
+   public List<string> UnrecordedRuns { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>A session (claim or basis) whose runs an unpublished report also used.</summary>
+public sealed class ReuseNote
+{
+   #region Public Methods
+
+   /// <summary>Session name.</summary>
+   public string Session { get; set; } = string.Empty;
+
+   /// <summary>Repository path of the verdict that blocked that report.</summary>
+   public string Verdict { get; set; } = string.Empty;
+
+   /// <summary>The blocked report's folder names found beside the runs (blocked-DATE-session); empty when none was found.</summary>
+   public List<string> BlockedFolders { get; set; } = new();
+
+   /// <summary>The session's runs (folder names), so a page can say it on the run pages of exactly these runs.</summary>
+   public List<string> Runs { get; set; } = new();
 
    #endregion Public Methods
 }

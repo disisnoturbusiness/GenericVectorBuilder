@@ -354,3 +354,171 @@ public static class ProcessInfo
 
    #endregion Public Methods
 }
+
+/// <summary>
+/// Reads the kernel's thermal throttle counters of every CPU (thermal_throttle/core_throttle_count
+/// and package_throttle_count) with each CPU's physical core (topology/thread_siblings_list) and
+/// package (topology/physical_package_id). It only reads files under /sys.
+/// Why it is called only at a run's start and end and at a target's start, first warm-up line
+/// and end: the clock sampler's reads must stay what they were (its CPU time is part of the
+/// client's CPU per search), and a read inside a timed pass would add work to it.
+/// </summary>
+public static class ThermalThrottle
+{
+   #region Public Methods
+
+   /// <summary>
+   /// The file counting a CPU's core thermal throttle events.
+   /// </summary>
+   /// <param name="cpu">Logical CPU.</param>
+   /// <returns>The path.</returns>
+   public static string CorePath( int cpu )
+   {
+      return $"/sys/devices/system/cpu/cpu{cpu}/thermal_throttle/core_throttle_count";
+   }
+
+   /// <summary>
+   /// The file counting the package thermal throttle events, as a CPU reports them.
+   /// </summary>
+   /// <param name="cpu">Logical CPU.</param>
+   /// <returns>The path.</returns>
+   public static string PackagePath( int cpu )
+   {
+      return $"/sys/devices/system/cpu/cpu{cpu}/thermal_throttle/package_throttle_count";
+   }
+
+   /// <summary>
+   /// The file naming a CPU's hyperthread siblings (its physical core).
+   /// </summary>
+   /// <param name="cpu">Logical CPU.</param>
+   /// <returns>The path.</returns>
+   public static string SiblingsPath( int cpu )
+   {
+      return $"/sys/devices/system/cpu/cpu{cpu}/topology/thread_siblings_list";
+   }
+
+   /// <summary>
+   /// The file naming a CPU's package.
+   /// </summary>
+   /// <param name="cpu">Logical CPU.</param>
+   /// <returns>The path.</returns>
+   public static string PackageIdPath( int cpu )
+   {
+      return $"/sys/devices/system/cpu/cpu{cpu}/topology/physical_package_id";
+   }
+
+   /// <summary>
+   /// Reads every CPU's counters now. A counter that cannot be read leaves the totals null and is
+   /// named in <see cref="ThrottleCounts.Unreadable"/>; a CPU whose topology cannot be read is
+   /// counted alone (which can only count an event twice, never miss one) and named in the note.
+   /// </summary>
+   /// <param name="system">The machine.</param>
+   /// <param name="cpus">CPUs to read.</param>
+   /// <returns>The reading.</returns>
+   public static ThrottleCounts Read( IMachineSystem system, IReadOnlyList<int> cpus )
+   {
+      var per = new List<CpuThrottle>();
+      var unreadable = new List<int>();
+      var ownCore = new List<int>();
+      var ownPackage = new List<int>();
+      foreach( int cpu in cpus )
+      {
+         long? core = Count( system, CorePath( cpu ) );
+         long? package = Count( system, PackagePath( cpu ) );
+         if( core == null || package == null )
+         {
+            unreadable.Add( cpu );
+         }
+
+         string? siblings = Siblings( system, cpu );
+         string? packageId = system.ReadFile( PackageIdPath( cpu ) )?.Trim();
+         string self = "cpu" + cpu.ToString( CultureInfo.InvariantCulture );
+         if( siblings == null )
+         {
+            ownCore.Add( cpu );
+         }
+
+         if( string.IsNullOrEmpty( packageId ) )
+         {
+            ownPackage.Add( cpu );
+         }
+
+         per.Add( new CpuThrottle( cpu, core, package, siblings ?? self, string.IsNullOrEmpty( packageId ) ? self : packageId ) );
+      }
+
+      bool complete = unreadable.Count == 0 && per.Count > 0;
+      return new ThrottleCounts
+      {
+         ReadUtc = DateTime.UtcNow.ToString( "yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture ),
+         CoreEvents = complete ? per.GroupBy( c => c.Siblings, StringComparer.Ordinal ).Sum( g => g.Max( c => c.CoreCount!.Value ) ) : null,
+         PackageEvents = complete ? per.GroupBy( c => c.PackageId, StringComparer.Ordinal ).Sum( g => g.Max( c => c.PackageCount!.Value ) ) : null,
+         PerCpu = per,
+         Unreadable = per.Count == 0 ? "no CPU to read" : unreadable.Count > 0 ? $"no readable core_throttle_count or package_throttle_count under {CorePath( unreadable[0] ).Replace( "/core_throttle_count", string.Empty, StringComparison.Ordinal )} on CPU(s) {CpuList.Format( unreadable )}" : null,
+         Note = TopologyNote( ownCore, ownPackage ),
+      };
+   }
+
+   #endregion Public Methods
+
+   #region Private Methods
+
+   /// <summary>
+   /// Says which CPUs' topology could not be read and so were counted as their own core or package.
+   /// </summary>
+   /// <param name="ownCore">CPUs whose thread_siblings_list could not be read.</param>
+   /// <param name="ownPackage">CPUs whose physical_package_id could not be read.</param>
+   /// <returns>The note, or null when every CPU's topology was read.</returns>
+   private static string? TopologyNote( List<int> ownCore, List<int> ownPackage )
+   {
+      var parts = new List<string>();
+      if( ownCore.Count > 0 )
+      {
+         parts.Add( $"the thread siblings of CPU(s) {CpuList.Format( ownCore )} could not be read, so each is counted as its own core" );
+      }
+
+      if( ownPackage.Count > 0 )
+      {
+         parts.Add( $"the package of CPU(s) {CpuList.Format( ownPackage )} could not be read, so each is counted as its own package" );
+      }
+
+      return parts.Count > 0 ? string.Join( "; ", parts ) : null;
+   }
+
+   /// <summary>
+   /// A counter file's value.
+   /// </summary>
+   /// <param name="system">The machine.</param>
+   /// <param name="path">The file.</param>
+   /// <returns>The count, or null when missing or not a whole number.</returns>
+   private static long? Count( IMachineSystem system, string path )
+   {
+      return long.TryParse( system.ReadFile( path )?.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out long count ) ? count : null;
+   }
+
+   /// <summary>
+   /// A CPU's siblings in canonical form.
+   /// </summary>
+   /// <param name="system">The machine.</param>
+   /// <param name="cpu">Logical CPU.</param>
+   /// <returns>"0,4", or null when unreadable or not a CPU list.</returns>
+   private static string? Siblings( IMachineSystem system, int cpu )
+   {
+      string? text = system.ReadFile( SiblingsPath( cpu ) )?.Trim();
+      if( string.IsNullOrEmpty( text ) )
+      {
+         return null;
+      }
+
+      try
+      {
+         return CpuList.Format( CpuList.Parse( text ) );
+      }
+      catch( FormatException )
+      {
+         // Counted alone instead; Read names the CPU in its note.
+         return null;
+      }
+   }
+
+   #endregion Private Methods
+}

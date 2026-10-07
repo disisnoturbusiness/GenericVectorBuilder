@@ -14,6 +14,13 @@ namespace GenericVectorBuilder.Bench.Report;
 /// </summary>
 public sealed class RunResult
 {
+   #region Data Members
+
+   /// <summary>The part of the command line's binary path cut off to name the build by its tree (as the threshold-basis prototype does).</summary>
+   public const string BINARY_TAIL = "/src/GenericVectorBuilder.Bench/bin/Release/net10.0/GenericVectorBuilder.Bench.dll";
+
+   #endregion Data Members
+
    #region Public Methods
 
    /// <summary>Full path of the result folder.</summary>
@@ -72,6 +79,46 @@ public sealed class RunResult
 
    /// <summary>Targets in file order.</summary>
    public IReadOnlyList<TargetResult> Targets { get; init; } = Array.Empty<TargetResult>();
+
+   /// <summary>The queries line verbatim ("golden: 20 labelled questions from ..."); part of the run-level identity.</summary>
+   public string? Queries { get; init; }
+
+   /// <summary>The run's notes, verbatim and in order; empty when none.</summary>
+   public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
+
+   /// <summary>nDCG of the exact top hits (truthNdcg); null when not recorded.</summary>
+   public double? TruthNdcg { get; init; }
+
+   /// <summary>SHA-256 of the golden question file the run read (queriesFileSha256, v8); null when not recorded.</summary>
+   public string? QueriesFileSha256 { get; init; }
+
+   /// <summary>machine.cpu: the CPU model.</summary>
+   public string? MachineCpu { get; init; }
+
+   /// <summary>machine.logicalCpus.</summary>
+   public int? MachineLogicalCpus { get; init; }
+
+   /// <summary>machine.ramGiB, as the run wrote it.</summary>
+   public double? MachineRamGiB { get; init; }
+
+   /// <summary>machine.os.</summary>
+   public string? MachineOs { get; init; }
+
+   /// <summary>machine.dotNet.</summary>
+   public string? MachineDotNet { get; init; }
+
+   /// <summary>True when the run was a settings-only run (settingsOnly): it read engine settings, images and data folders and searched nothing.</summary>
+   public bool SettingsOnly { get; init; }
+
+   /// <summary>The path of the benchmark binary in the command line with the project's bin path cut off ("/home/dan/gvb-work/lanes/v7-final"), or null when the command line does not name one.</summary>
+   public string? BinaryRoot
+   {
+      get
+      {
+         string? first = CommandLine?.Split( ' ' )[0];
+         return first == null ? null : first.Replace( BINARY_TAIL, string.Empty, StringComparison.Ordinal );
+      }
+   }
 
    /// <summary>
    /// Reads results.json from a folder.
@@ -136,6 +183,16 @@ public sealed class RunResult
          RunSeed = ResultJson.Int( root, "runSeed" ),
          TargetOrder = ResultJson.Texts( root, "targetOrder" ),
          Targets = targets.EnumerateArray().Where( t => t.ValueKind == JsonValueKind.Object ).Select( TargetResult.Parse ).ToList(),
+         Queries = queries,
+         Notes = ResultJson.Texts( root, "notes" ) ?? Array.Empty<string>(),
+         TruthNdcg = ResultJson.Number( root, "truthNdcg" ),
+         QueriesFileSha256 = ResultJson.Text( root, "queriesFileSha256" ),
+         MachineCpu = machine is JsonElement mc ? ResultJson.Text( mc, "cpu" ) : null,
+         MachineLogicalCpus = machine is JsonElement ml ? ResultJson.Int( ml, "logicalCpus" ) : null,
+         MachineRamGiB = machine is JsonElement mr ? ResultJson.Number( mr, "ramGiB" ) : null,
+         MachineOs = machine is JsonElement mo ? ResultJson.Text( mo, "os" ) : null,
+         MachineDotNet = machine is JsonElement md ? ResultJson.Text( md, "dotNet" ) : null,
+         SettingsOnly = ResultJson.Bool( root, "settingsOnly" ) ?? false,
       };
    }
 
@@ -263,6 +320,12 @@ public sealed class TargetResult
    /// </summary>
    public string? SearchSettings { get; init; }
 
+   /// <summary>
+   /// The same settings as recorded, one entry per key, sorted by key; empty when the run recorded none or recorded them as a text and not an object.
+   /// Why besides the text: a value may hold ", " (a description), so the sorted text cannot be split back into keys and values.
+   /// </summary>
+   public IReadOnlyList<KeyValuePair<string, string>> SearchSettingsEntries { get; init; } = Array.Empty<KeyValuePair<string, string>>();
+
    /// <summary>True when the engine had settled before it was timed, false when it had not (a run before the v6 method: still starting, building or compacting; a run of the v6 method: a trial of the same pass still landed outside the allowed margin of the warm-up's settled figure); null when not recorded.</summary>
    public bool? Settled { get; init; }
 
@@ -277,6 +340,33 @@ public sealed class TargetResult
 
    /// <summary>A CPU limit the engine puts on itself (e.g. "cpu_count 2"), as the run recorded it on the target; null when not recorded.</summary>
    public string? CpuCap { get; init; }
+
+   /// <summary>search.recallHits: the integer hit count behind recall (v8); null when not recorded (older runs: derived by the consolidation from recall x queryCount x top).</summary>
+   public int? RecallHits { get; init; }
+
+   /// <summary>image.ref: the image reference the target's container was created from; null for an embedded target or a run before v8.</summary>
+   public string? ImageRef { get; init; }
+
+   /// <summary>image.id: the image id the container ran; null when not recorded.</summary>
+   public string? ImageId { get; init; }
+
+   /// <summary>image.pinnedId: the id deploy/bench/image-pins.json expected; null when not recorded.</summary>
+   public string? ImagePinnedId { get; init; }
+
+   /// <summary>image.lastTagTimeUtc: when the reference was last set on this box; null when not recorded.</summary>
+   public string? ImageLastTagTimeUtc { get; init; }
+
+   /// <summary>engineSettings as recorded (v8): each entry's key, value and how it was read or set, in file order; empty when not recorded.</summary>
+   public IReadOnlyList<EngineSettingValue> EngineSettingsList { get; init; } = Array.Empty<EngineSettingValue>();
+
+   /// <summary>dataFolder as recorded (v8); null when not recorded.</summary>
+   public DataFolderValue? DataFolder { get; init; }
+
+   /// <summary>disk.text as recorded (e.g. "4.21 GiB added by this load (...)"); null when not recorded.</summary>
+   public string? DiskText { get; init; }
+
+   /// <summary>The target's notes, verbatim and in order; empty when none.</summary>
+   public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
 
    /// <summary>
    /// CPU time the benchmark client itself used per search, in milliseconds, by concurrency level
@@ -327,12 +417,22 @@ public sealed class TargetResult
          EngineSettings = NamedText( t, ENGINE_SETTINGS_NAMES ),
          EngineFiles = NamedText( t, ENGINE_FILES_NAMES ) ?? FilesFromNotes( t ),
          SearchSettings = SettingsText( t, search ),
+         SearchSettingsEntries = SettingsEntries( t, search ),
          Settled = ReadSettled( t, search ) ?? notedSettled,
          SettleDetail = ReadSettleDetail( t, search ) ?? notedDetail,
          PairHint = PairHintValue.Parse( ResultJson.Child( t, "pairHint" ) ),
          MeanMs = Search( search, "meanMs" ) ?? Search( search, "latencyMeanMs" ),
          CpuCap = CpuCapText( t ),
          ClientCpuMsPerSearch = ClientCpu( t, search ),
+         RecallHits = search is JsonElement h ? ResultJson.Int( h, "recallHits" ) : null,
+         ImageRef = Image( t, "ref" ),
+         ImageId = Image( t, "id" ),
+         ImagePinnedId = Image( t, "pinnedId" ),
+         ImageLastTagTimeUtc = Image( t, "lastTagTimeUtc" ),
+         EngineSettingsList = EngineSettingValue.ReadList( ResultJson.Child( t, "engineSettings" ) ),
+         DataFolder = DataFolderValue.Parse( ResultJson.Child( t, "dataFolder" ) ),
+         DiskText = ResultJson.Child( t, "disk" ) is { ValueKind: JsonValueKind.Object } disk ? ResultJson.Text( disk, "text" ) : null,
+         Notes = ResultJson.Texts( t, "notes" ) ?? Array.Empty<string>(),
       };
    }
 
@@ -395,6 +495,17 @@ public sealed class TargetResult
    }
 
    /// <summary>
+   /// One text field of the target's image object.
+   /// </summary>
+   /// <param name="target">The target object.</param>
+   /// <param name="name">Field name inside "image".</param>
+   /// <returns>The text, or null when the target has no image object or no such field.</returns>
+   private static string? Image( JsonElement target, string name )
+   {
+      return ResultJson.Child( target, "image" ) is { ValueKind: JsonValueKind.Object } image ? ResultJson.Text( image, name ) : null;
+   }
+
+   /// <summary>
    /// The engine's own CPU limit as text, from the accepted spellings on the target object.
    /// </summary>
    /// <param name="target">The target object.</param>
@@ -424,6 +535,29 @@ public sealed class TargetResult
       }
 
       return null;
+   }
+
+   /// <summary>
+   /// The search-effort settings as key and value pairs sorted by key, from the same place <see cref="SettingsText"/> reads.
+   /// </summary>
+   /// <param name="target">The target object.</param>
+   /// <param name="search">The search section, if any.</param>
+   /// <returns>The pairs; empty when the settings are absent or not an object.</returns>
+   private static IReadOnlyList<KeyValuePair<string, string>> SettingsEntries( JsonElement target, JsonElement? search )
+   {
+      foreach( JsonElement holder in search.HasValue ? new[] { target, search.Value } : new[] { target } )
+      {
+         foreach( string name in SETTING_NAMES )
+         {
+            if( ResultJson.Child( holder, name ) is { ValueKind: JsonValueKind.Object } found && RunConditions.AsText( found ) is not null )
+            {
+               return found.EnumerateObject().Select( p => new KeyValuePair<string, string>( p.Name, RunConditions.AsText( p.Value ) ?? string.Empty ) )
+                  .Where( p => p.Value.Length > 0 ).OrderBy( p => p.Key, StringComparer.Ordinal ).ToList();
+            }
+         }
+      }
+
+      return Array.Empty<KeyValuePair<string, string>>();
    }
 
    /// <summary>
@@ -574,6 +708,72 @@ public sealed record PairHintValue( string? PassA, string? PassB, string? Note )
    public static PairHintValue? Parse( JsonElement? element )
    {
       return element is { ValueKind: JsonValueKind.Object } e ? new PairHintValue( ResultJson.Text( e, "passA" ), ResultJson.Text( e, "passB" ), ResultJson.Text( e, "note" ) ) : null;
+   }
+
+   #endregion Public Methods
+}
+
+/// <summary>
+/// One entry of a target's engineSettings (v8): a setting's key, its value, and how the run got it
+/// ("read: &lt;command or API&gt;" or "set: &lt;repo path&gt;#&lt;token&gt;").
+/// Why kept as written: the report prints each value beside the way it was obtained, so a value the
+/// engine chose itself is never shown as one this setup set.
+/// </summary>
+/// <param name="Key">Setting name.</param>
+/// <param name="Value">Value as recorded.</param>
+/// <param name="How">How it was read or set, as recorded.</param>
+public sealed record EngineSettingValue( string Key, string Value, string How )
+{
+   #region Public Methods
+
+   /// <summary>
+   /// Reads the engineSettings array.
+   /// </summary>
+   /// <param name="element">The array, or null.</param>
+   /// <returns>The entries; empty when absent or not an array of objects.</returns>
+   /// <exception cref="InvalidDataException">An entry lacks key, value or how.</exception>
+   public static IReadOnlyList<EngineSettingValue> ReadList( JsonElement? element )
+   {
+      if( element is not { ValueKind: JsonValueKind.Array } array )
+      {
+         return Array.Empty<EngineSettingValue>();
+      }
+
+      return array.EnumerateArray().Where( e => e.ValueKind == JsonValueKind.Object ).Select( e => new EngineSettingValue(
+         ResultJson.Text( e, "key" ) ?? throw new InvalidDataException( "an engineSettings entry has no key" ),
+         ResultJson.Child( e, "value" ) is JsonElement v ? RunConditions.AsText( v ) ?? string.Empty : throw new InvalidDataException( "an engineSettings entry has no value" ),
+         ResultJson.Text( e, "how" ) ?? throw new InvalidDataException( "an engineSettings entry has no how" ) ) ).ToList();
+   }
+
+   #endregion Public Methods
+}
+
+/// <summary>
+/// A target's data folder as the run recorded it (v8 dataFolder): its path, its size at the start, what was reset and
+/// the size after the reset, the size at the end, and for an embedded engine the size of the bench database file alone.
+/// Why: ClickHouse's start state (log tables truncated at the start in v8) is a recorded condition the report discloses.
+/// </summary>
+/// <param name="Path">Host path of the folder.</param>
+/// <param name="BytesAtStart">Bytes before any reset.</param>
+/// <param name="Reset">What was reset (table names), or null when nothing was.</param>
+/// <param name="BytesAfterReset">Bytes after the reset, or null when nothing was reset.</param>
+/// <param name="BytesAtEnd">Bytes at the end of the target.</param>
+/// <param name="BenchFileBytes">Embedded engines: the bench database file alone; else null.</param>
+public sealed record DataFolderValue( string? Path, long? BytesAtStart, string? Reset, long? BytesAfterReset, long? BytesAtEnd, long? BenchFileBytes )
+{
+   #region Public Methods
+
+   /// <summary>
+   /// Reads a dataFolder object.
+   /// </summary>
+   /// <param name="element">The object, or null.</param>
+   /// <returns>The value, or null when absent.</returns>
+   public static DataFolderValue? Parse( JsonElement? element )
+   {
+      return element is { ValueKind: JsonValueKind.Object } e
+         ? new DataFolderValue( ResultJson.Text( e, "path" ), ResultJson.Long( e, "bytesAtStart" ), ResultJson.Child( e, "reset" ) is JsonElement r ? RunConditions.AsText( r ) : null,
+            ResultJson.Long( e, "bytesAfterReset" ), ResultJson.Long( e, "bytesAtEnd" ), ResultJson.Long( e, "benchFileBytes" ) )
+         : null;
    }
 
    #endregion Public Methods

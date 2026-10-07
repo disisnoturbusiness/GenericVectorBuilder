@@ -5,57 +5,59 @@ using GenericVectorBuilder.Bench.Stats;
 namespace GenericVectorBuilder.Bench.Report;
 
 /// <summary>
-/// Renders a <see cref="ConsolidatedReport"/> as consolidated.md: tables of numbers and
-/// recorded facts, plus the fixed framing sentences and the per-engine notes (each tagged with
-/// where it came from); no causes.
-/// Why numbers and tagged facts only: the dead draft mixed measured gaps with guessed reasons; this
-/// file is the evidence a writeup cites, and any explanation belongs in the writeup, tagged as such.
-/// A field a run did not record prints as "missing"; a metric that does not apply prints "-".
-/// The speed ranking is printed as tie bands under a title that says it is request speed on a
-/// small collection, measured through each engine's .NET client (see <see cref="ConsolidateFraming"/>);
-/// no ranking table shows a strict rank across runs. The rank-per-run tables show each run's own
-/// order, with the band beside them. Where the results carry the client's CPU per search it is
-/// shown beside the latency and the QPS it belongs to, so a reader can see how much of a
-/// fast engine's time is the client library.
+/// consolidated.md of the v8 report: headline, subtitle, threshold and basis, the four tables,
+/// recall, why, drift, clock, disclosures, method, targets not in this report and runs used.
+/// Every sentence comes from the report's audited sentences[] by slot; everything else is a heading,
+/// a table header or a table cell holding a value of consolidated.json. No prose is written here.
+/// Why: the reader lens re-derives every sentence of this file from the raw files, and a sentence
+/// that does not travel in sentences[] would escape the audit.
 /// </summary>
 public static class ConsolidatedMarkdown
 {
-   #region Data Members
-
-   /// <summary>Text for a field the result files did not record.</summary>
-   public const string MISSING = "missing";
-
-   /// <summary>What the engine notes column of the ranking tables holds, printed once under them.</summary>
-   public const string ENGINE_NOTES_LINE = "The engine notes column lists the notes under Per-engine notes and, after \"flags:\", every flag the engine carries (an unsettled engine, a spread above 15%, a shared core, a segment layout that differs between runs, and the rest). The number is still shown; read it with its flag, whose evidence is under Flags.";
-
-   #endregion Data Members
-
    #region Public Methods
 
    /// <summary>
    /// Renders the report.
    /// </summary>
-   /// <param name="report">The consolidated report.</param>
+   /// <param name="report">The report, sentences filled.</param>
    /// <returns>Markdown text.</returns>
    public static string Render( ConsolidatedReport report )
    {
       var md = new StringBuilder();
-      md.AppendLine( "# Consolidated benchmark" ).AppendLine();
-      AppendSettings( md, report );
-      AppendMethod( md, report );
-      AppendRuns( md, report );
-      AppendWithheld( md, report );
-      AppendTargets( md, report );
-      AppendRanking( md, report );
-      AppendEngineNotes( md, report );
-      AppendSummary( md, report );
-      AppendPerRun( md, report );
-      AppendRanks( md, report );
-      AppendPairs( md, report );
-      AppendExact( md, report );
-      AppendFacts( md, report );
-      AppendFlags( md, report );
-      AppendNotes( md, report );
+      md.AppendLine( "# Vector engine benchmark" ).AppendLine();
+      Paragraph( md, report, "headline", "stopped" );
+      Paragraph( md, report, "subtitle" );
+      Section( md, "Threshold and basis" );
+      Paragraph( md, report, "rule", "basis" );
+      BasisTables( md, report );
+      var printed = new HashSet<string>( StringComparer.Ordinal );
+      foreach( MetricTable table in report.Metrics )
+      {
+         Table( md, report, table, printed );
+      }
+
+      Section( md, "Recall" );
+      Paragraph( md, report, "recall" );
+      RecallTable( md, report );
+      Section( md, "Why some engines beat others: facts and measured costs" );
+      Paragraph( md, report, "why" );
+      WhyTable( md, report );
+      Drift( md, report );
+      Section( md, "Disclosures" );
+      Paragraph( md, report, "disclosure" );
+      DroppedTable( md, report );
+      SettingsTable( md, report );
+      Section( md, "Method" );
+      Paragraph( md, report, "method" );
+      if( HasSentences( report, "notinreport" ) )
+      {
+         Section( md, "Targets not in this report" );
+         Paragraph( md, report, "notinreport" );
+      }
+
+      Section( md, "Runs used" );
+      Paragraph( md, report, "runs" );
+      RunsTable( md, report );
       return md.ToString();
    }
 
@@ -64,695 +66,325 @@ public static class ConsolidatedMarkdown
    #region Private Methods
 
    /// <summary>
-   /// The shared settings and run counts.
+   /// Whether the report holds a sentence whose slot is the prefix or starts with it and a dot.
+   /// Why: a heading with nothing under it is an empty section on the page, and a reader looks for what is missing.
    /// </summary>
-   /// <param name="md">Output.</param>
    /// <param name="report">The report.</param>
-   private static void AppendSettings( StringBuilder md, ConsolidatedReport report )
+   /// <param name="prefix">The slot prefix.</param>
+   /// <returns>True when there is one.</returns>
+   private static bool HasSentences( ConsolidatedReport report, string prefix )
    {
-      RunSettings s = report.Settings;
-      var rows = new List<string[]>
-      {
-         new[] { "created (UTC)", report.CreatedUtc },
-         new[] { "command", "`" + report.CommandLine + "`" },
-         new[] { "targets", report.Targets.Count.ToString( CultureInfo.InvariantCulture ) },
-         new[] { "runs used", report.Runs.Count.ToString( CultureInfo.InvariantCulture ) },
-         new[] { "runs dropped", report.Dropped.Count.ToString( CultureInfo.InvariantCulture ) },
-         new[] { "pipeline", s.Pipeline ?? MISSING },
-         new[] { "benchmark command (every run)", s.Command ?? MISSING },
-         new[] { "host", s.Host ?? MISSING },
-         new[] { "rows x dimension", $"{Int( s.Rows )} x {Int( s.Dimension )}" },
-         new[] { "queries", $"{s.QueryKind ?? MISSING}, {Int( s.QueryCount )}" },
-         new[] { "top", Int( s.Top ) },
-         new[] { "concurrency", s.Concurrency.Count == 0 ? MISSING : string.Join( ", ", s.Concurrency ) },
-         new[] { "seconds per level", Int( s.SecondsPerLevel ) },
-         new[] { "build configuration", Recorded( s.BuildConfiguration, s, "buildConfiguration" ) },
-         new[] { "machine control", Recorded( s.MachineControl, s, "machineControl" ) },
-         new[] { "CPU governor", Recorded( s.Governor, s, "governor" ) },
-         new[] { "CPU partition", Recorded( s.CpuPartition, s, "cpuPartition" ) },
-      };
-      rows.AddRange( WarmupRows( s ) );
-      rows.Add( new[] { "least searches a warm-up must run (the --warmup setting, besides the time above)", Recorded( s.WarmupSearches?.ToString( CultureInfo.InvariantCulture ), s, "warmupSearches" ) } );
-      rows.Add( new[] { "exact mode seconds", Recorded( s.ExactSeconds?.ToString( CultureInfo.InvariantCulture ), s, "exactSeconds" ) } );
-      Table( md, new[] { "item", "value" }, rows );
+      return report.Sentences.Any( s => s.Slot == prefix || s.Slot.StartsWith( prefix + ".", StringComparison.Ordinal ) );
    }
 
    /// <summary>
-   /// The warm-up, settle check and rehearsal rows of the settings table, from the method the runs
-   /// recorded; "missing" when they recorded none. Never a bare count: the count is only the fewest
-   /// searches in a warm-up, and the warm-up is time based.
+   /// A second-level heading.
    /// </summary>
-   /// <param name="s">The shared settings.</param>
-   /// <returns>The rows.</returns>
-   private static IEnumerable<string[]> WarmupRows( RunSettings s )
+   /// <param name="md">Output.</param>
+   /// <param name="title">Heading text.</param>
+   private static void Section( StringBuilder md, string title )
    {
-      if( s.WarmupMethod == null )
-      {
-         return new[] { new[] { "warm-up before each timed pass", MISSING }, new[] { "settle check before each timed pass", MISSING }, new[] { "rehearsal before the first timed pass", MISSING } };
-      }
-
-      return s.WarmupMethod.Rows().Select( r => new[] { r.Item, r.Value } );
+      md.AppendLine( $"## {title}" ).AppendLine();
    }
 
    /// <summary>
-   /// The warm-up and rehearsal notes of the runs, verbatim: the method as the runs wrote it, so the
-   /// rows above can be checked against the source.
+   /// Every sentence whose slot is one of the prefixes (or starts with it and a dot), in report order, one line each.
    /// </summary>
    /// <param name="md">Output.</param>
    /// <param name="report">The report.</param>
-   private static void AppendMethod( StringBuilder md, ConsolidatedReport report )
+   /// <param name="prefixes">Slot prefixes.</param>
+   private static void Paragraph( StringBuilder md, ConsolidatedReport report, params string[] prefixes )
    {
-      md.AppendLine( "## Warm-up method as the runs recorded it" ).AppendLine();
-      if( report.Settings.WarmupMethod is not { Recorded.Count: > 0 } method )
+      List<SentenceRecord> found = report.Sentences.Where( s => prefixes.Any( p => s.Slot == p || s.Slot.StartsWith( p + ".", StringComparison.Ordinal ) ) ).ToList();
+      foreach( SentenceRecord s in found )
       {
-         md.AppendLine( "(none: the runs recorded no warm-up or rehearsal note)" ).AppendLine();
-         return;
+         string? label = Quoted( s ) ? Label( s.Slot ) : null;
+         if( label != null )
+         {
+            md.AppendLine( $"**{label}**" ).AppendLine();
+         }
+
+         md.AppendLine( Quoted( s ) ? $"> {s.Text}" : s.Text ).AppendLine();
+      }
+   }
+
+   /// <summary>
+   /// The label shown above a quoted durability or disk text: the target (and run) its slot names; null for other quotes.
+   /// </summary>
+   /// <param name="slot">The sentence's slot.</param>
+   /// <returns>The label, or null.</returns>
+   private static string? Label( string slot )
+   {
+      foreach( string prefix in new[] { "disclosure.durability.", "disclosure.disk.", "why.effort." } )
+      {
+         if( slot.StartsWith( prefix, StringComparison.Ordinal ) )
+         {
+            return slot[prefix.Length..].Replace( '.', ' ' );
+         }
       }
 
-      method.Recorded.ForEach( n => md.AppendLine( $"- {n}" ) );
+      return null;
+   }
+
+   /// <summary>
+   /// True when the sentence is a verbatim quote of a recorded field.
+   /// </summary>
+   /// <param name="s">The sentence.</param>
+   /// <returns>True for a quote.</returns>
+   private static bool Quoted( SentenceRecord s )
+   {
+      return s.Sources.Count == 1 && s.Sources[0].Kind == SourceKinds.QUOTE;
+   }
+
+   /// <summary>
+   /// The basis runs, the per-metric moves and the left-out runs.
+   /// </summary>
+   /// <param name="md">Output.</param>
+   /// <param name="report">The report.</param>
+   private static void BasisTables( StringBuilder md, ConsolidatedReport report )
+   {
+      BasisInfo b = report.Basis;
+      md.AppendLine( "| basis run | session | seed | turbo | uncore | warm-up | rehearsal | build |" ).AppendLine( "|---|---|---|---|---|---|---|---|" );
+      foreach( BasisRunInfo r in b.Runs )
+      {
+         md.AppendLine( Row( r.Folder, r.Session, r.Seed?.ToString( CultureInfo.InvariantCulture ) ?? string.Empty, r.Conditions.Turbo, r.Conditions.Uncore, r.Conditions.Warmup, r.Conditions.Rehearsal, r.Conditions.Build ) );
+      }
+
+      md.AppendLine().AppendLine( "| metric | one engine, same recorded setup | pair, same recorded setup | one engine, also same run conditions | pair, also same run conditions |" ).AppendLine( "|---|---|---|---|---|" );
+      foreach( (string metric, MetricBasis m) in b.PerMetric )
+      {
+         md.AppendLine( Row( ClaimMetrics.Label( metric ), Move( m.OneEngine ), Move( m.Pair ), Move( m.OneEngineSameSettings ), Move( m.PairSameSettings ) ) );
+      }
+
       md.AppendLine();
-   }
-
-   /// <summary>
-   /// Runs used (with seed and target order) and runs dropped (with reason).
-   /// </summary>
-   /// <param name="md">Output.</param>
-   /// <param name="report">The report.</param>
-   private static void AppendRuns( StringBuilder md, ConsolidatedReport report )
-   {
-      md.AppendLine( "## Runs used" ).AppendLine();
-      Table( md, new[] { "run", "started (UTC)", "runSeed", "load average", "targetOrder" }, report.Runs.Select( r => new[]
+      if( b.MaxMove != null )
       {
-         r.Name, r.StartedUtc ?? MISSING, Int( r.RunSeed ), r.LoadAverage ?? MISSING,
-         r.TargetOrder == null ? MISSING : string.Join( ", ", r.TargetOrder ),
-      } ) );
-      md.AppendLine( "## Runs dropped" ).AppendLine();
-      Table( md, new[] { "run", "reason" }, report.Dropped.Select( d => new[] { d.Name, d.Reason } ) );
-   }
-
-   /// <summary>
-   /// Every target the runs hold that this report leaves out, with its reason; "(none)" when there
-   /// is nothing to say. Always printed, so its absence cannot be mistaken for a report that was
-   /// never checked.
-   /// </summary>
-   /// <param name="md">Output.</param>
-   /// <param name="report">The report.</param>
-   private static void AppendWithheld( StringBuilder md, ConsolidatedReport report )
-   {
-      md.AppendLine( "## Targets not in this report" ).AppendLine();
-      Table( md, new[] { "target", "kind", "runs", "reason" }, report.Withheld.Select( w => new[] { w.Target, w.Kind, string.Join( ", ", w.Runs ), w.Reason } ) );
-   }
-
-   /// <summary>
-   /// Engine, hosting, index, search settings, recorded engine settings, durability and engine files of
-   /// each target (every distinct value seen; the runs of a shown target agree, because runs that differ
-   /// are refused for it).
-   /// </summary>
-   /// <param name="md">Output.</param>
-   /// <param name="report">The report.</param>
-   private static void AppendTargets( StringBuilder md, ConsolidatedReport report )
-   {
-      md.AppendLine( "## Targets" ).AppendLine();
-      Table( md, new[] { "target", "hosting", "engine", "index", "search settings", "engine settings (recorded)", "durability", "engine files (SHA-256)" }, report.TargetSummaries.Select( t => new[]
-      {
-         t.Name, Join( t.Hosting ), Join( t.Engines ), Join( t.Indexes ),
-         report.Settings.SearchSettings.TryGetValue( t.Name, out string? settings ) && settings != null ? settings : MISSING,
-         Join( t.EngineSettings ), Join( t.Durabilities ), Join( t.EngineFiles ),
-      } ) );
-      md.AppendLine( "Every column is what the runs recorded for the engine: its description, its index and search settings, its non-default engine settings and configuration files (when a run recorded them) and its durability statement. Runs that differ in any of them are refused for that target, never merged; a column that reads missing was not recorded by any run, so a setting changed there would not show." ).AppendLine();
-   }
-
-   /// <summary>
-   /// Median [min, max] of every metric per target.
-   /// </summary>
-   /// <param name="md">Output.</param>
-   /// <param name="report">The report.</param>
-   private static void AppendSummary( StringBuilder md, ConsolidatedReport report )
-   {
-      List<string> levels = Levels( report );
-      List<string> ratios = report.TargetSummaries.SelectMany( t => t.QpsRatio.Keys ).Distinct().ToList();
-      int? top = report.Settings.Top;
-      var header = new List<string> { "target", "n", "p50 ms", "p95 ms" };
-      header.AddRange( levels.Select( l => $"QPS@{l}" ) );
-      header.AddRange( ratios.Select( r => $"QPS ratio {r}" ) );
-      List<string> cpuLevels = ClientCpuLevels( report );
-      header.AddRange( cpuLevels.Select( l => $"client CPU ms/search@{l}" ) );
-      header.AddRange( new[] { "load rows/s (not ranked)", $"recall@{Int( top )}", $"nDCG@{Int( top )}", "exact p50 ms", "errors", "warm-up errors" } );
-      md.AppendLine( "## Per target: median [min, max]" ).AppendLine();
-      Table( md, header, report.TargetSummaries.Select( t =>
-      {
-         var cells = new List<string> { t.Name, t.P50Ms.N.ToString( CultureInfo.InvariantCulture ), Range( t.P50Ms, MsFormat ), Range( t.P95Ms, MsFormat ) };
-         cells.AddRange( levels.Select( l => t.Qps.TryGetValue( l, out Spread? q ) ? Range( q, _ => "0.0" ) : "-" ) );
-         cells.AddRange( ratios.Select( r => t.QpsRatio.TryGetValue( r, out Spread? q ) ? Range( q, _ => "0.00" ) : "-" ) );
-         cells.AddRange( cpuLevels.Select( l => t.ClientCpuMsPerSearch.TryGetValue( l, out Spread? c ) ? Range( c, MsFormat ) : "-" ) );
-         cells.AddRange( new[] { Range( t.LoadRowsPerSecond, _ => "0" ), Range( t.Recall, _ => "0.000" ), Range( t.Ndcg, _ => "0.000" ), Range( t.ExactP50Ms, MsFormat ), Int( t.Errors ), Int( t.WarmupErrors ) } );
-         return cells.ToArray();
-      } ) );
-   }
-
-   /// <summary>
-   /// Per-run p50, QPS at each level and QPS ratio (higher level over the lowest), one column
-   /// per run, so every median can be checked against the values it came from.
-   /// </summary>
-   /// <param name="md">Output.</param>
-   /// <param name="report">The report.</param>
-   private static void AppendPerRun( StringBuilder md, ConsolidatedReport report )
-   {
-      md.AppendLine( "## Per run: p50 ms" ).AppendLine();
-      PerRunTable( md, report, "median", t => t.P50Ms, "0.00" );
-      foreach( string level in Levels( report ) )
-      {
-         md.AppendLine( $"## Per run: QPS@{level}" ).AppendLine();
-         PerRunTable( md, report, "median", t => t.Qps.TryGetValue( level, out Spread? s ) ? s : null, "0.0" );
-      }
-
-      foreach( string ratio in report.TargetSummaries.SelectMany( t => t.QpsRatio.Keys ).Distinct() )
-      {
-         md.AppendLine( $"## Per run: QPS ratio {ratio}" ).AppendLine();
-         PerRunTable( md, report, "median", t => t.QpsRatio.TryGetValue( ratio, out Spread? s ) ? s : null, "0.00" );
-      }
-
-      foreach( string level in ClientCpuLevels( report ) )
-      {
-         md.AppendLine( $"## Per run: client CPU ms per search@{level}" ).AppendLine();
-         PerRunTable( md, report, "median", t => t.ClientCpuMsPerSearch.TryGetValue( level, out Spread? s ) ? s : null, "0.000" );
-      }
-   }
-
-   /// <summary>
-   /// Rank per run and, in place of a median rank, the tie band for latency and each QPS level.
-   /// Why the band and not the median rank: the median of three per-run ranks reads as a strict
-   /// rank, and targets whose ranges overlap cannot be ranked from these runs.
-   /// </summary>
-   /// <param name="md">Output.</param>
-   /// <param name="report">The report.</param>
-   private static void AppendRanks( StringBuilder md, ConsolidatedReport report )
-   {
-      var metrics = new List<(string Key, string Title)> { ( "p50Ms", "p50 (1 = lowest)" ) };
-      metrics.AddRange( Levels( report ).AsEnumerable().Reverse().Select( l => ( $"qps@{l}", $"QPS@{l} (1 = highest)" ) ) );
-      foreach( (string key, string title) in metrics )
-      {
-         md.AppendLine( $"## Rank per run: {title}" ).AppendLine();
-         var header = new List<string> { "target" };
-         header.AddRange( report.Runs.Select( r => r.Name ) );
-         header.Add( "band" );
-         Table( md, header, report.TargetSummaries.Select( t =>
-         {
-            RankSpread? ranks = t.Ranks.TryGetValue( key, out RankSpread? r ) ? r : null;
-            var cells = new List<string> { t.Name };
-            cells.AddRange( report.Runs.Select( ( _, i ) => ranks != null && i < ranks.PerRun.Count ? Int( ranks.PerRun[i] ) : "-" ) );
-            cells.Add( BandOf( report, key, t.Name ) );
-            return cells.ToArray();
-         } ) );
-      }
-   }
-
-   /// <summary>
-   /// Each pair, run by run, then the summary of the per-run ratios.
-   /// </summary>
-   /// <param name="md">Output.</param>
-   /// <param name="report">The report.</param>
-   private static void AppendPairs( StringBuilder md, ConsolidatedReport report )
-   {
-      List<string> levels = Levels( report );
-      foreach( PairSummary pair in report.Pairs )
-      {
-         md.AppendLine( $"## Paired per run: {pair.A} / {pair.B}" ).AppendLine();
-         var header = new List<string> { "run", $"{pair.A} p50 ms", $"{pair.B} p50 ms", "p50 ratio", "p95 ratio" };
-         header.AddRange( levels.SelectMany( l => new[] { $"{pair.A} QPS@{l}", $"{pair.B} QPS@{l}", $"QPS@{l} ratio" } ) );
-         header.AddRange( new[] { "recall diff", "nDCG diff", $"{pair.A} order", $"{pair.B} order" } );
-         Table( md, header, pair.Runs.Select( r =>
-         {
-            var cells = new List<string> { r.Run, Ms( r.AP50Ms ), Ms( r.BP50Ms ), Number( r.P50Ratio, "0.000" ), Number( r.P95Ratio, "0.000" ) };
-            cells.AddRange( levels.SelectMany( l => new[] { Number( r.AQps[l], "0.0" ), Number( r.BQps[l], "0.0" ), Number( r.QpsRatio[l], "0.000" ) } ) );
-            cells.AddRange( new[] { Number( r.RecallDifference, "0.000" ), Number( r.NdcgDifference, "0.000" ), Int( r.AOrder ), Int( r.BOrder ) } );
-            return cells.ToArray();
-         } ) );
-         var rows = new List<string[]>
-         {
-            SpreadRow( "p50 ratio", pair.P50Ratio, "0.000", $"{pair.A} lower p50", pair.RunsALowerP50 ),
-            SpreadRow( "p95 ratio", pair.P95Ratio, "0.000", "-", null ),
-         };
-         rows.AddRange( levels.Select( l => SpreadRow( $"QPS@{l} ratio", pair.QpsRatio[l], "0.000", $"{pair.A} higher QPS@{l}", pair.RunsAHigherQps[l] ) ) );
-         rows.Add( SpreadRow( "recall diff", pair.RecallDifference, "0.000", "-", null ) );
-         rows.Add( SpreadRow( "nDCG diff", pair.NdcgDifference, "0.000", "-", null ) );
-         rows.Add( new[] { "target order", "-", "-", "-", "-", $"{pair.A} ran before {pair.B}", pair.RunsARanFirst.HasValue ? pair.RunsARanFirst.Value.ToString( CultureInfo.InvariantCulture ) : MISSING } );
-         Table( md, new[] { "per-run value", "median", "min", "max", "n", "runs counted", "count" }, rows );
-      }
-   }
-
-   /// <summary>
-   /// Exact against default p50, run by run, then the summary per target.
-   /// </summary>
-   /// <param name="md">Output.</param>
-   /// <param name="report">The report.</param>
-   private static void AppendExact( StringBuilder md, ConsolidatedReport report )
-   {
-      if( report.ExactVsDefault.Count == 0 )
-      {
-         return;
-      }
-
-      md.AppendLine( "## Paired per run: exact p50 / default p50" ).AppendLine();
-      foreach( ExactVsDefault hinted in report.ExactVsDefault.Where( e => e.DeclaredPair != null ) )
-      {
-         md.AppendLine( $"- {hinted.Target}, default pair {hinted.DeclaredPair}: {hinted.Note ?? "no note"}" );
-      }
-
-      if( report.ExactVsDefault.Any( e => e.DeclaredPair != null ) )
-      {
+         md.AppendLine( "| differences between the two runs of the largest move |" ).AppendLine( "|---|" );
+         b.MaxMove.Differences.ForEach( d => md.AppendLine( Row( d ) ) );
          md.AppendLine();
       }
 
-      Table( md, new[] { "target", "run", "default p50 ms", "exact p50 ms", "exact - default ms", "exact / default", "exact recall", "exact pass before default@1" },
-         report.ExactVsDefault.SelectMany( e => e.Runs.Select( r => new[]
-         {
-            e.Target, r.Run, Ms( r.DefaultP50Ms ), Ms( r.ExactP50Ms ), Number( r.DifferenceMs, "0.00" ), Number( r.Ratio, "0.000" ),
-            Number( r.ExactRecall, "0.000" ), r.ExactRanFirst.HasValue ? ( r.ExactRanFirst.Value ? "yes" : "no" ) : MISSING,
-         } ) ) );
-      md.AppendLine( "## Exact / default summary" ).AppendLine();
-      Table( md, new[] { "target", "n", "median exact/default", "min", "max", "median exact - default ms", "runs exact slower" },
-         report.ExactVsDefault.Select( e => new[]
-         {
-            e.Target, e.Ratio.N.ToString( CultureInfo.InvariantCulture ), Number( e.Ratio.Median, "0.000" ), Number( e.Ratio.Min, "0.000" ), Number( e.Ratio.Max, "0.000" ),
-            Number( e.DifferenceMs.Median, "0.00" ), $"{e.RunsExactSlower} of {e.Runs.Count}",
-         } ) );
-   }
-
-   /// <summary>
-   /// Carry-through facts per target and run: order, passes, warm-up errors, index proof, durability.
-   /// </summary>
-   /// <param name="md">Output.</param>
-   /// <param name="report">The report.</param>
-   private static void AppendFacts( StringBuilder md, ConsolidatedReport report )
-   {
-      md.AppendLine( "## Recorded per run: order, passes, index state, durability" ).AppendLine();
-      Table( md, new[] { "target", "run", "order", "passOrder", "warm-up errors", "errors", "afterLoad ready", "afterLoad indexed/total", "afterLoad detail", "afterSearch ready", "afterSearch indexed/total", "segments after load / after search", "durability", "load indexNote", "settled", "mean ms" },
-         report.TargetSummaries.SelectMany( t => t.PerRun.Select( r => new[]
-         {
-            t.Name, r.Run, Int( r.OrderInRun ), r.PassOrder == null ? MISSING : string.Join( ", ", r.PassOrder ), Int( r.WarmupErrors ), Int( r.Errors ),
-            Ready( r.AfterLoad ), Counts( r.AfterLoad ), r.AfterLoad == null ? MISSING : r.AfterLoad.Detail ?? MISSING,
-            Ready( r.AfterSearch ), Counts( r.AfterSearch ), Layouts( r ), r.Durability ?? MISSING, r.LoadIndexNote ?? "-",
-            r.Settled.HasValue ? ( r.Settled.Value ? "yes" : "no" + ( r.SettleDetail == null ? string.Empty : ": " + r.SettleDetail ) ) : MISSING,
-            r.MeanMs.HasValue ? $"{Number( r.MeanMs, MsFormat( r.MeanMs.Value ) )} ({r.MeanSource})" : "-",
-         } ) ) );
-   }
-
-   /// <summary>
-   /// The speed ranking: a title that says what was ranked and on how big a collection, the one
-   /// line that says what the numbers do not measure, what a band is, then one table per metric
-   /// in band order. A table never shows a strict rank.
-   /// </summary>
-   /// <param name="md">Output.</param>
-   /// <param name="report">The report.</param>
-   private static void AppendRanking( StringBuilder md, ConsolidatedReport report )
-   {
-      int? rows = report.Settings.Rows;
-      md.AppendLine( $"## {ConsolidateFraming.Title( rows )}" ).AppendLine();
-      md.AppendLine( ConsolidateFraming.Line( rows ) ).AppendLine();
-      md.AppendLine( report.Runs.Count >= 2 ? ConsolidateFraming.BANDS_LINE : ConsolidateFraming.ONE_RUN_LINE ).AppendLine();
-      bool shownCpu = false;
-      foreach( MetricBands metric in report.Bands )
-      {
-         md.AppendLine( $"### {metric.Title}" ).AppendLine();
-         string? cpuLevel = ClientCpuLevelOf( report, metric );
-         shownCpu |= cpuLevel != null;
-         var header = new List<string> { metric.Banded ? "band" : "order in this run", "target", metric.Banded ? "median [min, max]" : "value" };
-         if( cpuLevel != null )
-         {
-            header.Add( "client CPU ms/search" );
-         }
-
-         header.AddRange( new[] { "runs", "engine notes" } );
-         Table( md, header, metric.Entries.Select( e => RankingRow( report, metric, e, cpuLevel ) ) );
-      }
-
-      if( shownCpu )
-      {
-         md.AppendLine( ConsolidateFraming.CLIENT_CPU_LINE ).AppendLine();
-      }
-
-      md.AppendLine( ENGINE_NOTES_LINE ).AppendLine();
-   }
-
-   /// <summary>
-   /// The concurrency level whose client CPU per search belongs beside a metric (one searcher for
-   /// the latency, the level itself for a QPS table), or null when no target recorded one.
-   /// </summary>
-   /// <param name="report">The report.</param>
-   /// <param name="metric">The metric's bands.</param>
-   /// <returns>The level key ("1", "8"), or null when the table has no such column.</returns>
-   private static string? ClientCpuLevelOf( ConsolidatedReport report, MetricBands metric )
-   {
-      string level = metric.Metric == "p50Ms" ? "1" : metric.Metric.StartsWith( "qps@", StringComparison.Ordinal ) ? metric.Metric["qps@".Length..] : string.Empty;
-      return level.Length > 0 && report.TargetSummaries.Any( t => t.ClientCpuMsPerSearch.ContainsKey( level ) ) ? level : null;
-   }
-
-   /// <summary>
-   /// The concurrency levels at which at least one target recorded the client's CPU per search, lowest first.
-   /// </summary>
-   /// <param name="report">The report.</param>
-   /// <returns>The level keys; empty when no run recorded it.</returns>
-   private static List<string> ClientCpuLevels( ConsolidatedReport report )
-   {
-      return report.TargetSummaries.SelectMany( t => t.ClientCpuMsPerSearch.Keys ).Distinct()
-         .OrderBy( k => int.TryParse( k, NumberStyles.Integer, CultureInfo.InvariantCulture, out int l ) ? l : int.MaxValue ).ToList();
-   }
-
-   /// <summary>
-   /// One row of a ranking table: band (or order in a one-run report), target, value, the client
-   /// CPU per search when the table shows it, runs, note kinds.
-   /// </summary>
-   /// <param name="report">The report.</param>
-   /// <param name="metric">The metric's bands.</param>
-   /// <param name="entry">The target's place.</param>
-   /// <param name="cpuLevel">Level whose client CPU per search is shown, or null for no such column.</param>
-   /// <returns>The cells.</returns>
-   private static string[] RankingRow( ConsolidatedReport report, MetricBands metric, BandEntry entry, string? cpuLevel )
-   {
-      bool higher = metric.HigherIsBetter;
-      string value = entry.Median.HasValue ? ( metric.Banded ? $"{Speed( entry.Median, higher )} [{Speed( entry.Min, higher )}, {Speed( entry.Max, higher )}]" : Speed( entry.Median, higher ) ) : "-";
-      var cells = new List<string> { metric.Banded ? Int( entry.Band, "-" ) : Int( entry.OrderInBand, "-" ), entry.Target, value };
-      if( cpuLevel != null )
-      {
-         Spread? cpu = report.TargetSummaries.FirstOrDefault( t => t.Name == entry.Target )?.ClientCpuMsPerSearch.GetValueOrDefault( cpuLevel );
-         cells.Add( cpu == null ? "-" : metric.Banded ? Range( cpu, MsFormat ) : Ms( cpu.Median ) );
-      }
-
-      cells.AddRange( new[] { entry.N.ToString( CultureInfo.InvariantCulture ), NoteKinds( report, entry.Target ) } );
-      return cells.ToArray();
-   }
-
-   /// <summary>
-   /// A speed value: one decimal for QPS, the millisecond format for latency, "-" when missing.
-   /// </summary>
-   /// <param name="value">Value.</param>
-   /// <param name="higherIsBetter">True for QPS.</param>
-   /// <returns>Text.</returns>
-   private static string Speed( double? value, bool higherIsBetter )
-   {
-      return value.HasValue ? Number( value, higherIsBetter ? "0.0" : MsFormat( value.Value ) ) : "-";
-   }
-
-   /// <summary>
-   /// The per-engine notes: what a reader needs to know about an engine to read its speed, each
-   /// with where it came from, and the flags the engine carries (their evidence is under Flags).
-   /// </summary>
-   /// <param name="md">Output.</param>
-   /// <param name="report">The report.</param>
-   private static void AppendEngineNotes( StringBuilder md, ConsolidatedReport report )
-   {
-      md.AppendLine( "## Per-engine notes" ).AppendLine();
-      var rows = new List<string[]>();
-      foreach( TargetSummary t in report.TargetSummaries )
-      {
-         rows.AddRange( t.EngineNotes.Select( n => new[] { t.Name, n.Kind, n.Text, n.Source } ) );
-         string[] kinds = report.Flags.Where( f => f.Target == t.Name ).Select( f => f.Kind ).ToArray();
-         if( kinds.Length > 0 )
-         {
-            rows.Add( new[] { t.Name, "flags", string.Join( ", ", kinds ) + " (evidence under Flags)", ConsolidateEngineNotes.SOURCE_RESULTS } );
-         }
-      }
-
-      Table( md, new[] { "target", "kind", "note", "source" }, rows );
-   }
-
-   /// <summary>
-   /// The band of a target for a metric, "-" when the metric has no bands (one run) or no value.
-   /// </summary>
-   /// <param name="report">The report.</param>
-   /// <param name="metric">Metric key ("p50Ms", "qps@8").</param>
-   /// <param name="target">Target name.</param>
-   /// <returns>The band number as text, or "-".</returns>
-   private static string BandOf( ConsolidatedReport report, string metric, string target )
-   {
-      BandEntry? entry = report.Bands.FirstOrDefault( b => b.Metric == metric )?.Entries.FirstOrDefault( e => e.Target == target );
-      return Int( entry?.Band, "-" );
-   }
-
-   /// <summary>
-   /// The kinds of a target's engine notes and, after "flags:", the kinds of every flag the target
-   /// carries, or "-" when it has neither. Why the flags are here: the unsettled flag said "rerun
-   /// before quoting" under Flags while the headline tables printed the same number with nothing
-   /// beside it.
-   /// </summary>
-   /// <param name="report">The report.</param>
-   /// <param name="target">Target name.</param>
-   /// <returns>E.g. "cpu-cap, exact-by-design; flags: unsettled-target, spread".</returns>
-   private static string NoteKinds( ConsolidatedReport report, string target )
-   {
-      string[] kinds = report.TargetSummaries.FirstOrDefault( t => t.Name == target )?.EngineNotes.Select( n => n.Kind ).ToArray() ?? Array.Empty<string>();
-      string[] flags = report.Flags.Where( f => f.Target == target ).Select( f => f.Kind ).Distinct( StringComparer.Ordinal ).ToArray();
-      var parts = new List<string>();
-      if( kinds.Length > 0 )
-      {
-         parts.Add( string.Join( ", ", kinds ) );
-      }
-
-      if( flags.Length > 0 )
-      {
-         parts.Add( "flags: " + string.Join( ", ", flags ) );
-      }
-
-      return parts.Count == 0 ? "-" : string.Join( "; ", parts );
-   }
-
-   /// <summary>
-   /// The segment layouts a run reported for a target, "after load / after search", "-" for one not reported.
-   /// </summary>
-   /// <param name="facts">The target's facts in one run.</param>
-   /// <returns>Text such as "2 segments / 2 segments".</returns>
-   private static string Layouts( TargetRunFacts facts )
-   {
-      return facts.SegmentLayoutAfterLoad == null && facts.SegmentLayoutAfterSearch == null ? "-" : $"{facts.SegmentLayoutAfterLoad ?? "-"} / {facts.SegmentLayoutAfterSearch ?? "-"}";
-   }
-
-   /// <summary>
-   /// Every flag, one row per target and kind.
-   /// </summary>
-   /// <param name="md">Output.</param>
-   /// <param name="report">The report.</param>
-   private static void AppendFlags( StringBuilder md, ConsolidatedReport report )
-   {
-      md.AppendLine( "## Flags" ).AppendLine();
-      Table( md, new[] { "target", "flag", "runs", "detail" }, report.Flags.Select( f => new[]
-      {
-         f.Target, f.Kind, $"{f.Runs.Count} of {report.Runs.Count}", f.Detail,
-      } ) );
-   }
-
-   /// <summary>
-   /// The rules the numbers follow, as bullets.
-   /// </summary>
-   /// <param name="md">Output.</param>
-   /// <param name="report">The report.</param>
-   private static void AppendNotes( StringBuilder md, ConsolidatedReport report )
-   {
-      if( report.Notes.Count == 0 )
-      {
-         return;
-      }
-
-      md.AppendLine( "## Notes" ).AppendLine();
-      report.Notes.ForEach( n => md.AppendLine( $"- {n}" ) );
+      SplitsTable( md, b );
+      md.AppendLine( "| run not in the basis | reason |" ).AppendLine( "|---|---|" );
+      b.LeftOut.ForEach( l => md.AppendLine( Row( l.Folder, l.Reason ) ) );
       md.AppendLine();
    }
 
    /// <summary>
-   /// A recorded setting with the source when it was derived, "missing" when it was not recorded.
-   /// </summary>
-   /// <param name="value">The value, or null.</param>
-   /// <param name="settings">The report's settings (holds the derived sources).</param>
-   /// <param name="field">Field name in the derived map.</param>
-   /// <returns>Text such as "Debug (from the path of the binary in the command line)".</returns>
-   private static string Recorded( string? value, RunSettings settings, string field )
-   {
-      return value == null ? MISSING : settings.Derived.TryGetValue( field, out string? how ) ? $"{value} ({how})" : value;
-   }
-
-   /// <summary>
-   /// A table with one column per run plus a summary column, from a per-target spread.
+   /// The setup splits: each change of an engine's recorded setup between basis runs, the field that changed, the largest moves it hides and the threshold they would give.
    /// </summary>
    /// <param name="md">Output.</param>
-   /// <param name="report">The report.</param>
-   /// <param name="summaryTitle">Title of the summary column.</param>
-   /// <param name="spread">The spread of a target, or null.</param>
-   /// <param name="format">Number format.</param>
-   private static void PerRunTable( StringBuilder md, ConsolidatedReport report, string summaryTitle, Func<TargetSummary, Spread?> spread, string format )
+   /// <param name="b">The basis.</param>
+   private static void SplitsTable( StringBuilder md, BasisInfo b )
    {
-      var header = new List<string> { "target" };
-      header.AddRange( report.Runs.Select( r => r.Name ) );
-      header.Add( summaryTitle );
-      Table( md, header, report.TargetSummaries.Select( t =>
+      if( b.SetupSplits.Count == 0 )
       {
-         Spread? s = spread( t );
-         var cells = new List<string> { t.Name };
-         cells.AddRange( report.Runs.Select( ( _, i ) => s != null && i < s.PerRun.Count ? Number( s.PerRun[i], format ) : "-" ) );
-         cells.Add( Number( s?.Median, format ) );
-         return cells.ToArray();
-      } ) );
-   }
-
-   /// <summary>
-   /// One summary row: median, min, max, n, and an optional count of runs.
-   /// </summary>
-   /// <param name="label">Row label.</param>
-   /// <param name="s">The spread.</param>
-   /// <param name="format">Number format.</param>
-   /// <param name="countLabel">What the count counts, or "-".</param>
-   /// <param name="count">The count, or null.</param>
-   /// <returns>The cells.</returns>
-   private static string[] SpreadRow( string label, Spread s, string format, string countLabel, int? count )
-   {
-      return new[]
-      {
-         label, Number( s.Median, format ), Number( s.Min, format ), Number( s.Max, format ), s.N.ToString( CultureInfo.InvariantCulture ),
-         countLabel, count.HasValue ? count.Value.ToString( CultureInfo.InvariantCulture ) : "-",
-      };
-   }
-
-   /// <summary>
-   /// Writes a Markdown table followed by a blank line; "(none)" when there are no rows.
-   /// </summary>
-   /// <param name="md">Output.</param>
-   /// <param name="header">Column titles.</param>
-   /// <param name="rows">Rows of cells.</param>
-   private static void Table( StringBuilder md, IReadOnlyList<string> header, IEnumerable<string[]> rows )
-   {
-      List<string[]> list = rows.ToList();
-      if( list.Count == 0 )
-      {
-         md.AppendLine( "(none)" ).AppendLine();
          return;
       }
 
-      md.AppendLine( "| " + string.Join( " | ", header.Select( Cell ) ) + " |" );
-      md.AppendLine( "|" + string.Concat( header.Select( _ => "---|" ) ) );
-      foreach( string[] row in list )
+      md.AppendLine( "| setup split | fields changed | between | one-engine move hidden | pair move hidden | threshold if counted |" ).AppendLine( "|---|---|---|---|---|---|" );
+      foreach( SetupSplit x in b.SetupSplits )
       {
-         md.AppendLine( "| " + string.Join( " | ", row.Select( Cell ) ) + " |" );
+         string one = x.OneEngine == null ? string.Empty : $"{ConsolidateSources.Percent( x.OneEngine.MoveBp )}% {ClaimMetrics.Label( x.OneEngine.Metric )}";
+         string pair = x.Pair == null ? string.Empty : $"{ConsolidateSources.Percent( x.Pair.MoveBp )}% {x.Pair.Pair} {ClaimMetrics.Label( x.Pair.Metric )}";
+         md.AppendLine( Row( x.Target, string.Join( ", ", x.Fields ), $"{ConsolidateSources.List( x.Before.Sessions )} vs {ConsolidateSources.List( x.After.Sessions )}", one, pair, $"{ConsolidateSources.Percent( x.TBpIfCounted )}%" ) );
       }
 
       md.AppendLine();
    }
 
    /// <summary>
-   /// Concurrency levels as dictionary keys, lowest first.
+   /// One metric table with its captions, row notes and flags.
    /// </summary>
+   /// <param name="md">Output.</param>
    /// <param name="report">The report.</param>
-   /// <returns>The level keys.</returns>
-   private static List<string> Levels( ConsolidatedReport report )
+   /// <param name="table">The table.</param>
+   /// <param name="printed">Flag texts printed so far: a target-level flag is the same evidence under every metric, and later tables show its code alone.</param>
+   private static void Table( StringBuilder md, ConsolidatedReport report, MetricTable table, HashSet<string> printed )
    {
-      return report.TargetSummaries.SelectMany( t => t.Qps.Keys ).Distinct()
-         .OrderBy( k => int.TryParse( k, NumberStyles.Integer, CultureInfo.InvariantCulture, out int l ) ? l : int.MaxValue ).ToList();
-   }
-
-   /// <summary>
-   /// "median [min, max]", or "-" when no run had the value.
-   /// </summary>
-   /// <param name="s">The spread.</param>
-   /// <param name="format">Picks the number format from the value.</param>
-   /// <returns>Text.</returns>
-   private static string Range( Spread s, Func<double, string> format )
-   {
-      if( s.Median is not double median )
+      Section( md, ClaimMetrics.Label( table.Metric ) );
+      Paragraph( md, report, $"table.{table.Metric}.caption", $"table.{table.Metric}.oneSession" );
+      List<string> sessions = report.Sessions.Select( s => s.Name ).ToList();
+      int dec = ConsolidateText.Decimals( table.Metric );
+      bool mode = table.Metric != ClaimMetrics.EXACT;
+      md.AppendLine( "| engine | " + string.Join( " | ", sessions.Select( s => $"{s} min-max" ) ) + $" | median of {report.RunsShown} |{( mode ? " search |" : string.Empty )} not separated from | flags |" );
+      md.AppendLine( "|---|" + string.Concat( sessions.Select( _ => "---|" ) ) + "---|" + ( mode ? "---|" : string.Empty ) + "---|---|" );
+      foreach( MetricRow row in table.Rows )
       {
-         return "-";
+         IEnumerable<string> ranges = sessions.Select( s => row.PerSession.TryGetValue( s, out SessionFigures? f ) ? $"{ConsolidateSources.Number( f.Min, dec )}-{ConsolidateSources.Number( f.Max, dec )}" : "one session" );
+         IEnumerable<string> cells = new[] { row.Display }.Concat( ranges ).Append( ConsolidateSources.Number( row.Median, dec ) );
+         if( mode )
+         {
+            cells = cells.Append( row.SearchMode ?? string.Empty );
+         }
+
+         md.AppendLine( Row( cells.Append( string.Join( ", ", row.NotSeparatedFrom ) ).Append( string.Join( ", ", row.Flags.Select( f => f.Code ).Distinct( StringComparer.Ordinal ) ) ).ToArray() ) );
       }
 
-      return $"{Number( median, format( median ) )} [{Number( s.Min, format( s.Min!.Value ) )}, {Number( s.Max, format( s.Max!.Value ) )}]";
+      md.AppendLine();
+      Paragraph( md, report, $"table.{table.Metric}.absent" );
+      foreach( MetricRow row in table.Rows.Where( r => r.Note != null ) )
+      {
+         md.AppendLine( row.Note ).AppendLine();
+      }
+
+      foreach( RowFlag flag in table.Rows.SelectMany( r => r.Flags ) )
+      {
+         if( printed.Add( flag.Text ) )
+         {
+            md.AppendLine( flag.Text ).AppendLine();
+         }
+      }
    }
 
    /// <summary>
-   /// Millisecond format: two decimals below 10 ms, one above (same rule as results.md).
+   /// The recall table.
    /// </summary>
-   /// <param name="ms">Value.</param>
-   /// <returns>Format string.</returns>
-   private static string MsFormat( double ms )
+   /// <param name="md">Output.</param>
+   /// <param name="report">The report.</param>
+   private static void RecallTable( StringBuilder md, ConsolidatedReport report )
    {
-      return ms < 10 ? "0.00" : "0.0";
+      md.AppendLine( "| engine | hits per run | of | differs |" ).AppendLine( "|---|---|---|---|" );
+      foreach( RecallRow r in report.Recall )
+      {
+         md.AppendLine( Row( r.Target, string.Join( "; ", r.Hits.Select( h => $"{h.Key}: {string.Join( ", ", h.Value )}" ) ), r.Of.ToString( CultureInfo.InvariantCulture ), r.Differs ? "yes" : "no" ) );
+      }
+
+      md.AppendLine();
    }
 
    /// <summary>
-   /// Milliseconds with <see cref="MsFormat"/>, "-" when missing.
+   /// The why table: facts, then costs.
    /// </summary>
-   /// <param name="ms">Value.</param>
-   /// <returns>Text.</returns>
-   private static string Ms( double? ms )
+   /// <param name="md">Output.</param>
+   /// <param name="report">The report.</param>
+   private static void WhyTable( StringBuilder md, ConsolidatedReport report )
    {
-      return ms.HasValue ? Number( ms, MsFormat( ms.Value ) ) : "-";
+      md.AppendLine( "| engine | kind | fact | confidence | source |" ).AppendLine( "|---|---|---|---|---|" );
+      foreach( WhyRow row in report.Why )
+      {
+         row.Facts.ForEach( f => md.AppendLine( Row( row.Target, f.Kind + ( f.Mode == null ? string.Empty : $" ({f.Mode})" ), f.Text, f.Confidence, f.Where ) ) );
+      }
+
+      md.AppendLine().AppendLine( "| engine | engine CPU ms/search @1 | @8 | client CPU ms/search @1 | @8 | engine CPUs busy @8 |" ).AppendLine( "|---|---|---|---|---|---|" );
+      foreach( WhyRow row in report.Why )
+      {
+         WhyCosts c = row.Costs;
+         md.AppendLine( Row( row.Target, Cost( c.EngineCpuMsPerSearch, "1" ), Cost( c.EngineCpuMsPerSearch, "8" ), Cost( c.ClientCpuMsPerSearch, "1" ), Cost( c.ClientCpuMsPerSearch, "8" ), c.EngineCpusBusyAt8 is double busy ? ConsolidateSources.Number( busy, 2 ) : string.Empty ) );
+      }
+
+      md.AppendLine();
    }
 
    /// <summary>
-   /// A number in invariant culture, "-" when missing.
+   /// The drift section with its lists (two-session mode).
    /// </summary>
-   /// <param name="value">Value.</param>
-   /// <param name="format">Format string.</param>
-   /// <returns>Text.</returns>
-   private static string Number( double? value, string format )
+   /// <param name="md">Output.</param>
+   /// <param name="report">The report.</param>
+   private static void Drift( StringBuilder md, ConsolidatedReport report )
    {
-      return ConsolidateMath.IsNumber( value ) ? value!.Value.ToString( format, CultureInfo.InvariantCulture ) : "-";
+      if( report.Drift == null )
+      {
+         return;
+      }
+
+      Section( md, "Drift between the sessions" );
+      Paragraph( md, report, "drift" );
+      md.AppendLine( "| unconfirmed order | ahead | behind | held in |" ).AppendLine( "|---|---|---|---|" );
+      report.Drift.UnconfirmedOrders.ForEach( u => md.AppendLine( Row( ClaimMetrics.Label( u.Metric ), u.A, u.B, u.Session ) ) );
+      md.AppendLine().AppendLine( "| close to the line | ahead | behind | lowest ratio, bp |" ).AppendLine( "|---|---|---|---|" );
+      report.Drift.CloseToLine.ForEach( c => md.AppendLine( Row( ClaimMetrics.Label( c.Metric ), c.A, c.B, c.MinRatioBp.ToString( CultureInfo.InvariantCulture ) ) ) );
+      md.AppendLine().AppendLine( "| on the line | ahead | behind | lowest ratio, bp |" ).AppendLine( "|---|---|---|---|" );
+      report.Drift.OnLine.ForEach( c => md.AppendLine( Row( ClaimMetrics.Label( c.Metric ), c.A, c.B, c.MinRatioBp.ToString( CultureInfo.InvariantCulture ) ) ) );
+      md.AppendLine();
    }
 
    /// <summary>
-   /// A whole number, or "missing" when the result files did not record it.
+   /// The dropped mean-based clock warnings, quoted as the runs recorded them, with the recomputed medians.
    /// </summary>
-   /// <param name="value">Value.</param>
-   /// <returns>Text.</returns>
-   private static string Int( int? value )
+   /// <param name="md">Output.</param>
+   /// <param name="report">The report.</param>
+   private static void DroppedTable( StringBuilder md, ConsolidatedReport report )
    {
-      return value.HasValue ? value.Value.ToString( CultureInfo.InvariantCulture ) : MISSING;
+      if( report.Clock.DroppedWarnings.Count == 0 )
+      {
+         return;
+      }
+
+      md.AppendLine( "| run | recorded warning | engine median MHz | client median MHz |" ).AppendLine( "|---|---|---|---|" );
+      report.Clock.DroppedWarnings.ForEach( d => md.AppendLine( Row( d.Run, d.Text, d.EngineMedianMhz?.ToString( CultureInfo.InvariantCulture ) ?? string.Empty, d.ClientMedianMhz?.ToString( CultureInfo.InvariantCulture ) ?? string.Empty ) ) );
+      md.AppendLine();
    }
 
    /// <summary>
-   /// A whole number, or the given text when it is missing.
+   /// The images and engine settings tables.
    /// </summary>
-   /// <param name="value">Value.</param>
-   /// <param name="missing">Text for a missing value.</param>
-   /// <returns>Text.</returns>
-   private static string Int( int? value, string missing )
+   /// <param name="md">Output.</param>
+   /// <param name="report">The report.</param>
+   private static void SettingsTable( StringBuilder md, ConsolidatedReport report )
    {
-      return value.HasValue ? value.Value.ToString( CultureInfo.InvariantCulture ) : missing;
+      if( report.Images.Count > 0 )
+      {
+         md.AppendLine( "| engine | image | id | last tagged (UTC) |" ).AppendLine( "|---|---|---|---|" );
+         report.Images.ForEach( i => md.AppendLine( Row( i.Target, i.Ref ?? string.Empty, i.Id, i.LastTagTimeUtc ?? string.Empty ) ) );
+         md.AppendLine();
+      }
+
+      if( report.EngineSettings.Count > 0 )
+      {
+         md.AppendLine( "| engine | setting | value | how |" ).AppendLine( "|---|---|---|---|" );
+         report.EngineSettings.ForEach( r => r.Settings.ForEach( s => md.AppendLine( Row( r.Target, s.Key, s.Value, s.How ) ) ) );
+         md.AppendLine();
+      }
    }
 
    /// <summary>
-   /// Ready flag of an index state: "true", "false", "not written" or "missing".
+   /// The runs-used table.
    /// </summary>
-   /// <param name="state">The state.</param>
-   /// <returns>Text.</returns>
-   private static string Ready( IndexStateFacts? state )
+   /// <param name="md">Output.</param>
+   /// <param name="report">The report.</param>
+   private static void RunsTable( StringBuilder md, ConsolidatedReport report )
    {
-      return state == null ? MISSING : state.Ready.HasValue ? ( state.Ready.Value ? "true" : "false" ) : "not written";
+      md.AppendLine( "| run | session | seed | started (UTC) |" ).AppendLine( "|---|---|---|---|" );
+      foreach( SessionInfo s in report.Sessions )
+      {
+         s.Runs.ForEach( r => md.AppendLine( Row( r.Folder, s.Name, r.Seed?.ToString( CultureInfo.InvariantCulture ) ?? string.Empty, r.StartedUtc ?? string.Empty ) ) );
+      }
+
+      report.Basis.Runs.Where( b => report.Sessions.All( s => s.Name != b.Session ) ).ToList()
+         .ForEach( b => md.AppendLine( Row( b.Folder, b.Session + " (basis)", b.Seed?.ToString( CultureInfo.InvariantCulture ) ?? string.Empty, b.StartedUtc ?? string.Empty ) ) );
+      md.AppendLine();
    }
 
    /// <summary>
-   /// "indexed/total" of an index state, "?" for a count the engine did not give.
+   /// A move cell.
    /// </summary>
-   /// <param name="state">The state.</param>
-   /// <returns>Text.</returns>
-   private static string Counts( IndexStateFacts? state )
+   /// <param name="move">The move, or null.</param>
+   /// <returns>"29.08% mongodb/oracle" or empty.</returns>
+   private static string Move( BasisMove? move )
    {
-      return state == null ? MISSING : $"{state.IndexedVectors?.ToString( CultureInfo.InvariantCulture ) ?? "?"}/{state.TotalVectors?.ToString( CultureInfo.InvariantCulture ) ?? "?"}";
+      return move == null ? string.Empty : $"{ConsolidateSources.Percent( move.MoveBp )}% {move.Target ?? move.Pair}";
    }
 
    /// <summary>
-   /// Distinct values joined, "missing" when there are none.
+   /// A cost cell.
    /// </summary>
-   /// <param name="values">Values.</param>
-   /// <returns>Text.</returns>
-   private static string Join( IReadOnlyList<string> values )
+   /// <param name="costs">Costs by level.</param>
+   /// <param name="level">Level key.</param>
+   /// <returns>The figure with three decimals, or empty.</returns>
+   private static string Cost( Dictionary<string, double?> costs, string level )
    {
-      return values.Count == 0 ? MISSING : string.Join( " / ", values );
+      return costs.TryGetValue( level, out double? v ) && v is double d ? ConsolidateSources.Number( d, 3 ) : string.Empty;
    }
 
    /// <summary>
-   /// Makes text safe inside a Markdown table cell.
+   /// One table row; a '|' inside a cell becomes '/', so no cell can split.
    /// </summary>
-   /// <param name="text">Text.</param>
-   /// <returns>Escaped text.</returns>
-   private static string Cell( string text )
+   /// <param name="cells">Cells.</param>
+   /// <returns>The row.</returns>
+   private static string Row( params string[] cells )
    {
-      return text.Replace( "|", "\\|" ).Replace( "\r", " " ).Replace( "\n", " " );
+      return "| " + string.Join( " | ", cells.Select( c => c.Replace( '|', '/' ).Replace( '\n', ' ' ) ) ) + " |";
    }
 
    #endregion Private Methods

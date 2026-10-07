@@ -4,45 +4,107 @@ using GenericVectorBuilder.Bench.Report;
 namespace GenericVectorBuilder.Bench.Stats;
 
 /// <summary>
-/// The flags of a consolidated report: everything a reader must see before trusting a target's
-/// numbers. Some come from what an engine said about itself (index not ready, durability not
-/// stated), some from the spread between runs, some from how the box was set up (governor, busy
-/// box, client and engines on the same cores, debug build).
-/// Why computed here and not in the page: the markdown and the web page must show the same
-/// warnings from the same numbers, and a rule that lives in one place can be tested once.
-/// A flag states evidence (the values and the runs), never a cause: why a spread is wide is for
-/// the writeup to argue.
+/// The evidence behind every flag on a row of a v8 table: what the runs recorded about one target's
+/// pass for one metric. A flag states evidence (the run, the pass, the recorded value and where it
+/// sits in results.json), never a cause; <see cref="ConsolidateText"/> turns each item into a
+/// sentence whose sources are exactly these paths.
+/// Codes: busy-box (the run flagged the pass busy from its own outside load during the pass),
+/// clock-off (the median rule puts the pass off its pinned clock), clock-not-read, governor,
+/// throttle-rise (the thermal throttle counters rose during the target),
+/// unsettled, index-not-ready, segment-layout-differs, search-errors, warmup-errors and one-session
+/// (set by the consolidator for a target whose setup changed between sessions).
+/// What is gone and why: the busy flag from the 1-minute load average (it counted the engine's own
+/// start-up as outside work), the spread and p50-against-mean flags (the claim rule reads every run's
+/// value, and p50 and QPS@1 come from one pass), and the bands.
 /// </summary>
 public static class ConsolidateFlags
 {
    #region Data Members
 
-   /// <summary>A target is flagged when its largest p50 or QPS across runs is more than this many times its smallest.</summary>
-   public const double SPREAD_RATIO = 1.15;
+   /// <summary>The run flagged the pass busy (outside load during the pass above its limit).</summary>
+   public const string BUSY_BOX = "busy-box";
 
-   /// <summary>
-   /// p50 above the mean latency by more than this ratio is flagged: latency has a long tail
-   /// to the slow side, so the median should sit at or under the mean, and a median above it
-   /// means the two numbers were taken under different conditions.
-   /// </summary>
-   public const double P50_ABOVE_MEAN_RATIO = 1.15;
+   /// <summary>The recomputed clock of the pass was off the pinned clock.</summary>
+   public const string CLOCK_OFF = "clock-off";
 
-   /// <summary>Mean above p50 by more than this ratio is flagged (a heavy tail, or two passes under different conditions).</summary>
-   public const double MEAN_ABOVE_P50_RATIO = 1.5;
+   /// <summary>A CPU group had no clock reading during the pass.</summary>
+   public const string CLOCK_NOT_READ = "clock-not-read";
+
+   /// <summary>The pass ran under another governor than performance.</summary>
+   public const string GOVERNOR = "governor-not-performance";
+
+   /// <summary>The thermal throttle counters rose during the target.</summary>
+   public const string THROTTLE = "throttle-rise";
+
+   /// <summary>The run recorded the target as not settled before it was timed.</summary>
+   public const string UNSETTLED = "unsettled";
+
+   /// <summary>The engine reported its index not ready after the load or after the searches.</summary>
+   public const string INDEX_NOT_READY = "index-not-ready";
+
+   /// <summary>The engine's segment layout differed between runs.</summary>
+   public const string SEGMENT_LAYOUT = "segment-layout-differs";
+
+   /// <summary>Timed searches failed.</summary>
+   public const string SEARCH_ERRORS = "search-errors";
+
+   /// <summary>Untimed warm-up searches failed.</summary>
+   public const string WARMUP_ERRORS = "warmup-errors";
+
+   /// <summary>The target's setup differed between the sessions; one session shown, not ranked.</summary>
+   public const string ONE_SESSION = "one-session";
+
+   /// <summary>Every code, in the order rows list them; the page's legend allow-list.</summary>
+   public static readonly IReadOnlyList<string> CODES = new[] { BUSY_BOX, CLOCK_OFF, CLOCK_NOT_READ, GOVERNOR, THROTTLE, UNSETTLED, INDEX_NOT_READY, SEGMENT_LAYOUT, SEARCH_ERRORS, WARMUP_ERRORS, ONE_SESSION };
 
    #endregion Data Members
 
    #region Public Methods
 
    /// <summary>
-   /// Builds every flag for the listed targets.
+   /// The flag evidence of one target on one metric over the runs shown.
    /// </summary>
-   /// <param name="summaries">Target summaries, in target order; each one's PerRun follows <paramref name="used"/>.</param>
-   /// <param name="used">Runs used, oldest first.</param>
-   /// <returns>The flags, grouped by target in target order.</returns>
-   public static List<Flag> Build( IReadOnlyList<TargetSummary> summaries, IReadOnlyList<RunResult> used )
+   /// <param name="target">Target name.</param>
+   /// <param name="metric">Metric id.</param>
+   /// <param name="runs">The runs shown for the row, oldest first.</param>
+   /// <returns>Evidence items in <see cref="CODES"/> order, then run order.</returns>
+   public static List<FlagEvidence> For( string target, string metric, IReadOnlyList<RunResult> runs )
    {
-      return summaries.SelectMany( s => For( s, used ) ).ToList();
+      var items = new List<FlagEvidence>();
+      string passName = ClaimMetrics.PassOf( metric );
+      foreach( RunResult run in runs )
+      {
+         int index = LastIndex( run.Conditions.Passes, target, passName );
+         if( index >= 0 )
+         {
+            PassPart( items, run, run.Conditions.Passes[index], index );
+         }
+
+         TargetPart( items, run, run.Find( target )! );
+      }
+
+      Layout( items, target, runs );
+      return items.Select( ( item, order ) => ( item, order ) ).OrderBy( x => CodeIndex( x.item.Code ) ).ThenBy( x => x.order ).Select( x => x.item ).ToList();
+   }
+
+   /// <summary>
+   /// The index of the last recorded pass of a target with a name (a pass name can repeat after a settle extension; the last one is the timed one).
+   /// </summary>
+   /// <param name="passes">The run's passes.</param>
+   /// <param name="target">Target.</param>
+   /// <param name="pass">Pass name.</param>
+   /// <returns>The index, or -1.</returns>
+   public static int LastIndex( IReadOnlyList<PassFacts> passes, string target, string pass )
+   {
+      for( int i = passes.Count - 1; i >= 0; i-- )
+      {
+         if( passes[i].Target == target && passes[i].Pass == pass )
+         {
+            return i;
+         }
+      }
+
+      return -1;
    }
 
    #endregion Public Methods
@@ -50,337 +112,133 @@ public static class ConsolidateFlags
    #region Private Methods
 
    /// <summary>
-   /// The flags for one target.
+   /// Flags read from one pass: busy box, clock off, clock not read, governor.
    /// </summary>
-   /// <param name="s">The target's summary.</param>
-   /// <param name="used">Runs used.</param>
-   /// <returns>The flags.</returns>
-   private static IEnumerable<Flag> For( TargetSummary s, IReadOnlyList<RunResult> used )
-   {
-      var flags = new List<Flag>();
-      List<TargetRunFacts> runs = s.PerRun;
-      AddFlag( flags, s.Name, "index-not-ready-after-load", runs.Where( r => r.AfterLoad != null && r.AfterLoad.Ready != true ).Select( r => ( r.Run, StateText( r.AfterLoad! ) ) ) );
-      AddFlag( flags, s.Name, "index-not-ready-after-search", runs.Where( r => r.AfterSearch != null && r.AfterSearch.Ready != true ).Select( r => ( r.Run, StateText( r.AfterSearch! ) ) ) );
-      AddFlag( flags, s.Name, "durability-not-stated", runs.Where( r => r.Durability != null && IsNotStated( r.Durability ) ).Select( r => ( r.Run, r.Durability!.Trim().Length == 0 ? "(empty)" : r.Durability! ) ) );
-      AddFlag( flags, s.Name, "warmup-errors", runs.Where( r => r.WarmupErrors > 0 ).Select( r => ( r.Run, $"{r.WarmupErrors} warm-up errors" ) ) );
-      AddFlag( flags, s.Name, "search-errors", runs.Where( r => r.Errors > 0 ).Select( r => ( r.Run, $"{r.Errors} search errors" ) ) );
-      AddFlag( flags, s.Name, "segment-layout-changed", runs.Where( r => r.SegmentLayoutAfterLoad != null && r.SegmentLayoutAfterSearch != null && r.SegmentLayoutAfterLoad != r.SegmentLayoutAfterSearch )
-         .Select( r => ( r.Run, $"{r.SegmentLayoutAfterLoad} after the load, {r.SegmentLayoutAfterSearch} after the searches" ) ) );
-      AddLayoutDifference( flags, s );
-      AddFlag( flags, s.Name, "exact-recall-below-1", runs.Where( r => r.ExactRecall < 1.0 ).Select( r => ( r.Run, $"exactRecall {r.ExactRecall:0.000}" ) ) );
-      AddFlag( flags, s.Name, "fields-missing", runs.Select( ( r, i ) => ( r.Run, string.Join( ", ", MissingFields( r, used[i] ) ) ) ).Where( x => x.Item2.Length > 0 ) );
-      if( s.Engines.Count > 1 || s.Indexes.Count > 1 )
-      {
-         flags.Add( new Flag { Target = s.Name, Kind = "engine-or-index-text-differs", Runs = runs.Select( r => r.Run ).ToList(), Detail = $"{s.Engines.Count} engine texts, {s.Indexes.Count} index texts" } );
-      }
-
-      AddSpread( flags, s );
-      AddMeanFlag( flags, s );
-      AddFlag( flags, s.Name, "unsettled-target", runs.Where( r => r.Settled == false ).Select( r => ( r.Run, r.SettleDetail == null ? "not settled" : "not settled: " + r.SettleDetail ) ) );
-      AddConditionFlags( flags, s.Name, used );
-      return flags;
-   }
-
-   /// <summary>
-   /// Flags a target whose engine reported a different segment layout in different runs, after the
-   /// load, after the searches, or both. The target stays in the report: the flag names each layout
-   /// and the runs that had it, so the numbers are read with the difference in view (see
-   /// <see cref="ConsolidateIdentity"/> for why this is a flag and not a refusal).
-   /// </summary>
-   /// <param name="flags">Receives the flag.</param>
-   /// <param name="s">The target's summary.</param>
-   private static void AddLayoutDifference( List<Flag> flags, TargetSummary s )
-   {
-      var parts = new List<string>();
-      if( ConsolidateIdentity.Difference( s.PerRun.Select( r => ( r.Run, r.SegmentLayoutAfterLoad ) ) ) is string afterLoad )
-      {
-         parts.Add( $"after the load: {afterLoad}" );
-      }
-
-      if( ConsolidateIdentity.Difference( s.PerRun.Select( r => ( r.Run, r.SegmentLayoutAfterSearch ) ) ) is string afterSearch )
-      {
-         parts.Add( $"after the searches: {afterSearch}" );
-      }
-
-      if( parts.Count > 0 )
-      {
-         flags.Add( new Flag { Target = s.Name, Kind = "segment-layout-differs-between-runs", Runs = s.PerRun.Select( r => r.Run ).ToList(), Detail = string.Join( "; ", parts ) + ". Searches ran over different layouts, so the medians mix them." } );
-      }
-   }
-
-   /// <summary>
-   /// Adds one flag covering the given runs, with each distinct detail and its run count.
-   /// Nothing is added when no run qualifies.
-   /// </summary>
-   /// <param name="flags">Receives the flag.</param>
-   /// <param name="target">Target name.</param>
-   /// <param name="kind">Flag kind.</param>
-   /// <param name="items">One (run, evidence text) pair per run it applies to.</param>
-   private static void AddFlag( List<Flag> flags, string target, string kind, IEnumerable<(string Run, string Detail)> items )
-   {
-      List<(string Run, string Detail)> list = items.ToList();
-      if( list.Count == 0 )
-      {
-         return;
-      }
-
-      string text = string.Join( "; ", list.GroupBy( i => i.Detail ).Select( g => g.Count() == list.Count ? g.Key : $"{g.Key} ({g.Count()} run{( g.Count() == 1 ? string.Empty : "s" )})" ) );
-      flags.Add( new Flag { Target = target, Kind = kind, Runs = list.Select( i => i.Run ).ToList(), Detail = text } );
-   }
-
-   /// <summary>
-   /// Flags a target whose p50 or QPS at any level varies by more than <see cref="SPREAD_RATIO"/>
-   /// between runs (two runs at least).
-   /// </summary>
-   /// <param name="flags">Receives the flag.</param>
-   /// <param name="s">The target's summary.</param>
-   private static void AddSpread( List<Flag> flags, TargetSummary s )
-   {
-      var parts = new List<string>();
-      SpreadPart( parts, "p50 ms", s.P50Ms, "0.00" );
-      foreach( KeyValuePair<string, Spread> level in s.Qps )
-      {
-         SpreadPart( parts, $"QPS@{level.Key}", level.Value, "0.0" );
-      }
-
-      if( parts.Count > 0 )
-      {
-         flags.Add( new Flag { Target = s.Name, Kind = "spread", Runs = s.PerRun.Select( r => r.Run ).ToList(), Detail = string.Join( "; ", parts ) } );
-      }
-   }
-
-   /// <summary>
-   /// Adds a "label min to max (xratio over n runs)" entry when the metric's spread is wide.
-   /// </summary>
-   /// <param name="parts">Receives the entry.</param>
-   /// <param name="label">Metric label.</param>
-   /// <param name="spread">The metric over the runs.</param>
-   /// <param name="format">Number format.</param>
-   private static void SpreadPart( List<string> parts, string label, Spread spread, string format )
-   {
-      if( spread.N < 2 || spread.Min is not double min || spread.Max is not double max || min <= 0 || max / min <= SPREAD_RATIO )
-      {
-         return;
-      }
-
-      parts.Add( $"{label} {min.ToString( format, CultureInfo.InvariantCulture )} to {max.ToString( format, CultureInfo.InvariantCulture )} (x{( max / min ).ToString( "0.00#", CultureInfo.InvariantCulture )} over {spread.N} runs)" );
-   }
-
-   /// <summary>
-   /// Flags runs whose p50 and mean latency disagree: p50 well above the mean, or the mean far
-   /// above the p50. The two come from separate passes, so a gap shows the passes ran under
-   /// different conditions (a CPU still ramping up, a warm-up that did not warm).
-   /// </summary>
-   /// <param name="flags">Receives the flag.</param>
-   /// <param name="s">The target's summary.</param>
-   private static void AddMeanFlag( List<Flag> flags, TargetSummary s )
-   {
-      var items = new List<(string Run, string Detail)>();
-      for( int i = 0; i < s.PerRun.Count && i < s.P50Ms.PerRun.Count; i++ )
-      {
-         if( s.P50Ms.PerRun[i] is not double p50 || s.PerRun[i].MeanMs is not double mean || !ConsolidateMath.IsNumber( p50 ) || !ConsolidateMath.IsNumber( mean ) || p50 <= 0 || mean <= 0 )
-         {
-            continue;
-         }
-
-         if( p50 / mean > P50_ABOVE_MEAN_RATIO || mean / p50 > MEAN_ABOVE_P50_RATIO )
-         {
-            items.Add( ( s.PerRun[i].Run, $"p50 {p50.ToString( "0.00", CultureInfo.InvariantCulture )} ms, mean {mean.ToString( "0.00", CultureInfo.InvariantCulture )} ms ({s.PerRun[i].MeanSource}), p50/mean {( p50 / mean ).ToString( "0.00", CultureInfo.InvariantCulture )}" ) );
-         }
-      }
-
-      AddFlag( flags, s.Name, "p50-mean-inconsistent", items );
-   }
-
-   /// <summary>
-   /// The flags about how the box was set up: busy box, CPU governor, client and engine on the
-   /// same cores, and a build that is not Release. The run-level facts apply to every target of
-   /// a run; the per-pass and per-engine records, when the run has them, speak for one target.
-   /// </summary>
-   /// <param name="flags">Receives the flags.</param>
-   /// <param name="target">Target name.</param>
-   /// <param name="used">Runs used.</param>
-   private static void AddConditionFlags( List<Flag> flags, string target, IReadOnlyList<RunResult> used )
-   {
-      AddFlag( flags, target, "busy-box", Join( used, c => BusyText( c, target ) ) );
-      AddFlag( flags, target, "governor-not-performance", Join( used, c => GovernorText( c, target ) ) );
-      AddFlag( flags, target, "client-engine-share-cores", Join( used, c => SharedText( c, target ) ) );
-      AddFlag( flags, target, "not-release-build", Join( used, BuildText ) );
-   }
-
-   /// <summary>
-   /// One (run, evidence) pair per run where the check gives evidence.
-   /// </summary>
-   /// <param name="used">Runs used.</param>
-   /// <param name="check">Gives the evidence text for a run's conditions, or null when the run is fine.</param>
-   /// <returns>The pairs.</returns>
-   private static IEnumerable<(string Run, string Detail)> Join( IReadOnlyList<RunResult> used, Func<RunConditions, string?> check )
-   {
-      return used.Select( r => ( r.Name, Detail: check( r.Conditions ) ) ).Where( x => x.Detail != null ).Select( x => ( x.Name, x.Detail! ) );
-   }
-
-   /// <summary>
-   /// Why the box counts as busy for a target: a 1-minute load average above the run's logical
-   /// CPU count at the start, and any timed pass of the target recorded as busy.
-   /// </summary>
-   /// <param name="c">The run's conditions.</param>
-   /// <param name="target">Target name.</param>
-   /// <returns>Evidence text, or null when the box was not busy.</returns>
-   private static string? BusyText( RunConditions c, string target )
-   {
-      var parts = new List<string>();
-      if( RunConditions.IsBusy( c.LoadAverage, c.LogicalCpus ) )
-      {
-         parts.Add( $"load average {c.LoadAverage} at the start on {c.LogicalCpus} logical CPUs" );
-      }
-
-      parts.AddRange( c.Passes.Where( p => p.Target == target && p.BusyBox ).Select( p => $"busy during {p.Pass}: {p.BusyReason ?? "no reason recorded"}" ) );
-      return parts.Count == 0 ? null : string.Join( "; ", parts );
-   }
-
-   /// <summary>
-   /// Why the CPU governor was not performance for a target: the run's governor, and any timed
-   /// pass of the target that ran under another one.
-   /// </summary>
-   /// <param name="c">The run's conditions.</param>
-   /// <param name="target">Target name.</param>
-   /// <returns>Evidence text, or null when every recorded governor was performance.</returns>
-   private static string? GovernorText( RunConditions c, string target )
-   {
-      var parts = new List<string>();
-      if( c.Governor != null && !RunConditions.IsPerformance( c.Governor ) )
-      {
-         parts.Add( $"governor {c.Governor}" );
-      }
-
-      parts.AddRange( c.Passes.Where( p => p.Target == target && p.Governor != null && !RunConditions.IsPerformance( p.Governor ) ).Select( p => $"governor {p.Governor} during {p.Pass}" ) );
-      return parts.Count == 0 ? null : string.Join( "; ", parts );
-   }
-
-   /// <summary>
-   /// Why the client and a target's engine shared cores: an embedded engine runs inside the
-   /// client, an engine that could not be fully pinned may roam, and CPU lists that overlap (per
-   /// logical CPU or per physical core) are shared. The engine's own CPU list is used when the
-   /// run recorded one, else the run's engine CPUs.
-   /// </summary>
-   /// <param name="c">The run's conditions.</param>
-   /// <param name="target">Target name.</param>
-   /// <returns>Evidence text, or null when they did not share cores or it cannot be told.</returns>
-   private static string? SharedText( RunConditions c, string target )
-   {
-      var parts = new List<string>();
-      EngineFacts? engine = c.Engines.FirstOrDefault( e => e.Target == target );
-      if( engine?.Hosting == "embedded" )
-      {
-         parts.Add( $"embedded engine runs inside the client process on the client CPUs {c.ClientCpus ?? "(all)"}" );
-      }
-
-      if( engine is { Problems.Count: > 0 } )
-      {
-         parts.Add( $"engine not fully pinned to its CPUs: {string.Join( "; ", engine.Problems )}" );
-      }
-
-      string? overlap = OverlapText( c, engine?.Cpus ?? c.EngineCpus );
-      if( overlap != null && engine?.Hosting != "embedded" )
-      {
-         parts.Add( overlap );
-      }
-
-      return parts.Count == 0 ? null : string.Join( "; ", parts );
-   }
-
-   /// <summary>
-   /// Which CPUs or physical cores the client and an engine CPU list have in common.
-   /// </summary>
-   /// <param name="c">The run's conditions.</param>
-   /// <param name="engineCpus">The engine's CPUs, or null when not recorded.</param>
-   /// <returns>Evidence text, or null when they share nothing or a list is missing.</returns>
-   private static string? OverlapText( RunConditions c, string? engineCpus )
-   {
-      ( string? sameCpus, string? sameCores ) = CpuSet.Overlap( c.ClientCpus, engineCpus, c.ThreadSiblings );
-      if( sameCores == null )
-      {
-         return null;
-      }
-
-      string cpus = sameCpus == null ? string.Empty : $"CPUs {sameCpus}";
-      string cores = sameCores == sameCpus ? string.Empty : $"physical cores of CPUs {sameCores} (hyperthread siblings)";
-      return $"client CPUs {c.ClientCpus} and engine CPUs {engineCpus} share {string.Join( " and ", new[] { cpus, cores }.Where( t => t.Length > 0 ) )}";
-   }
-
-   /// <summary>
-   /// "Debug build" with where the value came from when it was derived; null for a Release build
-   /// or an unknown one.
-   /// </summary>
-   /// <param name="c">The run's conditions.</param>
-   /// <returns>Evidence text, or null.</returns>
-   private static string? BuildText( RunConditions c )
-   {
-      if( c.BuildConfiguration == null || c.BuildConfiguration.Equals( "Release", StringComparison.OrdinalIgnoreCase ) )
-      {
-         return null;
-      }
-
-      string source = c.Derived.TryGetValue( "buildConfiguration", out string? how ) ? $" ({how})" : string.Empty;
-      return $"{c.BuildConfiguration} build{source}";
-   }
-
-   /// <summary>
-   /// Index state as short evidence text: "ready false, 0 of 524: detail".
-   /// </summary>
-   /// <param name="state">The state.</param>
-   /// <returns>The text.</returns>
-   private static string StateText( IndexStateFacts state )
-   {
-      string ready = state.Ready?.ToString().ToLowerInvariant() ?? "not written";
-      return $"ready {ready}, {state.IndexedVectors?.ToString() ?? "?"} of {state.TotalVectors?.ToString() ?? "?"}: {state.Detail ?? "no detail"}";
-   }
-
-   /// <summary>
-   /// True for a durability statement that says nothing: "not stated" or empty.
-   /// </summary>
-   /// <param name="durability">The statement.</param>
-   /// <returns>True when nothing was disclosed.</returns>
-   private static bool IsNotStated( string durability )
-   {
-      return durability.Trim().Length == 0 || durability.Trim().Equals( "not stated", StringComparison.OrdinalIgnoreCase );
-   }
-
-   /// <summary>
-   /// Contract fields a run did not record for a target: the target's own and the run's conditions.
-   /// Explicit search settings are not required: the target's index description carries its
-   /// search effort and is compared between runs.
-   /// </summary>
-   /// <param name="facts">The target's facts in one run.</param>
+   /// <param name="items">Receives the evidence.</param>
    /// <param name="run">The run.</param>
-   /// <returns>Names of the missing fields.</returns>
-   private static string[] MissingFields( TargetRunFacts facts, RunResult run )
+   /// <param name="pass">The pass.</param>
+   /// <param name="index">Its index in conditions.passes.</param>
+   private static void PassPart( List<FlagEvidence> items, RunResult run, PassFacts pass, int index )
    {
-      var missing = new List<string>();
-      Missing( missing, facts.OrderInRun == null, "targetOrder" );
-      Missing( missing, facts.PassOrder == null, "passOrder" );
-      Missing( missing, facts.WarmupErrors == null, "warmupErrors" );
-      Missing( missing, facts.AfterLoad == null, "indexState.afterLoad" );
-      Missing( missing, facts.AfterSearch == null, "indexState.afterSearch" );
-      Missing( missing, facts.Durability == null, "durability" );
-      Missing( missing, facts.Settled == null, "settled" );
-      missing.AddRange( run.Conditions.MissingNames() );
-      return missing.ToArray();
+      string at = $"conditions.passes[{index}]";
+      if( pass.BusyBox )
+      {
+         items.Add( new FlagEvidence( BUSY_BOX, run.Name, pass.Target, pass.Pass, index, new[] { ( $"{at}.outsideLoadDuring", Num( pass.OutsideLoadDuring, "0.000" ) ) } ) );
+      }
+
+      PassClock clock = ConsolidateClock.Recompute( run, pass );
+      if( clock.Off )
+      {
+         items.Add( new FlagEvidence( CLOCK_OFF, run.Name, pass.Target, pass.Pass, index, new[] { ( $"{at}.engineMhzMedian", Num( clock.EngineMedian ) ), ( $"{at}.clientMhzMedian", Num( clock.ClientMedian ) ) } ) );
+      }
+
+      if( !clock.Read )
+      {
+         items.Add( new FlagEvidence( CLOCK_NOT_READ, run.Name, pass.Target, pass.Pass, index, Array.Empty<(string, string)>() ) );
+      }
+
+      if( pass.Governor != null && !RunConditions.IsPerformance( pass.Governor ) )
+      {
+         items.Add( new FlagEvidence( GOVERNOR, run.Name, pass.Target, pass.Pass, index, new[] { ( $"{at}.governor", pass.Governor ) } ) );
+      }
    }
 
    /// <summary>
-   /// Adds a name when the condition holds.
+   /// Flags read from the target's own record: unsettled, index not ready, errors.
    /// </summary>
-   /// <param name="missing">Receives the name.</param>
-   /// <param name="isMissing">True when the field was not recorded.</param>
-   /// <param name="name">The field name.</param>
-   private static void Missing( List<string> missing, bool isMissing, string name )
+   /// <param name="items">Receives the evidence.</param>
+   /// <param name="run">The run.</param>
+   /// <param name="t">The target's result.</param>
+   private static void TargetPart( List<FlagEvidence> items, RunResult run, TargetResult t )
    {
-      if( isMissing )
+      string at = $"targets[{t.Name}]";
+      if( run.Conditions.ThrottleByTarget.TryGetValue( t.Name, out RecordedThrottle? rise ) && ( rise.CoreRise > 0 || rise.PackageRise > 0 ) )
       {
-         missing.Add( name );
+         string by = $"conditions.throttleByTarget.{t.Name}";
+         items.Add( new FlagEvidence( THROTTLE, run.Name, t.Name, null, null, new[] { ( by + ".coreRise", Num( rise.CoreRise ) ), ( by + ".packageRise", Num( rise.PackageRise ) ) } ) );
       }
+
+      if( t.Settled == false )
+      {
+         items.Add( new FlagEvidence( UNSETTLED, run.Name, t.Name, null, null, Array.Empty<(string, string)>() ) );
+      }
+
+      foreach( (string name, IndexStateValue? state) in new[] { ( "afterLoad", t.AfterLoad ), ( "afterSearch", t.AfterSearch ) } )
+      {
+         if( state?.Ready == false )
+         {
+            items.Add( new FlagEvidence( INDEX_NOT_READY, run.Name, t.Name, name, null, new[] { ( $"{at}.indexState.{name}.indexedVectors", Num( state.IndexedVectors ) ), ( $"{at}.indexState.{name}.totalVectors", Num( state.TotalVectors ) ) } ) );
+         }
+      }
+
+      if( t.Errors > 0 )
+      {
+         items.Add( new FlagEvidence( SEARCH_ERRORS, run.Name, t.Name, null, null, new[] { ( $"{at}.search.errors", Num( t.Errors ) ) } ) );
+      }
+
+      if( t.WarmupErrors > 0 )
+      {
+         items.Add( new FlagEvidence( WARMUP_ERRORS, run.Name, t.Name, null, null, new[] { ( $"{at}.warmupErrors", Num( t.WarmupErrors ) ) } ) );
+      }
+   }
+
+   /// <summary>
+   /// The segment-layout flag: the layouts after the searches differ between runs (one item per run, value = the engine's own words for its layout).
+   /// </summary>
+   /// <param name="items">Receives the evidence.</param>
+   /// <param name="target">Target.</param>
+   /// <param name="runs">Runs shown.</param>
+   private static void Layout( List<FlagEvidence> items, string target, IReadOnlyList<RunResult> runs )
+   {
+      var layouts = runs.Select( r => ( Run: r.Name, Layout: r.Find( target )!.AfterSearch?.Layout, Raw: SegmentLayout.RawMatch( r.Find( target )!.AfterSearch?.Detail ) ) ).ToList();
+      if( layouts.All( l => l.Layout != null && l.Raw != null ) && layouts.Select( l => l.Layout ).Distinct( StringComparer.Ordinal ).Count() > 1 )
+      {
+         items.AddRange( layouts.Select( l => new FlagEvidence( SEGMENT_LAYOUT, l.Run, target, "afterSearch", null, new[] { ( $"targets[{target}].indexState.afterSearch.detail", l.Raw! ) } ) ) );
+      }
+   }
+
+   /// <summary>
+   /// Position of a code in <see cref="CODES"/>.
+   /// </summary>
+   /// <param name="code">Code.</param>
+   /// <returns>Index.</returns>
+   private static int CodeIndex( string code )
+   {
+      int index = CODES.ToList().IndexOf( code );
+      return index < 0 ? int.MaxValue : index;
+   }
+
+   /// <summary>
+   /// A recorded number as printed, or "not recorded".
+   /// </summary>
+   /// <param name="value">The number.</param>
+   /// <param name="format">Format string.</param>
+   /// <returns>The text.</returns>
+   private static string Num( double? value, string format )
+   {
+      return value?.ToString( format, CultureInfo.InvariantCulture ) ?? ConsolidateIdentity.NOT_RECORDED;
+   }
+
+   /// <summary>
+   /// A recorded whole number as printed, or "not recorded".
+   /// </summary>
+   /// <param name="value">The number.</param>
+   /// <returns>The text.</returns>
+   private static string Num( long? value )
+   {
+      return value?.ToString( CultureInfo.InvariantCulture ) ?? ConsolidateIdentity.NOT_RECORDED;
    }
 
    #endregion Private Methods
 }
+
+/// <summary>
+/// One piece of flag evidence: the code, where it was recorded and the recorded values a sentence prints.
+/// </summary>
+/// <param name="Code">Flag code.</param>
+/// <param name="Run">Run folder name.</param>
+/// <param name="Target">Target.</param>
+/// <param name="Pass">Pass name for a pass flag, the index-state snapshot for an index flag, or null.</param>
+/// <param name="PassIndex">The pass's index in conditions.passes, or null for a target-level flag.</param>
+/// <param name="Values">The recorded values: results.json path and the value as printed.</param>
+public sealed record FlagEvidence( string Code, string Run, string Target, string? Pass, int? PassIndex, IReadOnlyList<(string Path, string Value)> Values );
