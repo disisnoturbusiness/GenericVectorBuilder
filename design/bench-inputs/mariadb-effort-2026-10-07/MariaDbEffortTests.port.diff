@@ -1,0 +1,10 @@
+--- ../../../ForClaude/GenericVectorBuilder/tests/GenericVectorBuilder.Engines.Tests/MariaDbEffortTests.cs	2026-10-04 19:58:54.232200391 +0000
++++ repo-maria/tests/GenericVectorBuilder.Engines.Tests/MariaDbEffortTests.cs	2026-10-07 17:28:18.090057187 +0000
+@@ -97,6 +97,7 @@
+       CancellationToken ct = deadline.Token;
+       string collection = GroupCReadinessData.NewCollection( "mdbef" );
+       MariaDbSinkOptions baseline = MariaDbSinkOptions.LocalDefaults();
++      baseline.Port = int.Parse( Environment.GetEnvironmentVariable( "GVB_BENCH_MARIADB_PORT" ) ?? throw new InvalidOperationException( "GVB_BENCH_MARIADB_PORT is not set" ) );
+       using var sink = new MariaDbSink( baseline );
+       try
+       {

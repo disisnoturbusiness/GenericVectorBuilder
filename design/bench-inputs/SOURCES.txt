@@ -1,0 +1,9 @@
+Inputs the benchmark's report cites. Hashes: questions_golden.json is listed in design/verdicts/SHA256SUMS; the tie check files in SHA256SUMS here; the MariaDB re-run in its own folder.
+
+questions_golden.json                       the 20 golden questions the runs read (a byte copy of the evalkit file; its SHA-256 is recorded by every run).
+tie-check-eshoponweb.py                     the script that checks the benchmark's recall tie rule (a hit within 1e-5 of the 10th best counts) against the eShopOnWeb data.
+tie-check-eshoponweb-2026-10-07.json        its output: 524 rows, 0 pairs of rows within 1e-5 of identical, 0 of 20 queries with a row outside the exact top 10 that the rule would count;
+                                            read-only against GenericVectorBuilder.dbo.gvb_eshoponweb (the table the runs read) and the benchmark's own cached query vectors.
+mariadb-effort-2026-10-07/                  the saved re-run of MariaDB's recall test (see its SOURCES.txt).
+recorded-text-classes-source/               the short form of deploy/bench/recorded-text-classes.json (classes_spec.py), the script that builds and checks it against the v7 runs (build_classes.py) and
+                                            the script that exports the sweep table (export_table.py). The consolidate command reads and checks the JSON itself on every run.

@@ -46,8 +46,14 @@ public sealed class ConsolidateInput
    /// <summary>The folder session folders were named relative to; run references in the report are relative to it.</summary>
    public string ResultsRoot { get; init; } = string.Empty;
 
-   /// <summary>The observer summary.json of the newest claim session, or null when none was given.</summary>
-   public string? ObserverPath { get; init; }
+   /// <summary>Every observer summary given, in the order given (the newest session's and any older session's); empty when none.</summary>
+   public List<string> ObserverPaths { get; init; } = new();
+
+   /// <summary>The classes of the recorded texts the report prints (deploy/bench/recorded-text-classes.json of the repository).</summary>
+   public ClassSheet Classes { get; init; } = new( Array.Empty<ClassEntry>(), new Dictionary<string, string>(), new Dictionary<string, string>() );
+
+   /// <summary>SHA-256 of the classes file.</summary>
+   public string ClassesSha256 { get; init; } = string.Empty;
 
    /// <summary>The command line, for the report.</summary>
    public string CommandLine { get; init; } = string.Empty;

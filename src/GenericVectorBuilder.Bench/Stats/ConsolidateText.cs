@@ -17,9 +17,14 @@ namespace GenericVectorBuilder.Bench.Stats;
 /// Slots, in reading order, by the sections the summary page places (P4's BenchSlots): headline;
 /// stopped.*; subtitle.* (data, machine, scope, sessions, questions or queries); rule.*; basis.* (runs, identity, the largest move,
 /// the moves per metric, splits and split.N.fields, moves and conditions, the exclusions); table.&lt;metric&gt;.*; recall.*;
-/// why.* (framing, costs, settings.TARGET, effort.TARGET as a quote, noeffort.TARGET); drift.* (the medians, unconfirmed, close, onLine);
-/// disclosure.* (disclosure.clock.* first; busy; durability with logs, nologs, TARGET and TARGET.correction; graph.TARGET); method.*;
+/// why.* (framing, costs, settings.TARGET, effort.TARGET with its labels and clauses, noeffort.TARGET); drift.* (the medians, unconfirmed, close, onLine);
+/// disclosure.* (disclosure.clock.* first, the rule of the median before its use; disclosure.governor and disclosure.engines.N; busy; durability with logs, nologs,
+/// TARGET with its labels and clauses, TARGET.correction; graph.TARGET; observer, observer.clock and timers for the newest session and the same with a
+/// session suffix for an older one); method.* (the intro, then labels and clauses, the notices of clauses not printed and the sentence from the saved tie check);
 /// notinreport.*; runs.* (runs.reuse.SESSION for every session with a blocking verdict, runs.stale.*).
+/// A recorded text is printed clause by clause (see <see cref="ClauseWriter"/>): a head sentence (durability and effort), then for each group of clauses
+/// a label sentence at TEXT.gN that says how the group is backed (read back, measured, documented, unverified), then each clause as a verbatim quote at
+/// TEXT.gN.qM; a clause not printed is replaced by a sentence at TEXT.dropped.M or TEXT.correction.
 /// A row's note (row.&lt;metric&gt;.&lt;target&gt;.note) and its flags (flag.&lt;metric&gt;.&lt;target&gt;.&lt;n&gt;) are
 /// audited like every other sentence and then travel on the row itself (rows[].note with noteSources,
 /// flags[].text with sources), which is where the page prints them, so no sentence is printed twice.
@@ -101,8 +106,8 @@ public static class ConsolidateText
    /// <summary>What the basis compares: runs of one recorded setup. Why stated: a change of setup hides its moves, and the splits below list them.</summary>
    public const string THRESHOLD_IDENTITY = "Basis moves are taken between runs in which the engine recorded the same setup: its engine text, index text, search settings, durability text, engine files, engine settings, image id and hosting.";
 
-   /// <summary>A field one run did not record.</summary>
-   public const string THRESHOLD_IDENTITY_MISSING = "A field that one of two runs did not record is not compared.";
+   /// <summary>A field one run did not record. Why the exception: the engine text and the index text are compared strictly (a run that did not record one differs from a run that did), the other fields only when both runs recorded them.</summary>
+   public const string THRESHOLD_IDENTITY_MISSING = "A field other than the engine text and the index text that one of two runs did not record is not compared.";
 
    /// <summary>Per metric, basis runs of one recorded setup.</summary>
    public const string THRESHOLD_ALL = "{0}, between basis runs of one recorded setup: largest moves {1} for one engine and {2} for a pair.";
@@ -292,14 +297,26 @@ public static class ConsolidateText
    /// <summary>Clock not held.</summary>
    public const string CLOCK_NOT_HELD = "In {0}, the runs did not all hold the clock.";
 
+   /// <summary>The median rule, defined where it is first used: per CPU group of the partition.</summary>
+   public const string CLOCK_RULE = "The median rule: a pass is off when the median, over its engine CPUs or over its client CPUs, of each CPU's median MHz is more than {0}% from the pinned {1} MHz.";
+
+   /// <summary>The median rule when the partition was not split into engine and client CPUs.</summary>
+   public const string CLOCK_RULE_ALL = "The median rule: a pass is off when the median, over all CPUs, of each CPU's median MHz is more than {0}% from the pinned {1} MHz.";
+
    /// <summary>Clock checked.</summary>
    public const string CLOCK_CHECKED = "In {0}, by the median rule, {1} of {2} passes were off the pinned clock and {3} had a CPU group not read.";
 
    /// <summary>A dropped mean-based warning.</summary>
    public const string CLOCK_DROPPED = "Run {0} flagged {1}'s {2} pass as off its clock by a mean; the medians read {3} MHz on engine CPUs and {4} MHz on client CPUs, within {5}%.";
 
-   /// <summary>Governor and partition.</summary>
-   public const string DISCLOSURE_GOVERNOR = "Every claim run used the {0} governor, with engines on CPUs {1} and the client on CPUs {2}.";
+   /// <summary>Governor and the client's CPUs.</summary>
+   public const string DISCLOSURE_GOVERNOR = "Every claim run used the {0} governor, with the client on CPUs {1}.";
+
+   /// <summary>The CPUs engines of one hosting ran on, from each run's record of where each engine ran (conditions.engines). Why per hosting: an embedded engine runs inside the client process, on the client CPUs.</summary>
+   public const string DISCLOSURE_ENGINES = "The {0} engines {1} ran {2}on CPUs {3}.";
+
+   /// <summary>When the runs record only a partition and not where each engine ran.</summary>
+   public const string DISCLOSURE_ENGINES_UNKNOWN = "The runs record the engine CPUs as {0} and do not record on which CPUs each engine ran.";
 
    /// <summary>Boot, both sessions on one boot.</summary>
    public const string DISCLOSURE_BOOT = "Every {0} run recorded boot {1} at {2}, before the first {3} run started at {4}, so {3} ran on that boot too.";
@@ -320,7 +337,58 @@ public static class ConsolidateText
    public const string DISCLOSURE_REDIS = "{0} holds its data in memory: its saved docs page says '{1}'; its compose file sets {2} and {3}.";
 
    /// <summary>Durability intro.</summary>
-   public const string DISCLOSURE_DURABILITY = "Each engine's durability, quoted below as run {0} recorded it, is the tool's own text and was not re-checked for this report.";
+   public const string DISCLOSURE_DURABILITY = "Each engine's durability text, as run {0} recorded it, follows clause by clause with how each clause is backed; the program wrote the text, and its figures were not re-derived for this report.";
+
+   /// <summary>The head of one engine's durability clauses.</summary>
+   public const string DURABILITY_HEAD = "{0}: its recorded durability text, clause by clause, with how each clause is backed.";
+
+   /// <summary>The head of one engine's effort clause.</summary>
+   public const string EFFORT_HEAD = "{0}: the clause of its recorded index text that states how hard a query searches, with how each part is backed.";
+
+   /// <summary>A group of clauses the engine or the machine reported in these runs.</summary>
+   public const string CLAUSE_READ_BACK = "Read back in these runs from the engine or the machine:";
+
+   /// <summary>A group of clauses read from the running engine by a line of the benchmark's own code.</summary>
+   public const string CLAUSE_READ_BY_CODE = "Read from the running engine or the machine by the benchmark's own code, as the cited line shows:";
+
+   /// <summary>A group of clauses this tool measured in these runs.</summary>
+   public const string CLAUSE_MEASURED = "Measured by this tool in these runs:";
+
+   /// <summary>A group of clauses a saved documentation page backs.</summary>
+   public const string CLAUSE_DOC_PAGE = "Documented on a saved page, not read back from the engine:";
+
+   /// <summary>A group of clauses a saved log or measurement backs.</summary>
+   public const string CLAUSE_DOC_LOG = "Backed by a saved log or measurement, not read back from the engine in these runs:";
+
+   /// <summary>A group of clauses a code or compose line saved in the repository backs.</summary>
+   public const string CLAUSE_DOC_CODE = "Set by a line of code or a compose file saved in this repository, not read back from the engine:";
+
+   /// <summary>A group of clauses a test saved in the repository describes.</summary>
+   public const string CLAUSE_DOC_TEST = "Described by a test saved in this repository, which these runs did not run:";
+
+   /// <summary>A group of clauses nothing backs.</summary>
+   public const string CLAUSE_UNVERIFIED = "Typed in the program's own text; not read back, measured or backed by a saved source:";
+
+   /// <summary>A text the list of classes does not cover, printed whole.</summary>
+   public const string CLAUSE_UNLISTED = "Not classified by this report's list of recorded clauses, so printed as unverified:";
+
+   /// <summary>A clause about targets this report does not have.</summary>
+   public const string DROPPED_ABSENT = "A clause of this note names {0}, which are not targets of this report, so it is not printed.";
+
+   /// <summary>A clause whose figures nothing saved backs.</summary>
+   public const string DROPPED_UNBACKED = "A clause of the {0} text is not printed: it cites figures that no saved source backs.";
+
+   /// <summary>The recall of one collection size in the saved re-run of the effort test.</summary>
+   public const string RECALL_LOG = "In the saved re-run of the {0} effort test, recall@{1} at ef {2} on {3} random {4}-dim vectors read {5} to {6}.";
+
+   /// <summary>No saved re-run matches the recorded effort.</summary>
+   public const string RECALL_LOG_NONE = "No saved re-run of the {0} effort test matches the ef {1} its runs recorded, so no recall figure is given.";
+
+   /// <summary>What the saved check of the tie rule found in this data.</summary>
+   public const string TIE_CHECK = "A saved check of this data found {0} pairs of rows within 1e-5 of identical, and {1} of {2} queries with a row outside the exact top {3} that the tie rule would count.";
+
+   /// <summary>No saved check of the tie rule matches this data.</summary>
+   public const string TIE_CHECK_NONE = "No saved check of the tie rule matches this data, so the reason given for the rule is not shown to apply to it.";
 
    /// <summary>The saved logs behind the measurements in those texts.</summary>
    public const string DISCLOSURE_DURABILITY_LOGS = "Strace logs of measurements cited in those texts are saved for {0}, in {1}, each listed with its hash in {2}.";
@@ -328,8 +396,8 @@ public static class ConsolidateText
    /// <summary>Measurements cited with no saved log.</summary>
    public const string DISCLOSURE_DURABILITY_NOLOGS = "No log is saved for the measurements cited in the durability texts of {0}.";
 
-   /// <summary>A recorded sentence a repository file contradicts.</summary>
-   public const string DISCLOSURE_CORRECTION = "Correction to the {0} text above: {1} sets {2}, so its words '{3}' do not hold.";
+   /// <summary>A recorded clause a repository file contradicts: it is not printed, and this says why.</summary>
+   public const string DISCLOSURE_CORRECTION = "The recorded {0} text says '{3}'; {1} sets {2}. That clause is not printed.";
 
    /// <summary>A search fact that rests on the engine's own report of segments smaller than another engine's graph point.</summary>
    public const string DISCLOSURE_GRAPH = "{0}'s search fact is the engine's own report; its segments held at most {1} vectors, below the {2} at which {3}'s recorded text says a segment gets a graph, and no graph was checked.";
@@ -356,7 +424,7 @@ public static class ConsolidateText
    public const string DISCLOSURE_LAYOUTS = "Segment layouts differed between runs for {0}; each run's layout is in its row flags.";
 
    /// <summary>Observer present.</summary>
-   public const string DISCLOSURE_OBSERVER = "An observer process ran beside the {0} runs; its own CPU, at most {1} CPUs in a pass, counts as outside load, and its summary is observer/summary.json beside this report.";
+   public const string DISCLOSURE_OBSERVER = "An observer process ran beside the {0} runs; its own CPU, at most {1} CPUs in a pass, counts as outside load, and its summary is {2} beside this report.";
 
    /// <summary>Observer clock check.</summary>
    public const string DISCLOSURE_OBSERVER_CLOCK = "By APERF and MPERF, the observer's largest clock deviation in a pass was {0}%, and it read MSR {1} as {2}.";
@@ -395,7 +463,7 @@ public static class ConsolidateText
    public const string NOT_IN_REPORT_SETUP = "{0} has no row: its recorded setup differs within a session, in {1}.";
 
    /// <summary>Runs used.</summary>
-   public const string RUNS = "Runs used: {0} claim runs and {1} basis runs, listed below with their seeds and start times.";
+   public const string RUNS = "Runs used: {0} claim runs, which are among the {1} runs of the basis; each is listed below with its seed and start time.";
 
    /// <summary>Why the page may show runs an unpublished report also used: its verdict's word.</summary>
    public const string RUNS_REUSE = "The runs of {0} were also used by a report that was not published; its verdict, {1}, holds the word {2}.";

@@ -65,7 +65,8 @@ public static class BenchRunTable
          throw new InvalidDataException( "results.json has no targets list." );
       }
 
-      JsonElement passes = root.TryGetProperty( "conditions", out JsonElement conditions ) && conditions.ValueKind == JsonValueKind.Object && conditions.TryGetProperty( "passes", out JsonElement p ) ? p : default;
+      JsonElement conditionsElement = root.TryGetProperty( "conditions", out JsonElement conditions ) && conditions.ValueKind == JsonValueKind.Object ? conditions : default;
+      JsonElement passes = conditionsElement.ValueKind == JsonValueKind.Object && conditionsElement.TryGetProperty( "passes", out JsonElement p ) ? p : default;
       long? queries = Whole( root, "queryCount" );
       long? top = Whole( root, "top" );
       long? of = queries != null && top != null ? queries * top : null;
@@ -90,7 +91,7 @@ public static class BenchRunTable
 
          double? recall = Number( search, "recall" );
          rows.Add( new BenchRunRow( key, BenchNames.FriendlyName( key ), Number( search, "p50Ms" ), Number( qps, "1" ), eight, Number( search, "exactP50Ms" ), recall, Hits( search, recall, of ),
-            ClientCpuAtOne( search ), t.ValueKind == JsonValueKind.Object ? BenchRunFlags.FromTarget( t, passes ) : Array.Empty<BenchFlagEntry>() ) );
+            ClientCpuAtOne( search ), t.ValueKind == JsonValueKind.Object ? BenchRunFlags.FromTarget( t, passes, conditionsElement ) : Array.Empty<BenchFlagEntry>() ) );
       }
 
       return new BenchRunSummary( rows.OrderBy( r => r.Name, StringComparer.Ordinal ).ToList(), missing, BenchConditions.FromRun( root ), of );
@@ -101,14 +102,14 @@ public static class BenchRunTable
    /// engines with no result, and the legends the table uses.
    /// </summary>
    /// <param name="summary">The run's figures.</param>
-   /// <param name="notes">Notes to print under an engine's name, by target (taken from the sets that use the run), or null for none.</param>
+   /// <param name="notes">Notes to print under an engine's name, with their sources, by target (taken from the sets that use the run), or null for none.</param>
    /// <returns>HTML fragment.</returns>
-   public static string Block( BenchRunSummary summary, IReadOnlyDictionary<string, string>? notes = null )
+   public static string Block( BenchRunSummary summary, IReadOnlyDictionary<string, BenchRowNote>? notes = null )
    {
       var html = new StringBuilder( "<section class=\"bench-summary\">" );
       html.Append( Conditions( summary.Conditions ) );
       html.Append( "<div class=\"preview\"><table class=\"bench-table\"><thead><tr><th>Engine</th><th class=\"n\">p50 (ms)</th><th class=\"n\">Searches per second, one searcher</th><th class=\"n\">Searches per second, eight searchers at once</th>" );
-      html.Append( "<th class=\"n\">Exact mode p50 (ms)</th><th class=\"n\">Client CPU per search, one searcher (ms)</th><th>Recall in hits</th><th>Flags</th></tr></thead><tbody>" );
+      html.Append( $"<th class=\"n\">Exact mode p50 (ms)</th><th class=\"n\">{BenchFormat.Enc( BenchLegends.H_CLIENT_CPU_1 )}</th><th>Recall in hits</th><th>Flags</th></tr></thead><tbody>" );
       foreach( BenchRunRow row in summary.Rows )
       {
          html.Append( $"<tr data-target=\"{BenchFormat.Enc( row.Key )}\"><td>{BenchFormat.Enc( row.Name )}{NoteOf( notes, row.Key )}</td><td class=\"n\">{BenchFormat.Enc( BenchFormat.Ms( row.P50Ms ) )}</td>" );
@@ -203,9 +204,14 @@ public static class BenchRunTable
    /// <param name="notes">Notes by target, or null.</param>
    /// <param name="key">The target.</param>
    /// <returns>HTML fragment; empty when there is none.</returns>
-   private static string NoteOf( IReadOnlyDictionary<string, string>? notes, string key )
+   private static string NoteOf( IReadOnlyDictionary<string, BenchRowNote>? notes, string key )
    {
-      return notes != null && notes.TryGetValue( key, out string? note ) && !string.IsNullOrWhiteSpace( note ) ? $"<br><small class=\"muted bench-note\">{BenchFormat.Enc( note )}</small>" : string.Empty;
+      if( notes == null || !notes.TryGetValue( key, out BenchRowNote? note ) || string.IsNullOrWhiteSpace( note.Text ) )
+      {
+         return string.Empty;
+      }
+
+      return $"<br><small class=\"muted bench-note\">{BenchFormat.Enc( note.Text )}</small>{( note.Sources.Count > 0 ? BenchConsolidatedHtml.SourceList( note.Sources ) : string.Empty )}";
    }
 
    /// <summary>

@@ -104,7 +104,7 @@ public static class ConsolidateSettings
          w.Add( $"why.settings.{row.Target}", T.Fill( T.WHY_SETTINGS, row.Target, pairs ), sources );
          if( row.Clause != null )
          {
-            w.Add( $"why.effort.{row.Target}", row.Clause, S.Quote( row.Run, $"targets[{row.Target}].index", row.Clause ) );
+            Effort( w, row );
          }
          else if( !row.Settings.Any( s => EFFORT_KEY.IsMatch( s.Key ) ) && w.Fact( row.Target, "search" )?.Mode == "approximate" )
          {
@@ -116,6 +116,22 @@ public static class ConsolidateSettings
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// The recorded effort clause of an engine, printed clause by clause with how each part is backed: the head sentence, then the parts of the clause that lie in the recorded index text.
+   /// </summary>
+   /// <param name="w">The writer.</param>
+   /// <param name="row">The settings row whose clause is printed.</param>
+   private static void Effort( Writer w, SearchSettingsRow row )
+   {
+      string index = w.Sessions.SelectMany( s => s.Runs ).First( r => r.Name == row.Run ).Find( row.Target )!.Index!;
+      string collapsed = RecordedTextClasses.Collapse( index );
+      string clause = RecordedTextClasses.Collapse( row.Clause! );
+      int start = collapsed.IndexOf( clause, StringComparison.Ordinal );
+      string slot = $"why.effort.{row.Target}";
+      w.Add( slot, T.Fill( T.EFFORT_HEAD, row.Target ), w.RunSource( row.Run ) );
+      new ClauseWriter( w, slot ).Add( row.Run, $"targets[{row.Target}].index", w.Input.Classes.Split( row.Target, "index", index ), start < 0 ? null : ( start, start + clause.Length ) );
+   }
 
    /// <summary>
    /// The clause that starts at a position of the text.

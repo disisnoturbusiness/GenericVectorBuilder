@@ -299,25 +299,24 @@ public sealed class ConsolidateDryFixTests : IClassFixture<DryFixFixture>
          Assert.Contains( "mhnsw_ef_search=100", two.Text( "why.settings.mariadb" ) ?? string.Empty );
          Assert.Contains( "hnsw.ef_search=100", two.Text( "why.settings.pgvector" ) ?? string.Empty );
          Assert.Contains( "hnsw_candidate_list_size_for_search=256", two.Text( "why.settings.clickhouse" ) ?? string.Empty );
-         string caveat = two.Text( "why.effort.mariadb" ) ?? string.Empty;
+         string caveat = Effort( two, "mariadb" );
          Assert.Contains( "MariaDB's own default is 20", caveat );
-         Assert.Contains( "recall@10 at ef 100 falls as the set grows", caveat );
-         Assert.Contains( "dynamic: limit x 8 clamped 100..500", two.Text( "why.effort.weaviate" ) ?? string.Empty );
-         Assert.Contains( "hnsw_ef=server default", two.Text( "why.effort.qdrant-hnsw" ) ?? string.Empty );
-         Assert.Contains( "numCandidates=20x hits (min 100)", two.Text( "why.effort.mongodb" ) ?? string.Empty );
+         Assert.DoesNotContain( "recall@10 at ef 100 falls as the set grows", caveat );
+         Assert.Contains( "dynamic: limit x 8 clamped 100..500", Effort( two, "weaviate" ) );
+         Assert.Contains( "hnsw_ef=server default", Effort( two, "qdrant-hnsw" ) );
+         Assert.Contains( "numCandidates=20x hits (min 100)", Effort( two, "mongodb" ) );
          Assert.Contains( "MariaDB's own default is 20", two.Md );
          Assert.Equal( 19, two.Under( "why.settings" ).Count );
       } );
    }
 
    /// <summary>
-   /// Reason 3: the recorded Weaviate durability text, which says its compose file sets no persistence variable, is printed as
-   /// recorded and followed by a correction generated from the compose file, which sets PERSISTENCE_DATA_PATH; the recorded
-   /// identity is untouched.
+   /// Reason 3: the recorded Weaviate durability text says its compose file sets no persistence variable, and that file sets PERSISTENCE_DATA_PATH. The
+   /// false clause is not printed, one sentence generated from the compose file says so and names the variable, and the recorded text is untouched.
    /// </summary>
    /// <returns>A task.</returns>
    [Fact]
-   public async Task WeaviateDurability_IsCorrectedFromItsComposeFile_WithoutChangingTheRecord()
+   public async Task WeaviateDurability_IsCorrectedFromItsComposeFile_OnceAndWithoutChangingTheRecord()
    {
       await ConsolidateHarness.Timed( () =>
       {
@@ -325,7 +324,9 @@ public sealed class ConsolidateDryFixTests : IClassFixture<DryFixFixture>
          string recorded = JsonDocument.Parse( File.ReadAllText( Path.Combine( ConsolidateHarness.BenchResults(), ConsolidateRealRunsTests.V7[0], "results.json" ) ) ).RootElement
             .GetProperty( "targets" ).EnumerateArray().First( t => t.GetProperty( "name" ).GetString() == "weaviate" ).GetProperty( "durability" ).GetString()!;
          Assert.Contains( "weaviate.compose.yaml sets no persistence variable", recorded );
-         Assert.Equal( recorded, two.Text( "disclosure.durability.weaviate" ) );
+         List<string> printed = two.Under( "disclosure.durability.weaviate" ).Select( s => s.Text ).ToList();
+         Assert.DoesNotContain( printed, t => t.Contains( "Weaviate 1.39.8 defaults, weaviate.compose.yaml", StringComparison.Ordinal ) );
+         Assert.Single( printed, t => t.Contains( "sets no persistence variable", StringComparison.Ordinal ) );
          string correction = two.Text( "disclosure.durability.weaviate.correction" ) ?? string.Empty;
          Assert.Contains( "PERSISTENCE_DATA_PATH", correction );
          Assert.Contains( "sets no persistence variable", correction );
@@ -335,7 +336,7 @@ public sealed class ConsolidateDryFixTests : IClassFixture<DryFixFixture>
    }
 
    /// <summary>
-   /// Reason 3, the other way: a compose file that sets no PERSISTENCE variable makes the recorded sentence true, so nothing is corrected.
+   /// Reason 3, the other way: a compose file that sets no PERSISTENCE variable makes the recorded clause true, so it is printed and nothing is corrected.
    /// </summary>
    /// <returns>A task.</returns>
    [Fact]
@@ -349,7 +350,7 @@ public sealed class ConsolidateDryFixTests : IClassFixture<DryFixFixture>
          File.WriteAllLines( compose, File.ReadAllLines( compose ).Where( l => !l.Contains( "PERSISTENCE_DATA_PATH", StringComparison.Ordinal ) ) );
          ConsolidateOutcome outcome = DryFixFixture.RunIn( _fixture.Results, Path.Combine( _fixture.Scratch, "out-no-persistence" ), repo, "--session", "v7=" + string.Join( ",", ConsolidateRealRunsTests.V7 ) );
          Assert.Equal( 0, outcome.Exit );
-         Assert.NotNull( outcome.Text( "disclosure.durability.weaviate" ) );
+         Assert.Contains( outcome.Under( "disclosure.durability.weaviate" ), s => s.Text.StartsWith( "Weaviate 1.39.8 defaults, weaviate.compose.yaml sets no persistence variable", StringComparison.Ordinal ) );
          Assert.Null( outcome.Text( "disclosure.durability.weaviate.correction" ) );
       } );
    }
@@ -639,8 +640,8 @@ public sealed class ConsolidateDryFixTests : IClassFixture<DryFixFixture>
          }
 
          Assert.Contains( "| median of 6 | search | not separated from | flags |", two.Md );
-         Assert.Contains( "| qdrant | 0.881-0.886 | 0.881-0.886 | 0.883 | exact |", two.Md );
-         Assert.Contains( "| redis | 0.393-0.399 | 0.393-0.399 | 0.398 | approximate |", two.Md );
+         Assert.Contains( "| qdrant | 0.881-0.886 | 0.881-0.886 | 0.883 | exact; measured |", two.Md );
+         Assert.Contains( "| redis | 0.393-0.399 | 0.393-0.399 | 0.398 | approximate; recorded, documented |", two.Md );
          string exactHeader = two.Md.Split( '\n' ).First( l => l.StartsWith( "| engine |", StringComparison.Ordinal ) && l.Contains( "median of 6", StringComparison.Ordinal ) && !l.Contains( "| search |", StringComparison.Ordinal ) );
          Assert.Contains( "| median of 6 | not separated from | flags |", exactHeader );
       } );
@@ -692,6 +693,17 @@ public sealed class ConsolidateDryFixTests : IClassFixture<DryFixFixture>
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// Every sentence printed under an engine's effort slot, joined: the head, the labels and the clauses of the recorded effort clause.
+   /// </summary>
+   /// <param name="outcome">The consolidation.</param>
+   /// <param name="target">The engine.</param>
+   /// <returns>The texts joined by a space.</returns>
+   private static string Effort( ConsolidateOutcome outcome, string target )
+   {
+      return string.Join( " ", outcome.Under( $"why.effort.{target}" ).Select( s => s.Text ) );
+   }
 
    /// <summary>
    /// The strings of a JSON array.

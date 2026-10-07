@@ -12,8 +12,8 @@ namespace GenericVectorBuilder.Bench.Stats;
 /// of every run shown), each row's not-separated list, guard G2 (a pair ordered in the first session
 /// whose medians reverse in the second, never the other way round), the orders held in one session
 /// only, the pairs close below the line and the ordered pairs that clear it by a hair.
-/// Why floor: a ratio exactly at the line in exact arithmetic that lands a hair below it in doubles
-/// stays unordered, so rounding never creates a claim.
+/// Why floor, and why exact: the ratio is floored exactly on the two values as stored (<see cref="BenchMath.RatioBpFloor"/>), with no floating-point rounding step.
+/// A pair whose ratio is a hair below the line stays unordered even when 10000.0 * a / b in doubles would round up onto it, so rounding never creates a claim.
 /// </summary>
 public static class ClaimRule
 {
@@ -46,7 +46,7 @@ public static class ClaimRule
    /// <returns>The ratio, bp, rounded down.</returns>
    public static int RatioBp( double num, double den )
    {
-      return checked( (int)Math.Floor( 10000.0 * num / den ) );
+      return BenchMath.RatioBpFloor( num, den );
    }
 
    /// <summary>

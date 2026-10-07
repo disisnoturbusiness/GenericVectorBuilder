@@ -3,3 +3,5 @@ e83e8d32101b520353d9d490ab1bf5457217ef2949fb41abac655be06212bef0  v6-verdict.md
 47df0cb385a91c943edf33710d2afb55bd79f019fc2348987800c43f6074550c  v7-verdict.md
 e3a917ec8c5e687d2a2d6b83bc8ffd7eb901f0ffac8d8b277995b86898e9a712  ../bench-inputs/questions_golden.json
 6f4951d36b0f58db15c7da0c98f885219cf14f488a0b233b8059ddda9b1d5230  ../engine-docs/redis-faq-2026-10-07.html
+4b0ee7bf2206e101ebc8ae7b6330600711bbfa7c0ee858ee64db49902bffefca  ../engine-docs/weaviate-vector-index-concepts-2026-10-07.md
+8ef738c82faa03fcd59dfddfe1dffa836071328d4386d8b93f59e84e3ea8dbff  ../engine-docs/weaviate-vector-index-reference-2026-10-07.mdx

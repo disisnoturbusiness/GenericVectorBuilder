@@ -11,7 +11,7 @@ namespace GenericVectorBuilder.Bench.Report;
 /// <param name="Kind">index, search, storage, protocol, cap or set-by-setup.</param>
 /// <param name="Text">The fact in under 12 words, built only from words of its source and a few joining words.</param>
 /// <param name="Source">"results:targets[name].field#token", "repo/path#token", "doc:repo/path#quote" or "absent:results:targets[name]#alt1|alt2".</param>
-/// <param name="Confidence">recorded (the run's static text), measured (state read from the running engine), documented (a saved page), set-by-code (a repository file) or checked (an absence check: none of the words occur in the recorded text).</param>
+/// <param name="Confidence">recorded (the run's static text), measured (state read from the running engine), documented (a saved page), set-by-code (a repository file), checked (an absence check: none of the words occur in the recorded text) or <see cref="EngineFactSheet.OWN_REPORT"/> (state the engine reported about itself and nothing else checked).</param>
 /// <param name="Mode">For search rows: exact or approximate, derived from the source and checked against the run's own index state; null otherwise.</param>
 public sealed record EngineFactRow( string Target, string Kind, string Text, string Source, string Confidence, string? Mode = null );
 
@@ -112,8 +112,15 @@ public static class EngineFactSheet
    /// <summary>The label of an absence check: the row says "not recorded", and "checked" says the tool looked for the words and found none. Why not "recorded": a page that read "not recorded" beside "recorded" would contradict itself.</summary>
    public const string CHECKED = "checked";
 
+   /// <summary>
+   /// The label of a fact read from an engine's own report that this tool did not check against anything else: mongot says its segments were searched through the HNSW graph, and
+   /// its segments are smaller than the size at which another engine in the same runs builds a graph, so the report says whose word it is. Why not "measured": a measured fact is
+   /// state this tool read and could compare with other evidence; an engine's report of how it ran is the engine's claim.
+   /// </summary>
+   public const string OWN_REPORT = "recorded (engine's own report)";
+
    /// <summary>The confidence labels.</summary>
-   public static readonly IReadOnlyList<string> CONFIDENCES = new[] { "recorded", "measured", "documented", "set-by-code", CHECKED };
+   public static readonly IReadOnlyList<string> CONFIDENCES = new[] { "recorded", "measured", "documented", "set-by-code", CHECKED, OWN_REPORT };
 
    /// <summary>The search modes.</summary>
    public static readonly IReadOnlyList<string> MODES = new[] { "exact", "approximate" };
@@ -554,7 +561,8 @@ public static class EngineFactSheet
          SourceKinds.ABSENT => CHECKED,
          _ => ResultsConfidence( row.Source ),
       };
-      if( expected != row.Confidence )
+      bool ownReport = row.Confidence == OWN_REPORT && expected == "measured";
+      if( expected != row.Confidence && !ownReport )
       {
          problems.Add( $"{label}: the confidence is '{row.Confidence}' but a source of this kind is '{expected}': {row.Source}" );
       }

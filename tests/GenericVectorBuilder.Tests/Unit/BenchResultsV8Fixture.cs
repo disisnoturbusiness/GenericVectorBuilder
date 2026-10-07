@@ -33,6 +33,15 @@ internal static class BenchResultsV8Fixture
    /// <summary>A note an engine's row carries.</summary>
    public const string REDIS_NOTE = "Holds its data in memory.";
 
+   /// <summary>The label the fixture gives one engine's search fact, one the page must print as it is and never as a stronger one.</summary>
+   public const string OWN_REPORT_LABEL = "recorded (engine's own report)";
+
+   /// <summary>The engine whose search fact carries <see cref="OWN_REPORT_LABEL"/>.</summary>
+   public const string OWN_REPORT_TARGET = "pgvector";
+
+   /// <summary>Targets whose search ran as an exact scan.</summary>
+   public static readonly string[] EXACT_TARGETS = { "qdrant", "sqlitevec", "sql" };
+
    /// <summary>Target, display name, p50 (ms), QPS at 1, QPS at 8, exact p50 (ms), row note; the figures are medians the runs scatter around.</summary>
    private static readonly ( string Target, string Display, double P50, double Qps1, double Qps8, double? Exact, string? Note )[] ENGINES =
    {
@@ -174,9 +183,16 @@ internal static class BenchResultsV8Fixture
             ["notSeparatedFrom"] = new JsonArray( notSeparated.Select( n => (JsonNode)JsonValue.Create( n )! ).ToArray() ),
             ["flags"] = new JsonArray(),
          };
+         if( metric != "exactP50Ms" )
+         {
+            row["searchMode"] = SearchMode( target );
+         }
+
          if( engine.Note != null )
          {
             row["note"] = engine.Note;
+            row["noteSources"] = new JsonArray( new JsonObject { ["kind"] = "doc", ["ref"] = "doc:design/engine-docs/redis-faq.html#in-memory", ["value"] = "in-memory" },
+               new JsonObject { ["kind"] = "file", ["ref"] = "deploy/engines/redis.compose.yaml#--appendonly no", ["value"] = "--appendonly no" } );
          }
 
          rows.Add( row );
@@ -243,16 +259,61 @@ internal static class BenchResultsV8Fixture
    /// </summary>
    private static JsonObject Why( string target )
    {
+      string mode = SearchMode( target );
       return new JsonObject
       {
          ["target"] = target,
-         ["facts"] = new JsonArray( new JsonObject { ["kind"] = "index", ["text"] = "HNSW graph, approximate search", ["source"] = $"results:targets[{target}].index#HNSW", ["confidence"] = "recorded" } ),
+         ["facts"] = new JsonArray( new JsonObject { ["kind"] = "index", ["text"] = "HNSW graph, approximate search", ["source"] = $"results:targets[{target}].index#HNSW", ["confidence"] = "recorded" },
+            new JsonObject
+            {
+               ["kind"] = "search",
+               ["text"] = mode == "exact" ? "no index used, exact scan by design" : "the search walked the graph",
+               ["source"] = $"results:targets[{target}].indexState.afterLoad.detail#graph",
+               ["confidence"] = target == OWN_REPORT_TARGET ? OWN_REPORT_LABEL : "measured",
+               ["mode"] = mode,
+               ["where"] = $"in all 6 run(s) selected, at targets[{target}].indexState.afterLoad.detail",
+            } ),
          ["costs"] = new JsonObject
          {
             ["engineCpuMsPerSearch"] = new JsonObject { ["1"] = Num( target == "sqlitevec" ? null : 0.31 ), ["8"] = Num( target == "sqlitevec" ? null : 0.29 ) },
             ["clientCpuMsPerSearch"] = new JsonObject { ["1"] = 0.57, ["8"] = 0.36 },
             ["engineCpusBusyAt8"] = 1.7,
          },
+      };
+   }
+
+   /// <summary>
+   /// The search mode of a target in the fixture: exact for the three exact-scan engines, approximate for the rest.
+   /// </summary>
+   private static string SearchMode( string target )
+   {
+      return EXACT_TARGETS.Contains( target ) ? "exact" : "approximate";
+   }
+
+   /// <summary>
+   /// One setup split in the shape the consolidate command writes it: the changed field with its text before and after, the runs on each side, the largest
+   /// one-engine and pair moves across the change, and the threshold the change would give.
+   /// </summary>
+   private static JsonObject SetupSplit( string target, string field, string before, string after, int oneBp, int pairBp, int tBp )
+   {
+      JsonObject Move( string metric, int bp, string who, bool pair ) => new()
+      {
+         ["metric"] = metric, ["moveBp"] = bp, ["move"] = bp / 10000.0, ["target"] = pair ? null : who, ["pair"] = pair ? who : null,
+         ["runs"] = new JsonArray( "20261005-073329-eshoponweb", "20261006-130619-eshoponweb" ), ["values"] = new JsonArray( 495.78, 374.79 ),
+         ["differences"] = new JsonArray( "turbo: turbo not pinned vs turbo off", "build: v6-final vs v7-final" ),
+      };
+
+      return new JsonObject
+      {
+         ["target"] = target,
+         ["fields"] = new JsonArray( field ),
+         ["changes"] = new JsonArray( new JsonObject { ["field"] = field, ["before"] = before, ["after"] = after } ),
+         ["before"] = new JsonObject { ["sessions"] = new JsonArray( "v6" ), ["runs"] = new JsonArray( "20261005-073329-eshoponweb", "20261005-085448-eshoponweb", "20261005-101815-eshoponweb" ) },
+         ["after"] = new JsonObject { ["sessions"] = new JsonArray( "v7", "v8" ), ["runs"] = new JsonArray( V7_RUNS.Concat( V8_RUNS ).Select( r => (JsonNode)JsonValue.Create( r )! ).ToArray() ) },
+         ["oneEngine"] = Move( "qps8", oneBp, target, false ),
+         ["pair"] = Move( "qps8", pairBp, target + "/mongodb", true ),
+         ["perMetric"] = new JsonObject(),
+         ["tBpIfCounted"] = tBp,
       };
    }
 
@@ -270,6 +331,10 @@ internal static class BenchResultsV8Fixture
          ["exclusions"] = new JsonArray( new JsonObject { ["target"] = "clickhouse", ["seeds"] = new JsonArray( 501, 502, 503 ), ["metric"] = "*", ["kind"] = "unrecorded config change", ["why"] = "log tables switched off", ["source"] = "design/verdicts/v6-verdict.md" } ),
          ["perMetric"] = new JsonObject { ["p50Ms"] = new JsonObject { ["oneEngine"] = move.DeepClone(), ["pair"] = move.DeepClone() } },
          ["noMachineControl"] = new JsonObject { ["oneEngine"] = new JsonObject { ["moveBp"] = 11280, ["target"] = "redis", ["runs"] = new JsonArray( "a", "b" ), ["values"] = new JsonArray( 1.0, 2.0 ), ["differences"] = new JsonArray() } },
+         ["setupSplitCount"] = 2,
+         ["setupSplits"] = new JsonArray(
+            SetupSplit( "mariadb", "durability", "innodb_flush_log_at_trx_commit=2 (mariadb.compose.yaml)", "innodb_flush_log_at_trx_commit=2 (set in mariadb-bench.compose.yaml)", 409, 1785, 3500 ),
+            SetupSplit( "sqlitevec", "index", "vec0 brute-force scan, default chunk", "vec0 brute-force scan, chunk_size=1024", 11936, 15508, 16500 ) ),
          ["maxBp"] = 2908,
          ["tBp"] = T_BP,
       };
@@ -287,8 +352,9 @@ internal static class BenchResultsV8Fixture
          ["perTarget"] = new JsonArray( ENGINES.SelectMany( e => new[] { "p50Ms", "qps1", "qps8" }.Select( m => (JsonNode)new JsonObject { ["target"] = e.Target, ["metric"] = m, ["moveBp"] = 150 } ) ).ToArray() ),
          ["medianAbsMoveBp"] = 150,
          ["largest"] = new JsonObject { ["target"] = "sqlitevec", ["metric"] = "qps8", ["moveBp"] = 390 },
-         ["unconfirmedOrders"] = new JsonArray( new JsonObject { ["metric"] = "p50Ms", ["a"] = "mariadb", ["b"] = "pgvector" } ),
+         ["unconfirmedOrders"] = new JsonArray( new JsonObject { ["metric"] = "p50Ms", ["a"] = "mariadb", ["b"] = "pgvector", ["session"] = "v7" } ),
          ["closeToLine"] = new JsonArray( new JsonObject { ["metric"] = "qps8", ["a"] = "redis", ["b"] = "mariadb", ["minRatioBp"] = 13100 } ),
+         ["onLine"] = new JsonArray( new JsonObject { ["metric"] = "p50Ms", ["a"] = "mariadb", ["b"] = "sqlitevec", ["minRatioBp"] = 13513 } ),
       };
    }
 
@@ -304,7 +370,7 @@ internal static class BenchResultsV8Fixture
             ["v7"] = new JsonObject { ["pinned"] = true, ["pinnedMhz"] = 3500, ["noTurbo"] = 1, ["uncore"] = "0x1e1e", ["clockOffPasses"] = 0, ["clockUnreadPasses"] = 0, ["legacyParsed"] = true },
             ["v8"] = new JsonObject { ["pinned"] = true, ["pinnedMhz"] = 3500, ["noTurbo"] = 1, ["uncore"] = "0x1e1e", ["clockOffPasses"] = 0, ["clockUnreadPasses"] = 0, ["legacyParsed"] = false },
          },
-         ["droppedWarnings"] = new JsonArray( new JsonObject { ["run"] = V7_RUNS[0], ["text"] = "clock off its pinned value during oracle default@8: the engine CPUs averaged 3121 MHz", ["engineMedianMhz"] = 3492, ["clientMedianMhz"] = 3492 } ),
+         ["droppedWarnings"] = new JsonArray( new JsonObject { ["run"] = V7_RUNS[0], ["text"] = "clock off its pinned value during oracle default@8: the engine CPUs averaged 3121 MHz", ["target"] = "oracle", ["pass"] = "default@8", ["engineMedianMhz"] = 3492, ["clientMedianMhz"] = 3492 } ),
       };
    }
 

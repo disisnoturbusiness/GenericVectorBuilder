@@ -26,7 +26,7 @@ public static class ConsolidateHarness
    public static readonly string[] REPORT_SOURCES =
    {
       "Report/RunResult.cs", "Report/RunConditions.cs", "Report/ResultJson.cs", "Report/ConsolidateCommand.cs", "Report/ConsolidatedMarkdown.cs",
-      "Report/EngineFacts.cs", "Report/Sentence.cs", "Report/SentenceAudit.cs", "Report/BannedWords.cs",
+      "Report/EngineFacts.cs", "Report/Sentence.cs", "Report/SentenceAudit.cs", "Report/BannedWords.cs", "Report/RecordedTextClasses.cs",
    };
 
    private static readonly Lazy<Assembly> COMPILED = new( Compile );
@@ -255,6 +255,8 @@ public sealed class SyntheticBench : IDisposable
          File.Copy( Path.Combine( ConsolidateHarness.RepoRoot(), file ), Path.Combine( Repo, file ) );
       }
 
+      Directory.CreateDirectory( Path.Combine( Repo, "deploy", "bench" ) );
+      File.WriteAllText( Path.Combine( Repo, "deploy", "bench", "recorded-text-classes.json" ), "{\"policy\":{\"durability\":\"label\",\"index\":\"label\",\"notes\":\"label\"}}" );
       Directory.CreateDirectory( Path.Combine( Repo, "design", "engine-docs" ) );
       File.WriteAllText( Path.Combine( Repo, "design", "engine-docs", "redis.html" ), $"<html><body><p>{MEMORY_QUOTE} with snapshots.</p></body></html>" );
    }

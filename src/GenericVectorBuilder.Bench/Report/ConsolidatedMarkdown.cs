@@ -47,6 +47,7 @@ public static class ConsolidatedMarkdown
       Paragraph( md, report, "disclosure" );
       DroppedTable( md, report );
       SettingsTable( md, report );
+      ClausesTable( md, report );
       Section( md, "Method" );
       Paragraph( md, report, "method" );
       if( HasSentences( report, "notinreport" ) )
@@ -115,7 +116,7 @@ public static class ConsolidatedMarkdown
    /// <returns>The label, or null.</returns>
    private static string? Label( string slot )
    {
-      foreach( string prefix in new[] { "disclosure.durability.", "disclosure.disk.", "why.effort." } )
+      foreach( string prefix in new[] { "disclosure.disk." } )
       {
          if( slot.StartsWith( prefix, StringComparison.Ordinal ) )
          {
@@ -215,7 +216,7 @@ public static class ConsolidatedMarkdown
          IEnumerable<string> cells = new[] { row.Display }.Concat( ranges ).Append( ConsolidateSources.Number( row.Median, dec ) );
          if( mode )
          {
-            cells = cells.Append( row.SearchMode ?? string.Empty );
+            cells = cells.Append( row.SearchMode == null ? string.Empty : $"{row.SearchMode}; {row.SearchConfidence}" );
          }
 
          md.AppendLine( Row( cells.Append( string.Join( ", ", row.NotSeparatedFrom ) ).Append( string.Join( ", ", row.Flags.Select( f => f.Code ).Distinct( StringComparer.Ordinal ) ) ).ToArray() ) );
@@ -260,10 +261,10 @@ public static class ConsolidatedMarkdown
    /// <param name="report">The report.</param>
    private static void WhyTable( StringBuilder md, ConsolidatedReport report )
    {
-      md.AppendLine( "| engine | kind | fact | confidence | source |" ).AppendLine( "|---|---|---|---|---|" );
+      md.AppendLine( "| engine | kind | fact | confidence | class | source |" ).AppendLine( "|---|---|---|---|---|---|" );
       foreach( WhyRow row in report.Why )
       {
-         row.Facts.ForEach( f => md.AppendLine( Row( row.Target, f.Kind + ( f.Mode == null ? string.Empty : $" ({f.Mode})" ), f.Text, f.Confidence, f.Where ) ) );
+         row.Facts.ForEach( f => md.AppendLine( Row( row.Target, f.Kind + ( f.Mode == null ? string.Empty : $" ({f.Mode})" ), f.Text, f.Confidence, f.Class, f.Where ) ) );
       }
 
       md.AppendLine().AppendLine( "| engine | engine CPU ms/search @1 | @8 | client CPU ms/search @1 | @8 | engine CPUs busy @8 |" ).AppendLine( "|---|---|---|---|---|---|" );
@@ -336,6 +337,32 @@ public static class ConsolidatedMarkdown
          report.EngineSettings.ForEach( r => r.Settings.ForEach( s => md.AppendLine( Row( r.Target, s.Key, s.Value, s.How ) ) ) );
          md.AppendLine();
       }
+   }
+
+   /// <summary>
+   /// The recorded texts the report prints, clause by clause: how each clause is backed and whether the report prints it.
+   /// Why a table as well as the sentences: it lists every clause in one place, with the sources that back it, so a reader can check the classes without reading the sentences.
+   /// </summary>
+   /// <param name="md">Output.</param>
+   /// <param name="report">The report.</param>
+   private static void ClausesTable( StringBuilder md, ConsolidatedReport report )
+   {
+      if( report.RecordedTexts.Count == 0 )
+      {
+         return;
+      }
+
+      md.AppendLine( "| text | clause | how it is backed | printed | basis |" ).AppendLine( "|---|---|---|---|---|" );
+      foreach( RecordedTextRecord record in report.RecordedTexts )
+      {
+         string name = record.Target.Length == 0 ? $"run note {record.Note?.ToString( CultureInfo.InvariantCulture )}" : $"{record.Target} {record.Field}";
+         foreach( RecordedClause clause in record.Clauses )
+         {
+            md.AppendLine( Row( name, clause.Text, clause.Unlisted ? clause.Class + " (not in the list)" : clause.Class, clause.Printed ? "yes" : "no: " + clause.NotPrinted, string.Join( "; ", clause.Basis ) ) );
+         }
+      }
+
+      md.AppendLine();
    }
 
    /// <summary>

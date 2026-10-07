@@ -73,7 +73,7 @@ public static class ThresholdBasis
    /// <returns>The move, bp.</returns>
    public static int MoveBp( double hi, double lo )
    {
-      return checked( (int)Math.Ceiling( 10000.0 * hi / lo ) - 10000 );
+      return BenchMath.RatioBpCeiling( hi, lo ) - 10000;
    }
 
    /// <summary>

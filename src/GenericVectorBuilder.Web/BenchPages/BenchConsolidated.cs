@@ -31,8 +31,18 @@ public sealed record BenchFlagEntry( string Code, string Text );
 /// <param name="NotSeparatedFrom">Targets this row is not separated from by the claim rule.</param>
 /// <param name="Flags">Warnings about this row.</param>
 /// <param name="Note">A note printed with the engine's name (for example that it holds its data in memory), or null.</param>
+/// <param name="SearchMode">How the engine's search ran, as the report's search fact for the engine says ("approximate" or "exact", printed as written), or null for a table that has no such column (the exact-mode table) and for a file that gives none.</param>
+/// <param name="NoteSources">What the note is bound to (a saved page, a repository file), printed with the note; empty when the note has none or the row has no note.</param>
 public sealed record BenchRow( string Target, string Display, string Status, IReadOnlyDictionary<string, BenchRange> PerSession, double? Median,
-   IReadOnlyList<string> NotSeparatedFrom, IReadOnlyList<BenchFlagEntry> Flags, string? Note );
+   IReadOnlyList<string> NotSeparatedFrom, IReadOnlyList<BenchFlagEntry> Flags, string? Note, string? SearchMode = null, IReadOnlyList<BenchSource>? NoteSources = null )
+{
+   #region Public Methods
+
+   /// <summary>The sources of the row's note; never null.</summary>
+   public IReadOnlyList<BenchSource> NoteSourceList => NoteSources ?? Array.Empty<BenchSource>();
+
+   #endregion Public Methods
+}
 
 /// <summary>One metric table.</summary>
 /// <param name="Metric">The metric's name: "p50Ms", "qps1", "qps8" or "exactP50Ms".</param>
@@ -71,12 +81,40 @@ public sealed record BenchMove( long MoveBp, string Who, IReadOnlyList<string> R
 /// <param name="Moves">The moves, one per metric when the file gives a per-metric object, else the moves listed.</param>
 public sealed record BenchBasisMoves( string Kind, IReadOnlyList<( string Metric, BenchMove Move )> Moves );
 
+/// <summary>One field of an engine's recorded setup that differs between the runs before and after a change.</summary>
+/// <param name="Field">The field's name ("engine", "index", "durability", ...).</param>
+/// <param name="Before">The text the earlier runs recorded.</param>
+/// <param name="After">The text the later runs recorded.</param>
+public sealed record BenchSetupChange( string Field, string Before, string After );
+
+/// <summary>The largest move an engine, or a pair, showed between runs on the two sides of a change of recorded setup, with the metric it was on.</summary>
+/// <param name="Metric">The metric the move is on.</param>
+/// <param name="Move">The move: its size, the engine or pair, the two runs, the two figures and the recorded differences between the runs.</param>
+public sealed record BenchSplitMove( string Metric, BenchMove Move );
+
+/// <summary>
+/// One change of an engine's recorded setup that the threshold basis does not compare across, with the move it hides and the threshold the basis would give if
+/// it were counted.
+/// </summary>
+/// <param name="Target">The engine.</param>
+/// <param name="Changes">The fields that differ, each with the text before and after.</param>
+/// <param name="BeforeSessions">The sessions of the runs that recorded the earlier setup.</param>
+/// <param name="BeforeRuns">The runs that recorded the earlier setup.</param>
+/// <param name="AfterSessions">The sessions of the runs that recorded the later setup.</param>
+/// <param name="AfterRuns">The runs that recorded the later setup.</param>
+/// <param name="OneEngine">The largest one-engine move across the change, or null when the file gives none.</param>
+/// <param name="Pair">The largest pair move across the change, or null when the file gives none.</param>
+/// <param name="TBpIfCounted">The threshold in basis points the basis would give with the change counted, or null.</param>
+public sealed record BenchSetupSplit( string Target, IReadOnlyList<BenchSetupChange> Changes, IReadOnlyList<string> BeforeSessions, IReadOnlyList<string> BeforeRuns,
+   IReadOnlyList<string> AfterSessions, IReadOnlyList<string> AfterRuns, BenchSplitMove? OneEngine, BenchSplitMove? Pair, long? TBpIfCounted );
+
 /// <summary>One run that counts towards the threshold.</summary>
 /// <param name="Folder">The run's folder name (untrusted text).</param>
 /// <param name="Seed">The run's seed, or null.</param>
 /// <param name="Conditions">The conditions the file records for it (turbo, uncore, warm-up and so on), as they are written.</param>
 /// <param name="Session">The name of the session of earlier runs the run belongs to (for example "v5"), or null when the file does not give it.</param>
-public sealed record BenchBasisRun( string Folder, long? Seed, IReadOnlyList<BenchPair> Conditions, string? Session = null );
+/// <param name="StartedUtc">When the run started, as the file wrote it, or null.</param>
+public sealed record BenchBasisRun( string Folder, long? Seed, IReadOnlyList<BenchPair> Conditions, string? Session = null, string? StartedUtc = null );
 
 /// <summary>The data the threshold rests on.</summary>
 /// <param name="Runs">The runs that count towards it.</param>
@@ -86,8 +124,17 @@ public sealed record BenchBasisRun( string Folder, long? Seed, IReadOnlyList<Ben
 /// <param name="NoMachineControl">The largest moves seen without machine control.</param>
 /// <param name="MaxBp">The largest move in basis points, or null.</param>
 /// <param name="TBp">The threshold in basis points, or null.</param>
+/// <param name="SetupSplits">The changes of an engine's recorded setup the basis does not compare across; empty when the file lists none.</param>
 public sealed record BenchBasis( IReadOnlyList<BenchBasisRun> Runs, IReadOnlyList<IReadOnlyList<BenchPair>> LeftOut, IReadOnlyList<IReadOnlyList<BenchPair>> Exclusions,
-   IReadOnlyList<BenchBasisMoves> Moves, IReadOnlyList<BenchBasisMoves> NoMachineControl, long? MaxBp, long? TBp );
+   IReadOnlyList<BenchBasisMoves> Moves, IReadOnlyList<BenchBasisMoves> NoMachineControl, long? MaxBp, long? TBp, IReadOnlyList<BenchSetupSplit>? SetupSplits = null )
+{
+   #region Public Methods
+
+   /// <summary>The changes of recorded setup the basis does not compare across; never null.</summary>
+   public IReadOnlyList<BenchSetupSplit> Splits => SetupSplits ?? Array.Empty<BenchSetupSplit>();
+
+   #endregion Public Methods
+}
 
 /// <summary>One engine's move between two sessions on one metric.</summary>
 /// <param name="Target">The engine.</param>
@@ -100,7 +147,8 @@ public sealed record BenchDriftEntry( string Target, string Metric, double MoveB
 /// <param name="A">The first engine.</param>
 /// <param name="B">The second engine.</param>
 /// <param name="MinRatioBp">The smaller of the two sessions' ratios in basis points, or null when the list has no ratio.</param>
-public sealed record BenchPairRef( string Metric, string A, string B, long? MinRatioBp );
+/// <param name="Session">For an order that held in one session only, the session it held in; null for any other list.</param>
+public sealed record BenchPairRef( string Metric, string A, string B, long? MinRatioBp, string? Session = null );
 
 /// <summary>How far the figures moved between two sessions.</summary>
 /// <param name="From">The first session's name.</param>
@@ -110,15 +158,26 @@ public sealed record BenchPairRef( string Metric, string A, string B, long? MinR
 /// <param name="Largest">The largest move as the file describes it, as text, or null.</param>
 /// <param name="UnconfirmedOrders">Orders that held in the first session and not in both.</param>
 /// <param name="CloseToLine">Pairs near the line that separates two engines.</param>
+/// <param name="OnLine">Ordered pairs that clear the line by a hair: the orders the report publishes that a little drift would remove.</param>
 public sealed record BenchDrift( string? From, string? To, IReadOnlyList<BenchDriftEntry> PerTarget, double? MedianAbsMoveBp, string? Largest,
-   IReadOnlyList<BenchPairRef> UnconfirmedOrders, IReadOnlyList<BenchPairRef> CloseToLine );
+   IReadOnlyList<BenchPairRef> UnconfirmedOrders, IReadOnlyList<BenchPairRef> CloseToLine, IReadOnlyList<BenchPairRef>? OnLine = null )
+{
+   #region Public Methods
+
+   /// <summary>The ordered pairs on the line; never null.</summary>
+   public IReadOnlyList<BenchPairRef> OnLinePairs => OnLine ?? Array.Empty<BenchPairRef>();
+
+   #endregion Public Methods
+}
 
 /// <summary>A clock warning a v7 report recorded and the consolidated set dropped, with the recomputed figures.</summary>
 /// <param name="Run">The run the warning was recorded for (a folder name or a path ending in one).</param>
 /// <param name="Text">The warning as recorded.</param>
 /// <param name="EngineMedianMhz">The median MHz of the engine CPUs, or null.</param>
 /// <param name="ClientMedianMhz">The median MHz of the client CPUs, or null.</param>
-public sealed record BenchDroppedWarning( string Run, string Text, double? EngineMedianMhz, double? ClientMedianMhz );
+/// <param name="Target">The engine the warning was recorded for, or null when the file does not say.</param>
+/// <param name="Pass">The pass the warning was recorded for, or null when the file does not say.</param>
+public sealed record BenchDroppedWarning( string Run, string Text, double? EngineMedianMhz, double? ClientMedianMhz, string? Target = null, string? Pass = null );
 
 /// <summary>What the clock did during the sessions.</summary>
 /// <param name="PerSession">Each session's clock figures as the file gives them.</param>
@@ -153,8 +212,10 @@ public sealed record BenchEffort( string Text, string? Source );
 /// <param name="Kind">"index", "search", "storage", "protocol", "cap" or "set-by-setup".</param>
 /// <param name="Text">The fact.</param>
 /// <param name="Source">Where it comes from.</param>
-/// <param name="Confidence">"recorded", "measured", "documented" or "set-by-code".</param>
-public sealed record BenchFact( string Kind, string Text, string Source, string Confidence );
+/// <param name="Confidence">The label the report gives the fact (for example "measured", "recorded", "documented", "set-by-code", "checked" or "recorded (engine's own report)"). The page prints it as written and never maps it to another label: a label the page upgraded would say more than the report does.</param>
+/// <param name="Mode">For a search fact, the mode it states ("approximate" or "exact", as written); null for any other fact and for a file that gives none.</param>
+/// <param name="Where">Where in the runs the fact was found (for example "in all 6 run(s) selected, at targets[redis].index"), or null.</param>
+public sealed record BenchFact( string Kind, string Text, string Source, string Confidence, string? Mode = null, string? Where = null );
 
 /// <summary>What one engine cost per search, as measured.</summary>
 /// <param name="EngineCpuMs1">Engine CPU milliseconds per search with one searcher, or null.</param>
@@ -213,7 +274,10 @@ public sealed record BenchGuards( bool G2Stopped, IReadOnlyList<string> G2Pairs,
 /// <param name="Failures">Failures it found (a published set has none).</param>
 /// <param name="FactsSha256">SHA-256 of the facts file used, or null.</param>
 /// <param name="ExclusionsSha256">SHA-256 of the exclusions file used, or null.</param>
-public sealed record BenchAudit( long SentencesChecked, IReadOnlyList<string> Failures, string? FactsSha256, string? ExclusionsSha256 );
+/// <param name="ObserverSha256">SHA-256 of the observer's summary used, or null.</param>
+/// <param name="FactsChecked">How many engine facts the audit checked, or null.</param>
+/// <param name="RowSentencesChecked">How many of the sentences it checked were row notes, or null.</param>
+public sealed record BenchAudit( long SentencesChecked, IReadOnlyList<string> Failures, string? FactsSha256, string? ExclusionsSha256, string? ObserverSha256 = null, long? FactsChecked = null, long? RowSentencesChecked = null );
 
 /// <summary>
 /// A consolidated.json of the v8 shape, read into the parts the page prints: sessions, the four metric
@@ -239,9 +303,10 @@ public sealed record BenchAudit( long SentencesChecked, IReadOnlyList<string> Fa
 /// <param name="Sentences">Every sentence.</param>
 /// <param name="Audit">The audit result, or null.</param>
 /// <param name="EngineSettings">The settings read from each running engine or set from a repository file, by engine; none when the runs recorded none.</param>
+/// <param name="UnreadFields">The paths of fields the file holds that the page neither draws nor lists as deliberately left out (see <see cref="BenchConsolidatedFields"/>); none for a file the page reads whole.</param>
 public sealed record BenchConsolidated( IReadOnlyList<BenchSession> Sessions, long TBp, double Ratio, IReadOnlyList<BenchMetric> Metrics, BenchGuards Guards, BenchBasis? Basis,
    BenchDrift? Drift, IReadOnlyList<BenchRecall> Recall, BenchClock? Clock, IReadOnlyList<BenchPair> Machine, IReadOnlyList<BenchImage> Images, IReadOnlyList<BenchWhy> Why,
-   IReadOnlyList<BenchSentence> Sentences, BenchAudit? Audit, IReadOnlyList<BenchEngineSettings>? EngineSettings = null )
+   IReadOnlyList<BenchSentence> Sentences, BenchAudit? Audit, IReadOnlyList<BenchEngineSettings>? EngineSettings = null, IReadOnlyList<string>? UnreadFields = null )
 {
    #region Public Methods
 

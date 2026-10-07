@@ -76,6 +76,18 @@ public static class BenchFormat
    }
 
    /// <summary>
+   /// True when two search modes are the same mode: their first words (letters only, any case) are equal, so "approximate" and "approximate (engine's own
+   /// report)" are one mode and "approximate" and "exact" are two.
+   /// </summary>
+   /// <param name="a">One mode as the file words it.</param>
+   /// <param name="b">The other mode as the file words it.</param>
+   /// <returns>True when they name the same mode.</returns>
+   public static bool SameMode( string a, string b )
+   {
+      return string.Equals( FirstWord( a ), FirstWord( b ), StringComparison.OrdinalIgnoreCase );
+   }
+
+   /// <summary>
    /// A container image id without its "sha256:" prefix, cut to twelve characters, as a person reads it.
    /// </summary>
    /// <param name="id">The full id.</param>
@@ -87,4 +99,31 @@ public static class BenchFormat
    }
 
    #endregion Public Methods
+
+   #region Private Methods
+
+   /// <summary>
+   /// The first run of letters of a text, or the trimmed text when it has none.
+   /// </summary>
+   /// <param name="text">The text.</param>
+   /// <returns>The first word.</returns>
+   private static string FirstWord( string text )
+   {
+      string trimmed = text.Trim();
+      int start = 0;
+      while( start < trimmed.Length && !char.IsLetter( trimmed[start] ) )
+      {
+         start++;
+      }
+
+      int end = start;
+      while( end < trimmed.Length && char.IsLetter( trimmed[end] ) )
+      {
+         end++;
+      }
+
+      return end > start ? trimmed[start..end] : trimmed;
+   }
+
+   #endregion Private Methods
 }

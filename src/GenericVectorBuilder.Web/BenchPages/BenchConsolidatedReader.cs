@@ -47,6 +47,7 @@ public static class BenchConsolidatedReader
 
    private const string FILE = "consolidated.json";
    private static readonly string[] EFFORT_NAMES = { "searchEffort", "searchSettings" };
+   private const string SEARCH_KIND = "search";
    private const string RANKED = "ranked";
    private const string ONE_SESSION = "one-session";
 
@@ -103,7 +104,8 @@ public static class BenchConsolidatedReader
       BenchGuards guards = ReadGuards( root );
       var model = new BenchConsolidated( sessions, BenchJson.Whole( threshold, "tBp", "threshold" ) ?? throw BenchJson.Bad( "threshold", "tBp", "a whole number" ),
          BenchJson.RequireNumber( threshold, "ratio", "threshold" ), ReadMetrics( root ), guards, ReadBasis( root, two ), ReadDrift( root, two ), ReadRecall( root ),
-         ReadClock( root, two ), ReadPairs( BenchJson.Get( root, "machine" ), "machine" ), ReadImages( root ), ReadWhy( root ), ReadSentences( root ), ReadAudit( root ), ReadEngineSettings( root ) );
+         ReadClock( root, two ), ReadPairs( BenchJson.Get( root, "machine" ), "machine" ), ReadImages( root ), ReadWhy( root ), ReadSentences( root ), ReadAudit( root ), ReadEngineSettings( root ),
+         BenchConsolidatedFields.Unread( root ) );
       Validate( model, two );
       return model;
    }
@@ -224,8 +226,28 @@ public static class BenchConsolidatedReader
 
       string target = BenchJson.RequireText( r, "target", path );
       var flags = BenchJson.Items( r, "flags", path ).Select( ( f, k ) => new BenchFlagEntry( BenchJson.RequireText( f, "code", $"{path}.flags[{k}]" ), BenchJson.Text( f, "text", $"{path}.flags[{k}]" ) ?? string.Empty ) ).ToList();
+      string? note = BenchJson.Text( r, "note", path );
+      List<BenchSource> noteSources = ReadSources( r, "noteSources", path );
+      if( noteSources.Count > 0 && string.IsNullOrWhiteSpace( note ) )
+      {
+         throw new InvalidDataException( $"{path}.noteSources holds sources for a note, and the row has no note." );
+      }
+
       return new BenchRow( target, BenchJson.Text( r, "display", path ) is { Length: > 0 } display ? display : BenchNames.FriendlyName( target ), status, per, BenchJson.Number( r, "median", path ),
-         BenchJson.Strings( r, "notSeparatedFrom", path ), flags, BenchJson.Text( r, "note", path ) );
+         BenchJson.Strings( r, "notSeparatedFrom", path ), flags, note, BenchJson.Text( r, "searchMode", path ) is { Length: > 0 } mode ? mode : null, noteSources );
+   }
+
+   /// <summary>
+   /// The sources bound to a text: a list of { kind, ref, value } objects.
+   /// </summary>
+   /// <param name="parent">The object that holds the list.</param>
+   /// <param name="name">The list's name.</param>
+   /// <param name="path">Where the parent sits in the file.</param>
+   /// <returns>The sources; none when the list is absent.</returns>
+   private static List<BenchSource> ReadSources( JsonElement parent, string name, string path )
+   {
+      return BenchJson.Items( parent, name, path ).Select( ( x, j ) => new BenchSource( BenchJson.RequireText( x, "kind", $"{path}.{name}[{j}]" ),
+         BenchJson.RequireText( x, "ref", $"{path}.{name}[{j}]" ), Describe( BenchJson.Get( x, "value" ) ?? default ) ) ).ToList();
    }
 
    /// <summary>
@@ -267,11 +289,61 @@ public static class BenchConsolidatedReader
 
       JsonElement b = basis.Value;
       var runs = BenchJson.Items( b, "runs", "basis" ).Select( ( r, i ) => new BenchBasisRun( BenchJson.RequireText( r, "folder", $"basis.runs[{i}]" ), BenchJson.Whole( r, "seed", $"basis.runs[{i}]" ),
-         ReadPairs( BenchJson.Get( r, "conditions" ), $"basis.runs[{i}].conditions" ), BenchJson.Text( r, "session", $"basis.runs[{i}]" ) ) ).ToList();
+         ReadPairs( BenchJson.Get( r, "conditions" ), $"basis.runs[{i}].conditions" ), BenchJson.Text( r, "session", $"basis.runs[{i}]" ), BenchJson.Text( r, "startedUtc", $"basis.runs[{i}]" ) ) ).ToList();
       List<BenchBasisMoves> moves = ReadMoves( BenchJson.Get( b, "perMetric" ), "basis.perMetric" );
       moves.AddRange( ReadNamedMoves( b, "basis", "maxMove", "exclusionsKept" ) );
       List<BenchBasisMoves> none = ReadMoves( BenchJson.Get( b, "noMachineControl" ), "basis.noMachineControl", true );
-      return new BenchBasis( runs, ReadRecords( b, "leftOut", "basis" ), ReadRecords( b, "exclusions", "basis" ), moves, none, BenchJson.Whole( b, "maxBp", "basis" ), BenchJson.Whole( b, "tBp", "basis" ) );
+      return new BenchBasis( runs, ReadRecords( b, "leftOut", "basis" ), ReadRecords( b, "exclusions", "basis" ), moves, none, BenchJson.Whole( b, "maxBp", "basis" ), BenchJson.Whole( b, "tBp", "basis" ), ReadSetupSplits( b ) );
+   }
+
+   /// <summary>
+   /// The changes of an engine's recorded setup that the basis does not compare across, each with the fields that changed, the runs on its two sides, the
+   /// largest move it hides and the threshold it would give. The file's own count (setupSplitCount) must equal the list: a table that shows fewer changes than
+   /// the file counts would hide the very thing the threshold depends on.
+   /// </summary>
+   /// <param name="basis">The basis object.</param>
+   /// <returns>The splits; none when the file lists none and counts none.</returns>
+   private static List<BenchSetupSplit> ReadSetupSplits( JsonElement basis )
+   {
+      var splits = new List<BenchSetupSplit>();
+      foreach( ( JsonElement e, int i ) in BenchJson.Items( basis, "setupSplits", "basis" ).Select( ( e, i ) => ( e, i ) ) )
+      {
+         string path = $"basis.setupSplits[{i}]";
+         List<BenchSetupChange> changes = BenchJson.Items( e, "changes", path ).Select( ( c, j ) => new BenchSetupChange( BenchJson.RequireText( c, "field", $"{path}.changes[{j}]" ),
+            BenchJson.Text( c, "before", $"{path}.changes[{j}]" ) ?? string.Empty, BenchJson.Text( c, "after", $"{path}.changes[{j}]" ) ?? string.Empty ) ).ToList();
+         if( changes.Count == 0 )
+         {
+            throw new InvalidDataException( $"{path}.changes names no field that changed; a setup split with nothing changed is not a split." );
+         }
+
+         JsonElement before = BenchJson.Get( e, "before" ) ?? default;
+         JsonElement after = BenchJson.Get( e, "after" ) ?? default;
+         splits.Add( new BenchSetupSplit( BenchJson.RequireText( e, "target", path ), changes, BenchJson.Strings( before, "sessions", $"{path}.before" ), BenchJson.Strings( before, "runs", $"{path}.before" ),
+            BenchJson.Strings( after, "sessions", $"{path}.after" ), BenchJson.Strings( after, "runs", $"{path}.after" ), ReadSplitMove( e, "oneEngine", path ), ReadSplitMove( e, "pair", path ),
+            BenchJson.Whole( e, "tBpIfCounted", path ) ) );
+      }
+
+      long? counted = BenchJson.Whole( basis, "setupSplitCount", "basis" );
+      if( counted != null && counted != splits.Count )
+      {
+         throw new InvalidDataException( $"basis.setupSplitCount is {counted} and basis.setupSplits lists {splits.Count}; the page draws every change the file counts or none." );
+      }
+
+      return splits;
+   }
+
+   /// <summary>
+   /// The move a setup split hides, or null when the split has none for that kind.
+   /// </summary>
+   /// <param name="split">The split's object.</param>
+   /// <param name="name">"oneEngine" or "pair".</param>
+   /// <param name="path">Where the split sits in the file.</param>
+   /// <returns>The move with its metric, or null.</returns>
+   private static BenchSplitMove? ReadSplitMove( JsonElement split, string name, string path )
+   {
+      return BenchJson.Get( split, name ) is { ValueKind: JsonValueKind.Object } move
+         ? new BenchSplitMove( BenchJson.RequireText( move, "metric", $"{path}.{name}" ), ReadMove( move, $"{path}.{name}" ) )
+         : null;
    }
 
    /// <summary>
@@ -403,7 +475,8 @@ public static class BenchConsolidatedReader
          BenchJson.RequireText( e, "metric", $"drift.perTarget[{i}]" ), BenchJson.Get( e, "moveBp" ) is { ValueKind: JsonValueKind.Number } n ? n.GetDouble() : throw BenchJson.Bad( $"drift.perTarget[{i}]", "moveBp", "a number" ) ) ).ToList();
       double? median = BenchJson.Get( d, "medianAbsMoveBp" ) is { ValueKind: JsonValueKind.Number } m ? m.GetDouble() : null;
       string? largest = BenchJson.Get( d, "largest" ) is JsonElement l ? DescribeLargest( l ) : null;
-      return new BenchDrift( BenchJson.Text( d, "from", "drift" ), BenchJson.Text( d, "to", "drift" ), per, median, largest, ReadPairRefs( d, "unconfirmedOrders" ), ReadPairRefs( d, "closeToLine" ) );
+      return new BenchDrift( BenchJson.Text( d, "from", "drift" ), BenchJson.Text( d, "to", "drift" ), per, median, largest, ReadPairRefs( d, "unconfirmedOrders" ), ReadPairRefs( d, "closeToLine" ),
+         ReadPairRefs( d, "onLine" ) );
    }
 
    /// <summary>
@@ -433,7 +506,7 @@ public static class BenchConsolidatedReader
    }
 
    /// <summary>
-   /// A list of { metric, a, b } objects.
+   /// A list of { metric, a, b } objects, each with the smallest ratio ("minRatioBp") or the session it held in ("session") when the list has them.
    /// </summary>
    /// <param name="parent">The drift object.</param>
    /// <param name="name">The list's name.</param>
@@ -441,7 +514,7 @@ public static class BenchConsolidatedReader
    private static List<BenchPairRef> ReadPairRefs( JsonElement parent, string name )
    {
       return BenchJson.Items( parent, name, "drift" ).Select( ( e, i ) => new BenchPairRef( BenchJson.RequireText( e, "metric", $"drift.{name}[{i}]" ), BenchJson.RequireText( e, "a", $"drift.{name}[{i}]" ),
-         BenchJson.RequireText( e, "b", $"drift.{name}[{i}]" ), BenchJson.Whole( e, "minRatioBp", $"drift.{name}[{i}]" ) ) ).ToList();
+         BenchJson.RequireText( e, "b", $"drift.{name}[{i}]" ), BenchJson.Whole( e, "minRatioBp", $"drift.{name}[{i}]" ), BenchJson.Text( e, "session", $"drift.{name}[{i}]" ) ) ).ToList();
    }
 
    /// <summary>
@@ -491,7 +564,8 @@ public static class BenchConsolidatedReader
       }
 
       var dropped = BenchJson.Items( clock.Value, "droppedWarnings", "clock" ).Select( ( w, i ) => new BenchDroppedWarning( BenchJson.RequireText( w, "run", $"clock.droppedWarnings[{i}]" ),
-         BenchJson.Text( w, "text", $"clock.droppedWarnings[{i}]" ) ?? string.Empty, BenchJson.Number( w, "engineMedianMhz", $"clock.droppedWarnings[{i}]" ), BenchJson.Number( w, "clientMedianMhz", $"clock.droppedWarnings[{i}]" ) ) ).ToList();
+         BenchJson.Text( w, "text", $"clock.droppedWarnings[{i}]" ) ?? string.Empty, BenchJson.Number( w, "engineMedianMhz", $"clock.droppedWarnings[{i}]" ), BenchJson.Number( w, "clientMedianMhz", $"clock.droppedWarnings[{i}]" ),
+         BenchJson.Text( w, "target", $"clock.droppedWarnings[{i}]" ), BenchJson.Text( w, "pass", $"clock.droppedWarnings[{i}]" ) ) ).ToList();
       return new BenchClock( per, dropped );
    }
 
@@ -520,7 +594,8 @@ public static class BenchConsolidatedReader
       {
          string path = $"why[{i}]";
          var facts = BenchJson.Items( e, "facts", path ).Select( ( f, j ) => new BenchFact( BenchJson.RequireText( f, "kind", $"{path}.facts[{j}]" ), BenchJson.RequireText( f, "text", $"{path}.facts[{j}]" ),
-            BenchJson.RequireText( f, "source", $"{path}.facts[{j}]" ), BenchJson.RequireText( f, "confidence", $"{path}.facts[{j}]" ) ) ).ToList();
+            BenchJson.RequireText( f, "source", $"{path}.facts[{j}]" ), BenchJson.RequireText( f, "confidence", $"{path}.facts[{j}]" ),
+            BenchJson.Text( f, "mode", $"{path}.facts[{j}]" ) is { Length: > 0 } mode ? mode : null, BenchJson.Text( f, "where", $"{path}.facts[{j}]" ) is { Length: > 0 } where ? where : null ) ).ToList();
          JsonElement costs = BenchJson.Get( e, "costs" ) ?? default;
          JsonElement engine = BenchJson.Get( costs, "engineCpuMsPerSearch" ) ?? default;
          JsonElement client = BenchJson.Get( costs, "clientCpuMsPerSearch" ) ?? default;
@@ -637,15 +712,16 @@ public static class BenchConsolidatedReader
 
    /// <summary>
    /// Settings in an object: one setting for a "text" (or for a "key" and a "value"), the settings under "settings", or, for any other object, one
-   /// setting per member written "name=value", as results.json writes the settings of a target. A "source" member is where the settings come from, and a
-   /// "target" member names the engine of a top-level entry; neither is a setting.
+   /// setting per member written "name=value", as results.json writes the settings of a target. A "source" member is where the settings come from (an
+   /// entry of the file's top-level list that names no source gives the run it was read from, "run", in its place), and a "target" member names the engine
+   /// of a top-level entry; none of them is a setting.
    /// </summary>
    /// <param name="obj">The object.</param>
    /// <param name="path">Where it sits in the file.</param>
    /// <returns>The settings.</returns>
    private static List<BenchEffort> EffortFromObject( JsonElement obj, string path )
    {
-      string? source = BenchJson.Text( obj, "source", path );
+      string? source = BenchJson.Text( obj, "source", path ) ?? BenchJson.Text( obj, "run", path );
       if( BenchJson.Get( obj, "text" ) is { ValueKind: JsonValueKind.String } text )
       {
          return new List<BenchEffort> { new( text.GetString()!.Trim(), source ) };
@@ -661,7 +737,7 @@ public static class BenchConsolidatedReader
          return EffortValues( inner, $"{path}.settings" ).Select( e => e with { Source = e.Source ?? source } ).ToList();
       }
 
-      return obj.EnumerateObject().Where( p => p.Name is not ( "target" or "source" ) ).Select( p => new BenchEffort( $"{p.Name}={Describe( p.Value )}", source ) ).ToList();
+      return obj.EnumerateObject().Where( p => p.Name is not ( "target" or "source" or "run" ) ).Select( p => new BenchEffort( $"{p.Name}={Describe( p.Value )}", source ) ).ToList();
    }
 
    /// <summary>
@@ -689,7 +765,8 @@ public static class BenchConsolidatedReader
    {
       JsonElement? audit = BenchJson.Get( root, "audit" );
       return audit == null ? null : new BenchAudit( BenchJson.Whole( audit.Value, "sentencesChecked", "audit" ) ?? 0, BenchJson.Items( audit.Value, "failures", "audit" ).Select( f => Describe( f ) ).ToList(),
-         BenchJson.Text( audit.Value, "factsSha256", "audit" ), BenchJson.Text( audit.Value, "exclusionsSha256", "audit" ) );
+         BenchJson.Text( audit.Value, "factsSha256", "audit" ), BenchJson.Text( audit.Value, "exclusionsSha256", "audit" ), BenchJson.Text( audit.Value, "observerSha256", "audit" ),
+         BenchJson.Whole( audit.Value, "factsChecked", "audit" ), BenchJson.Whole( audit.Value, "rowSentencesChecked", "audit" ) );
    }
 
    /// <summary>
@@ -782,7 +859,32 @@ public static class BenchConsolidatedReader
          throw new InvalidDataException( $"{FILE}: two sessions need the facts and costs table (why)." );
       }
 
+      ValidateSearchModes( model );
       ValidateReuse( model );
+   }
+
+   /// <summary>
+   /// The search mode a metric row prints for an engine must be the mode the engine's own search fact states: the column and the fact are two prints of one
+   /// recorded state, and a row that says "approximate" beside a fact that says "exact" (or the reverse) would show the reader a label the facts table
+   /// contradicts. Modes are compared by their first word (see <see cref="BenchFormat.SameMode"/>), so a mode the report words "approximate (engine's own
+   /// report)" in one place and "approximate" in another is one mode, and "approximate" against "exact" is a contradiction. A row whose engine has no search
+   /// fact that states a mode cannot be checked and is not refused; a row whose engine has such facts and none of them states the row's mode is refused,
+   /// naming the engine, the table and both modes.
+   /// </summary>
+   /// <param name="model">The model read.</param>
+   private static void ValidateSearchModes( BenchConsolidated model )
+   {
+      foreach( BenchMetric metric in model.Metrics )
+      {
+         foreach( BenchRow row in metric.Rows.Where( r => r.SearchMode != null ) )
+         {
+            List<string> stated = model.Why.Where( w => w.Target == row.Target ).SelectMany( w => w.Facts ).Where( f => f.Kind == SEARCH_KIND && f.Mode != null ).Select( f => f.Mode! ).ToList();
+            if( stated.Count > 0 && !stated.Any( m => BenchFormat.SameMode( m, row.SearchMode! ) ) )
+            {
+               throw new InvalidDataException( $"metrics[{metric.Metric}].{row.Target}.searchMode is \"{row.SearchMode}\", and the search facts of {row.Target} state {string.Join( ", ", stated.Distinct( StringComparer.Ordinal ).Select( m => $"\"{m}\"" ) )}." );
+            }
+         }
+      }
    }
 
    /// <summary>

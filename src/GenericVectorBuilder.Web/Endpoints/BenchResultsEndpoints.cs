@@ -168,16 +168,18 @@ public static class BenchResultsEndpoints
       ( string? title, string rest, string? reportError ) = ReadReport( md );
       var body = new StringBuilder( "<p><a href=\"/bench-results\">Summary and all runs</a></p>" );
       body.Append( "<h1>" ).Append( BenchMarkdown.Inline( title ?? run ) ).Append( "</h1>" );
-      if( BenchFolderNames.Banner( BenchFolderNames.KindOf( run ) ) is string banner )
+      bool isSet = File.Exists( Path.Combine( folder, CONSOLIDATED_JSON ) ) && !File.Exists( Path.Combine( folder, RESULTS_JSON ) );
+      bool recordOnly = isSet && IsRecordOnly( folder, run );
+      if( BenchFolderNames.Banner( BenchFolderNames.KindOf( run ), recordOnly ) is string banner )
       {
          body.Append( $"<p class=\"errors bench-banner\">{Enc( banner )}</p>" );
       }
 
-      bool isSet = File.Exists( Path.Combine( folder, CONSOLIDATED_JSON ) ) && !File.Exists( Path.Combine( folder, RESULTS_JSON ) );
       body.Append( isSet ? SetBlock( folder ) : RunBlock( root, folder, run ) );
-      string heading = isSet && IsRecordOnly( folder, run ) ? BenchLegends.H_REPORT_RECORD : BenchLegends.H_REPORT_TEXT;
-      body.Append( reportError != null ? $"<p class=\"errors\">The report could not be read: {Enc( reportError )}</p>" : ReportHtml( md, rest, isSet, heading ) );
-      body.Append( RawFiles( folder, run ) );
+      string heading = recordOnly ? BenchLegends.H_REPORT_RECORD : BenchLegends.H_REPORT_TEXT;
+      string text = BenchReportStrip.Apply( rest, out int stripped );
+      body.Append( reportError != null ? $"<p class=\"errors\">The report could not be read: {Enc( reportError )}</p>" : ReportHtml( md, text, stripped, isSet, heading ) );
+      body.Append( RawFiles( folder, run, md == null ? null : Path.GetFileName( md ), stripped ) );
       return Page( title ?? run, body.ToString() );
    }
 
@@ -280,22 +282,23 @@ public static class BenchResultsEndpoints
    /// framing left out and a note saying so; for a consolidated set, inside a closed details.
    /// </summary>
    /// <param name="md">The report path, or null.</param>
-   /// <param name="rest">The report text after its title.</param>
+   /// <param name="text">The report text after its title, with the retired sentences already left out (see <see cref="BenchReportStrip"/>).</param>
+   /// <param name="removed">How many sentences were left out.</param>
    /// <param name="isSet">True for a consolidated set.</param>
    /// <param name="heading">The summary line of a consolidated set's details block.</param>
    /// <returns>HTML fragment.</returns>
-   private static string ReportHtml( string? md, string rest, bool isSet, string heading )
+   private static string ReportHtml( string? md, string text, int removed, bool isSet, string heading )
    {
       if( md == null )
       {
          return "<p class=\"muted\">This folder has no Markdown report.</p>";
       }
 
-      string text = BenchReportStrip.Apply( rest, out int removed );
       string note = removed > 0 ? $"<aside class=\"bench-caveats\"><p>{Enc( BenchLegends.STRIPPED )} {removed}</p></aside>" : string.Empty;
+      string asWritten = isSet ? string.Empty : $"<p class=\"bench-legend muted\">{Enc( BenchLegends.RUN_REPORT_AS_WRITTEN )} {Enc( BenchLegends.RUN_REPORT_UNCHECKED )}</p>";
       return isSet
          ? $"<details class=\"bench-target\"><summary>{Enc( heading )}</summary>{note}{BenchMarkdown.Render( text )}</details>"
-         : $"<h2>Full results</h2>{note}{BenchMarkdown.Render( text )}";
+         : $"<h2>Full results</h2>{asWritten}{note}{BenchMarkdown.Render( text )}";
    }
 
    /// <summary>
@@ -327,8 +330,10 @@ public static class BenchResultsEndpoints
    /// </summary>
    /// <param name="folder">Folder path (already resolved).</param>
    /// <param name="run">Folder name.</param>
+   /// <param name="report">The file name of the report the page printed a copy of, or null when the folder has none.</param>
+   /// <param name="stripped">How many sentences the page left out of its copy of the report; when it is above zero the raw file is said to hold them.</param>
    /// <returns>HTML fragment.</returns>
-   private static string RawFiles( string folder, string run )
+   private static string RawFiles( string folder, string run, string? report, int stripped )
    {
       var files = new List<string>();
       try
@@ -345,7 +350,13 @@ public static class BenchResultsEndpoints
          return $"<h2>Raw files</h2><p class=\"errors\">The file list could not be read: {Enc( ex.Message )}</p>";
       }
 
-      var html = new StringBuilder( "<h2>Raw files</h2><ul>" );
+      var html = new StringBuilder( "<h2>Raw files</h2>" );
+      if( report != null && stripped > 0 )
+      {
+         html.Append( $"<p class=\"muted bench-raw-note\"><code>{Enc( report )}</code> {Enc( BenchLegends.RAW_UNEDITED )} {stripped}</p>" );
+      }
+
+      html.Append( "<ul>" );
       foreach( string file in files.OrderBy( f => f, StringComparer.Ordinal ) )
       {
          html.Append( $"<li><a href=\"/bench-results/{Enc( run )}/{Enc( file )}\">{Enc( file )}</a></li>" );

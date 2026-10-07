@@ -41,7 +41,8 @@ public static class ConsolidateLoader
       string repo = Repo( args.Repo );
       string factsPath = Existing( args.Facts ?? Path.Combine( AppContext.BaseDirectory, ConsolidateCommand.FACTS_FILE ), "--facts" );
       string exclusionsPath = Existing( args.Exclusions ?? Path.Combine( AppContext.BaseDirectory, ConsolidateCommand.EXCLUSIONS_FILE ), "--exclusions" );
-      log( $"Repository {repo}; facts {factsPath}; exclusions {exclusionsPath}; {others.Count} other run(s) of {pipeline} beside the sessions" );
+      string classesPath = Existing( Path.Combine( repo, RecordedTextClasses.FILE ), "the recorded-text classes" );
+      log( $"Repository {repo}; facts {factsPath}; exclusions {exclusionsPath}; classes {classesPath}; {others.Count} other run(s) of {pipeline} beside the sessions" );
       return new ConsolidateInput
       {
          Sessions = sessions,
@@ -55,7 +56,9 @@ public static class ConsolidateLoader
          ExclusionsSha256 = EngineFactSheet.FileSha256( exclusionsPath ),
          RepoRoot = repo,
          ResultsRoot = root,
-         ObserverPath = args.Observer == null ? null : Existing( Path.GetFullPath( args.Observer ), "--observer" ),
+         ObserverPaths = args.Observers.Select( o => Existing( Path.GetFullPath( o ), "--observer" ) ).ToList(),
+         Classes = RecordedTextClasses.Load( classesPath ),
+         ClassesSha256 = EngineFactSheet.FileSha256( classesPath ),
          CommandLine = commandLine,
          CreatedUtc = DateTime.UtcNow.ToString( "yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture ),
       };

@@ -3,6 +3,13 @@ using System.Text.Json;
 namespace GenericVectorBuilder.Web.BenchPages;
 
 /// <summary>
+/// A note a consolidated set prints beside an engine's name, with what it is bound to.
+/// </summary>
+/// <param name="Text">The note.</param>
+/// <param name="Sources">Its sources (a saved page, a repository file); empty when it has none.</param>
+public sealed record BenchRowNote( string Text, IReadOnlyList<BenchSource> Sources );
+
+/// <summary>
 /// One run a consolidated folder uses, with the role it plays there.
 /// </summary>
 /// <param name="Run">The run's folder name (checked safe).</param>
@@ -26,9 +33,9 @@ public sealed record BenchRunRef( string Run, string Role, string? Session = nul
 /// <param name="Reuse">The sentences of its "runs.reuse" slots with their sources, one per session it says a word about; empty when it has none.</param>
 /// <param name="Dropped">The clock warnings it dropped.</param>
 /// <param name="Error">Why the file could not be read, or null.</param>
-/// <param name="RowNotes">The notes its metric rows carry beside an engine's name (for example that an engine holds its data in memory), by target; null for a file with none.</param>
+/// <param name="RowNotes">The notes its metric rows carry beside an engine's name (for example that an engine holds its data in memory) with their sources, by target; null for a file with none.</param>
 public sealed record BenchFolderFacts( string Folder, BenchFolderKind Kind, BenchShape? Shape, int EngineCount, IReadOnlyList<BenchRunRef> Runs, IReadOnlyList<BenchSentence> Reuse,
-   IReadOnlyList<BenchDroppedWarning> Dropped, string? Error, IReadOnlyDictionary<string, string>? RowNotes = null );
+   IReadOnlyList<BenchDroppedWarning> Dropped, string? Error, IReadOnlyDictionary<string, BenchRowNote>? RowNotes = null );
 
 /// <summary>
 /// Finds which consolidated folders use which runs.
@@ -136,12 +143,12 @@ public static class BenchRunUse
    /// <param name="facts">Every folder's facts.</param>
    /// <param name="run">The run's folder name.</param>
    /// <returns>Target to note; empty when no folder that uses the run has one.</returns>
-   public static IReadOnlyDictionary<string, string> NotesFor( IReadOnlyList<BenchFolderFacts> facts, string run )
+   public static IReadOnlyDictionary<string, BenchRowNote> NotesFor( IReadOnlyList<BenchFolderFacts> facts, string run )
    {
-      var notes = new Dictionary<string, string>( StringComparer.Ordinal );
+      var notes = new Dictionary<string, BenchRowNote>( StringComparer.Ordinal );
       foreach( ( BenchFolderFacts folder, string _ ) in MarksFor( facts, run ) )
       {
-         foreach( KeyValuePair<string, string> note in folder.RowNotes ?? new Dictionary<string, string>() )
+         foreach( KeyValuePair<string, BenchRowNote> note in folder.RowNotes ?? new Dictionary<string, BenchRowNote>() )
          {
             notes.TryAdd( note.Key, note.Value );
          }
@@ -200,8 +207,8 @@ public static class BenchRunUse
 
       List<BenchSentence> reuse = model.Sentences.Where( s => s.Slot == REUSE_SLOT || s.Slot.StartsWith( BenchSlots.REUSE_PREFIX, StringComparison.Ordinal ) ).ToList();
       int engines = model.Metrics.SelectMany( m => m.Rows.Select( r => r.Target ) ).Distinct( StringComparer.Ordinal ).Count();
-      Dictionary<string, string> notes = model.Metrics.SelectMany( m => m.Rows ).Where( r => !string.IsNullOrWhiteSpace( r.Note ) )
-         .GroupBy( r => r.Target, StringComparer.Ordinal ).ToDictionary( g => g.Key, g => g.First().Note!, StringComparer.Ordinal );
+      Dictionary<string, BenchRowNote> notes = model.Metrics.SelectMany( m => m.Rows ).Where( r => !string.IsNullOrWhiteSpace( r.Note ) )
+         .GroupBy( r => r.Target, StringComparer.Ordinal ).ToDictionary( g => g.Key, g => new BenchRowNote( g.First().Note!, g.First().NoteSourceList ), StringComparer.Ordinal );
       return new BenchFolderFacts( folder, kind, BenchShape.Consolidated, engines, runs, reuse, model.Clock?.Dropped ?? new List<BenchDroppedWarning>(), null, notes );
    }
 

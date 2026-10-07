@@ -79,19 +79,54 @@ public static class ConsolidateTextDisclosures
    #region Private Methods
 
    /// <summary>
-   /// Governor and CPU partition.
+   /// The governor, the client's CPUs and where each engine ran.
    /// </summary>
    /// <param name="w">The writer.</param>
    private static void Governor( Writer w )
    {
       RunConditions c = w.Newest.Runs[0].Conditions;
-      if( c.Governor == null || c.EngineCpus == null || c.ClientCpus == null )
+      if( c.Governor == null || c.ClientCpus == null )
       {
          return;
       }
 
-      w.Add( "disclosure.governor", T.Fill( T.DISCLOSURE_GOVERNOR, c.Governor, c.EngineCpus, c.ClientCpus ),
-         S.ResultAll( "conditions.governor", c.Governor ), S.ResultAll( "conditions.engineCpus", c.EngineCpus ), S.ResultAll( "conditions.clientCpus", c.ClientCpus ) );
+      w.Add( "disclosure.governor", T.Fill( T.DISCLOSURE_GOVERNOR, c.Governor, c.ClientCpus ), S.ResultAll( "conditions.governor", c.Governor ), S.ResultAll( "conditions.clientCpus", c.ClientCpus ) );
+      Engines( w, c );
+   }
+
+   /// <summary>
+   /// The CPUs each group of engines ran on, from each run's record of where each engine ran: container engines on the engine CPUs, embedded engines inside the client process on the client CPUs.
+   /// Why per target and not the partition: the partition says where the engines were meant to run, and an embedded engine runs on the client's CPUs, so a sentence that says every engine ran on the engine CPUs is false for it.
+   /// </summary>
+   /// <param name="w">The writer.</param>
+   /// <param name="c">The newest session's first run's conditions.</param>
+   private static void Engines( Writer w, RunConditions c )
+   {
+      List<EnginePinFacts> pins = w.Report.Targets.Select( t => c.Engines.FirstOrDefault( e => e.Target == t ) ).Where( e => e is { Cpus: not null } ).Select( e => e! ).ToList();
+      if( pins.Count == 0 )
+      {
+         if( c.EngineCpus != null )
+         {
+            w.Add( "disclosure.engines.unknown", T.Fill( T.DISCLOSURE_ENGINES_UNKNOWN, c.EngineCpus ), S.ResultAll( "conditions.engineCpus", c.EngineCpus ) );
+         }
+
+         return;
+      }
+
+      int n = 0;
+      foreach( IGrouping<( string? Hosting, string? Cpus ), EnginePinFacts> group in pins.GroupBy( e => ( e.Hosting, e.Cpus ) ) )
+      {
+         bool embedded = group.Key.Hosting == ConsolidateWhy.EMBEDDED;
+         string noun = group.Key.Hosting == "compose" ? "container" : group.Key.Hosting ?? ConsolidateIdentity.NOT_RECORDED;
+         var sources = new List<SentenceSource>();
+         foreach( EnginePinFacts pin in group )
+         {
+            sources.Add( S.ResultAll( $"conditions.engines[target={pin.Target}].cpus", pin.Cpus! ) );
+            sources.Add( S.ResultAll( $"conditions.engines[target={pin.Target}].hosting", pin.Hosting ?? string.Empty ) );
+         }
+
+         w.Add( $"disclosure.engines.{n++}", T.Fill( T.DISCLOSURE_ENGINES, noun, S.List( group.Select( g => g.Target ).ToList() ), embedded ? "inside the client process " : string.Empty, group.Key.Cpus! ), sources );
+      }
    }
 
    /// <summary>
@@ -264,7 +299,7 @@ public static class ConsolidateTextDisclosures
    }
 
    /// <summary>
-   /// The observer, its clock check and the timers; or that no observer summary was given.
+   /// The observer, its clock check and the timers, for the newest session and for every older session an observer summary covers; or that no observer summary was given.
    /// </summary>
    /// <param name="w">The writer.</param>
    private static void Observer( Writer w )
@@ -276,28 +311,46 @@ public static class ConsolidateTextDisclosures
          return;
       }
 
+      ObserverSentences( w, o, "observer", string.Empty, "observer" );
+      for( int i = 0; i < w.Report.ObserverOthers.Count; i++ )
+      {
+         ObserverInfo other = w.Report.ObserverOthers[i];
+         ObserverSentences( w, other, $"observerOthers[{i}]", $".{other.Session}", "observer" );
+      }
+   }
+
+   /// <summary>
+   /// The observer sentences of one session.
+   /// </summary>
+   /// <param name="w">The writer.</param>
+   /// <param name="o">The observer block of the session.</param>
+   /// <param name="at">Its path in consolidated.json.</param>
+   /// <param name="suffix">The slot suffix: empty for the newest session, ".name" for an older one.</param>
+   /// <param name="slotName">The slot name.</param>
+   private static void ObserverSentences( Writer w, ObserverInfo o, string at, string suffix, string slotName )
+   {
       if( o.CpuMax is double cpu )
       {
          string max = S.Number( cpu, 3 );
-         w.Add( "disclosure.observer", T.Fill( T.DISCLOSURE_OBSERVER, w.Newest.Name, max ), S.Consolidated( "observer.cpuMax", max ) );
+         w.Add( $"disclosure.{slotName}{suffix}", T.Fill( T.DISCLOSURE_OBSERVER, o.Session, max, o.Copy ), S.Consolidated( at + ".cpuMax", max ), S.Consolidated( at + ".copy", o.Copy ) );
       }
 
       if( o.AperfWorstDeviationBp is double bp && o.Msr620ValuesSeen.Count > 0 )
       {
          string pct = S.Percent( bp );
          string values = S.List( o.Msr620ValuesSeen );
-         w.Add( "disclosure.observer.clock", T.Fill( T.DISCLOSURE_OBSERVER_CLOCK, pct, T.Msr(), values ), new[] { S.Consolidated( "observer.aperfWorstDeviationBp", pct, "bp-pct" ), S.File( T.MSR_FILE, T.MSR_TOKEN ) }
-            .Concat( o.Msr620ValuesSeen.Select( ( v, i ) => S.Consolidated( $"observer.msr620ValuesSeen[{i}]", v ) ) ) );
+         w.Add( $"disclosure.{slotName}.clock{suffix}", T.Fill( T.DISCLOSURE_OBSERVER_CLOCK, pct, T.Msr(), values ), new[] { S.Consolidated( at + ".aperfWorstDeviationBp", pct, "bp-pct" ), S.File( T.MSR_FILE, T.MSR_TOKEN ) }
+            .Concat( o.Msr620ValuesSeen.Select( ( v, i ) => S.Consolidated( $"{at}.msr620ValuesSeen[{i}]", v ) ) ) );
       }
 
       if( o.TimersCovered )
       {
          string fired = S.Whole( o.PassesWithTimerFired );
-         w.Add( "disclosure.timers", T.Fill( T.DISCLOSURE_TIMERS, fired, w.Newest.Name ), S.Consolidated( "observer.passesWithTimerFired", fired ) );
+         w.Add( $"disclosure.timers{suffix}", T.Fill( T.DISCLOSURE_TIMERS, fired, o.Session ), S.Consolidated( at + ".passesWithTimerFired", fired ) );
       }
       else
       {
-         w.Add( "disclosure.timers", T.Fill( T.DISCLOSURE_TIMERS_NOT_COVERED, w.Newest.Name ) );
+         w.Add( $"disclosure.timers{suffix}", T.Fill( T.DISCLOSURE_TIMERS_NOT_COVERED, o.Session ) );
       }
    }
 

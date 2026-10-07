@@ -1,0 +1,191 @@
+date: 2026-10-07T18:13:07Z
+host: linus7795 6.8.0-142-generic
+commit of the tree under test: 1ebbb3f8f1a2a81a6bb447b7ba222b733a997964
+test file md5: c2495ae25b5a7b2214bf35cd6a099748  /home/dan/gvb-work/lanes/v8-fix-sweep/repo-maria/tests/GenericVectorBuilder.Engines.Tests/MariaDbEffortTests.cs
+compose file md5: 1d07d34ef4ed0fe04c90f33984a227c3  /home/dan/gvb-work/lanes/v8-fix-sweep/repo-maria/deploy/engines/mariadb-bench.compose.yaml
+image: sha256:6422478cb8e159f080fb1d8ccf65101e26fe51385787fde7d16c3b165a331f15
+load: 1.39 2.13 2.36 3/2121 1493709
+daily before: b115140380d05c5d4ab5d4e123b77af39bb22c23649fa35e3789e06bf0c3fbd0 2026-10-04T14:18:30.610916687Z restarts=0 cpuset=0-7
+ Network gvbbench-mariadb_default  Created
+ Container gvbbench-mariadb  Creating
+ Container gvbbench-mariadb  Created
+ Container gvbbench-mariadb  Starting
+ Container gvbbench-mariadb  Started
+bench container: 86811968cb17beb64dddd74eeaf885c69f0b2c5ba0027a02b355b1d1358c340a image=sha256:6422478cb8e159f080fb1d8ccf65101e26fe51385787fde7d16c3b165a331f15 cpuset=2-3,6-7 started=2026-10-07T18:13:08.059202964Z
+bench container threads on CPUs:       1 2,3,6,7;
+server version: 11.8.9-MariaDB-ubu2404
+settings read from the running bench container with SHOW GLOBAL VARIABLES (name = value):
+   SETTING innodb_buffer_pool_size = 2147483648
+   SETTING innodb_doublewrite = ON
+   SETTING innodb_flush_log_at_trx_commit = 2
+   SETTING log_bin = OFF
+   SETTING mhnsw_default_distance = euclidean
+   SETTING mhnsw_default_m = 6
+   SETTING mhnsw_ef_search = 20
+   SETTING mhnsw_max_cache_size = 4294967296
+===== repeat 1, 2026-10-07T18:13:14Z
+exit 0
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 2000) [5 s]
+ 2000 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.6 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 488 of 1000 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 488 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 1000 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.900, p50 2.94 ms
+   ef 20: recall@10 0.484, p50 2.67 ms
+   ef 3200: recall@10 0.994, p50 5.05 ms
+ RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.484, ef 100 0.900, ef 3200 0.994
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 524) [1 s]
+ 524 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.5 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 395 of 524 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 395 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 520 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.994, p50 2.38 ms
+   ef 20: recall@10 0.888, p50 2.03 ms
+   ef 3200: recall@10 0.994, p50 2.30 ms
+ RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.888, ef 100 0.994, ef 3200 0.994
+Total tests: 2
+     Passed: 2
+===== repeat 2, 2026-10-07T18:13:24Z
+exit 0
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 2000) [5 s]
+ 2000 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.6 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 514 of 1000 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 514 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 1000 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.932, p50 1.47 ms
+   ef 20: recall@10 0.482, p50 1.28 ms
+   ef 3200: recall@10 0.992, p50 3.95 ms
+ RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 524) [1 s]
+ 524 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.5 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 402 of 524 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 402 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 516 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.988, p50 1.93 ms
+   ef 20: recall@10 0.898, p50 1.98 ms
+   ef 3200: recall@10 0.988, p50 2.42 ms
+ RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.898, ef 100 0.988, ef 3200 0.988
+Total tests: 2
+     Passed: 2
+===== repeat 3, 2026-10-07T18:13:33Z
+exit 0
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 2000) [5 s]
+ 2000 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.6 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 495 of 1000 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 495 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 1000 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.894, p50 2.96 ms
+   ef 20: recall@10 0.468, p50 2.49 ms
+   ef 3200: recall@10 0.994, p50 5.01 ms
+ RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 524) [1 s]
+ 524 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.5 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 414 of 524 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 414 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 517 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.988, p50 1.99 ms
+   ef 20: recall@10 0.896, p50 2.32 ms
+   ef 3200: recall@10 0.988, p50 2.68 ms
+ RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.896, ef 100 0.988, ef 3200 0.988
+Total tests: 2
+     Passed: 2
+===== repeat 4, 2026-10-07T18:13:42Z
+exit 0
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 2000) [5 s]
+ 2000 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.6 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 484 of 1000 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 484 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 1000 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.912, p50 3.00 ms
+   ef 20: recall@10 0.460, p50 2.27 ms
+   ef 3200: recall@10 0.992, p50 4.75 ms
+ RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.460, ef 100 0.912, ef 3200 0.992
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 524) [1 s]
+ 524 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.5 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 403 of 524 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 403 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 517 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.990, p50 2.42 ms
+   ef 20: recall@10 0.886, p50 2.09 ms
+   ef 3200: recall@10 0.990, p50 1.62 ms
+ RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.990, ef 3200 0.990
+Total tests: 2
+     Passed: 2
+===== repeat 5, 2026-10-07T18:13:52Z
+exit 0
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 2000) [5 s]
+ 2000 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.6 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 496 of 1000 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 496 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 1000 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.920, p50 2.56 ms
+   ef 20: recall@10 0.482, p50 1.20 ms
+   ef 3200: recall@10 0.994, p50 3.11 ms
+ RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.920, ef 3200 0.994
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 524) [1 s]
+ 524 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.5 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 399 of 524 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 399 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 520 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.988, p50 1.70 ms
+   ef 20: recall@10 0.882, p50 2.10 ms
+   ef 3200: recall@10 0.988, p50 2.45 ms
+ RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.882, ef 100 0.988, ef 3200 0.988
+Total tests: 2
+     Passed: 2
+===== repeat 6, 2026-10-07T18:14:01Z
+exit 0
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 2000) [5 s]
+ 2000 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.6 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 488 of 1000 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 488 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 1000 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.928, p50 2.65 ms
+   ef 20: recall@10 0.452, p50 2.55 ms
+   ef 3200: recall@10 0.990, p50 4.60 ms
+ RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.452, ef 100 0.928, ef 3200 0.990
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 524) [1 s]
+ 524 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.5 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 398 of 524 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 398 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 520 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.992, p50 2.16 ms
+   ef 20: recall@10 0.874, p50 1.88 ms
+   ef 3200: recall@10 0.992, p50 2.61 ms
+ RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.874, ef 100 0.992, ef 3200 0.992
+Total tests: 2
+     Passed: 2
+===== repeat 7, 2026-10-07T18:14:10Z
+exit 0
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 2000) [5 s]
+ 2000 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.6 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 508 of 1000 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 508 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 1000 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.914, p50 3.04 ms
+   ef 20: recall@10 0.500, p50 1.46 ms
+   ef 3200: recall@10 0.994, p50 4.19 ms
+ RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.500, ef 100 0.914, ef 3200 0.994
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 524) [2 s]
+ 524 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.5 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 401 of 524 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 401 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 520 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.996, p50 1.67 ms
+   ef 20: recall@10 0.882, p50 1.66 ms
+   ef 3200: recall@10 0.996, p50 2.67 ms
+ RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.882, ef 100 0.996, ef 3200 0.996
+Total tests: 2
+     Passed: 2
+===== repeat 8, 2026-10-07T18:14:19Z
+exit 0
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 2000) [5 s]
+ 2000 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.6 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 506 of 1000 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 506 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 1000 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.906, p50 2.68 ms
+   ef 20: recall@10 0.490, p50 2.61 ms
+   ef 3200: recall@10 0.996, p50 5.05 ms
+ RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.490, ef 100 0.906, ef 3200 0.996
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 524) [2 s]
+ 524 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.5 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 404 of 524 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 404 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 518 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.988, p50 2.37 ms
+   ef 20: recall@10 0.872, p50 1.84 ms
+   ef 3200: recall@10 0.988, p50 1.44 ms
+ RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988
+Total tests: 2
+     Passed: 2
+===== repeat 9, 2026-10-07T18:14:29Z
+exit 0
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 2000) [5 s]
+ 2000 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.6 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 500 of 1000 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 500 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 1000 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.930, p50 2.82 ms
+   ef 20: recall@10 0.490, p50 2.62 ms
+   ef 3200: recall@10 0.990, p50 4.18 ms
+ RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.490, ef 100 0.930, ef 3200 0.990
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 524) [1 s]
+ 524 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.5 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 400 of 524 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 400 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 520 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.994, p50 1.98 ms
+   ef 20: recall@10 0.862, p50 1.98 ms
+   ef 3200: recall@10 0.994, p50 2.67 ms
+ RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.862, ef 100 0.994, ef 3200 0.994
+Total tests: 2
+     Passed: 2
+===== repeat 10, 2026-10-07T18:14:38Z
+exit 0
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 2000) [5 s]
+ 2000 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.6 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 494 of 1000 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 494 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 1000 of 1000 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.916, p50 3.01 ms
+   ef 20: recall@10 0.496, p50 2.66 ms
+   ef 3200: recall@10 0.994, p50 5.22 ms
+ RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.496, ef 100 0.916, ef 3200 0.994
+  Passed GenericVectorBuilder.Engines.Tests.MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured(count: 524) [1 s]
+ 524 vectors, effort in use: 100. VECTOR INDEX is maintained inside every INSERT, nothing to build; confirmed after 2 poll(s) in 0.5 s (poll 1 of 2 said: not ready: a search at mhnsw_ef_search 100 returned only 399 of 524 requested rows through the index (EXPLAIN key 'vec_idx') (information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 399 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported)): information_schema lists vec_idx as INDEX_TYPE VECTOR, EXPLAIN of the default search uses key vec_idx, the server applied mhnsw_ef_search 100 (asked for 100, read back from the server), a search at that effort returned 519 of 524 requested rows through the index; MariaDB has no per-index row count (the graph is a hidden InnoDB table), so indexed vectors are not reported
+   ef 100 (the default): recall@10 0.996, p50 2.30 ms
+   ef 20: recall@10 0.886, p50 2.23 ms
+   ef 3200: recall@10 0.996, p50 2.70 ms
+ RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996
+Total tests: 2
+     Passed: 2
+leftover tables in the bench container: 0
+daily after:  b115140380d05c5d4ab5d4e123b77af39bb22c23649fa35e3789e06bf0c3fbd0 2026-10-04T14:18:30.610916687Z restarts=0 cpuset=0-7
+daily container unchanged: yes
+ Container gvbbench-mariadb  Removed
+ Network gvbbench-mariadb_default  Removing
+ Network gvbbench-mariadb_default  Removed

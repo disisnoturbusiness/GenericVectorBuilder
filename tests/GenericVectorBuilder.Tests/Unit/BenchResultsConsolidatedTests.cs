@@ -305,7 +305,7 @@ public class BenchResultsConsolidatedTests
       string why = html[html.IndexOf( BenchLegends.H_WHY, StringComparison.Ordinal )..];
 
       Assert.Equal( model.Why.Select( w => w.Target ), TABLE_ROWS.Matches( why[..why.IndexOf( BenchLegends.H_THRESHOLD, StringComparison.Ordinal )] ).Select( m => m.Groups[1].Value ) );
-      Assert.Contains( "(recorded; <code>results:targets[redis].index#HNSW</code>)", why );
+      Assert.Contains( "(<span class=\"bench-label\">recorded</span>; <code>results:targets[redis].index#HNSW</code>)", why );
       string sqlitevec = Regex.Match( why, "<tr data-target=\"sqlitevec\">.*?</tr>" ).Value;
       Assert.Contains( "<td class=\"n\">-</td><td class=\"n\">-</td>", sqlitevec );
       Assert.Contains( "<td class=\"n\">0.57</td><td class=\"n\">0.36</td>", sqlitevec );
@@ -376,7 +376,7 @@ public class BenchResultsConsolidatedTests
 
       Assert.Contains( "First session v7; second session v8; median absolute move 1.50%; largest move sqlitevec, qps8, 3.90%", html );
       Assert.Contains( "<td class=\"n\">1.50%</td>", html );
-      Assert.Contains( "<code>p50Ms</code> MariaDB and pgvector", html );
+      Assert.Contains( "<code>p50Ms</code> MariaDB ahead of pgvector, held in v7", html );
       Assert.Contains( $"<code>qps8</code> Redis and MariaDB, {BenchLegends.L_MIN_RATIO} 1.3100", html );
    }
 
@@ -390,7 +390,7 @@ public class BenchResultsConsolidatedTests
       string html = Html();
 
       Assert.Contains( "Machine: CPU Intel(R) Xeon(R) CPU E5-1620 v3 @ 3.50GHz; Logical CPUs 8; RAM (GiB) 62.7; OS Ubuntu 24.04.5 LTS; Governor performance; Partition client 0-1,4-5; engines 2-3,6-7", html );
-      Assert.Contains( "<td>clock off its pinned value during oracle default@8: the engine CPUs averaged 3121 MHz</td><td>3492</td><td>3492</td>", html );
+      Assert.Contains( "<td>clock off its pinned value during oracle default@8: the engine CPUs averaged 3121 MHz</td><td>oracle</td><td>default@8</td><td>3492</td><td>3492</td>", html );
       Assert.Contains( "Clock v7: pinned true; pinnedMhz 3500; noTurbo 1; uncore 0x1e1e; clockOffPasses 0; clockUnreadPasses 0; legacyParsed true " + System.Net.WebUtility.HtmlEncode( BenchLegends.L_LEGACY_PARSED ), html );
       Assert.Contains( "Clock v8: pinned true; pinnedMhz 3500; noTurbo 1; uncore 0x1e1e; clockOffPasses 0; clockUnreadPasses 0; legacyParsed false", html );
       Assert.Contains( "<code>aaaaaaaaaaaa</code>", html );

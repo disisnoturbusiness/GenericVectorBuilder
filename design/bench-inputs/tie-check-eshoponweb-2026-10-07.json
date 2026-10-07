@@ -1,0 +1,160 @@
+{
+ "what": "tie-rule check of the benchmark's recall on its own data (see tie-check-eshoponweb.py)",
+ "table": "dbo.gvb_eshoponweb",
+ "database": "GenericVectorBuilder",
+ "rows": 524,
+ "dimension": 1024,
+ "distinctVectorTexts": 524,
+ "epsilon": 1e-05,
+ "top": 10,
+ "duplicatePairs": 0,
+ "maxPairwiseDot": 0.98958,
+ "queryCache": "golden-eshoponweb-68df42ca69efa079.json",
+ "queryCacheSha256": "e4296814b62271d1c4696c5e109b01db251c54fbace7b38cd178fc15767fa664",
+ "queries": 20,
+ "queriesWithRowsOutsideTopKWithinEpsilon": 0,
+ "smallestGap": 8.1e-05,
+ "perQuery": [
+  {
+   "query": 0,
+   "kthScore": 0.255653,
+   "nextScore": 0.254299,
+   "gap": 0.001354,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 1,
+   "kthScore": 0.292215,
+   "nextScore": 0.288283,
+   "gap": 0.003933,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 2,
+   "kthScore": 0.339046,
+   "nextScore": 0.335531,
+   "gap": 0.003514,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 3,
+   "kthScore": 0.337767,
+   "nextScore": 0.336321,
+   "gap": 0.001446,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 4,
+   "kthScore": 0.330381,
+   "nextScore": 0.327427,
+   "gap": 0.002953,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 5,
+   "kthScore": 0.250282,
+   "nextScore": 0.249866,
+   "gap": 0.000416,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 6,
+   "kthScore": 0.340199,
+   "nextScore": 0.324898,
+   "gap": 0.015302,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 7,
+   "kthScore": 0.284866,
+   "nextScore": 0.278611,
+   "gap": 0.006255,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 8,
+   "kthScore": 0.325541,
+   "nextScore": 0.319887,
+   "gap": 0.005654,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 9,
+   "kthScore": 0.39894,
+   "nextScore": 0.395203,
+   "gap": 0.003737,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 10,
+   "kthScore": 0.362423,
+   "nextScore": 0.362342,
+   "gap": 8.1e-05,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 11,
+   "kthScore": 0.32029,
+   "nextScore": 0.320112,
+   "gap": 0.000178,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 12,
+   "kthScore": 0.35884,
+   "nextScore": 0.358311,
+   "gap": 0.000529,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 13,
+   "kthScore": 0.37583,
+   "nextScore": 0.366926,
+   "gap": 0.008904,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 14,
+   "kthScore": 0.357914,
+   "nextScore": 0.356788,
+   "gap": 0.001126,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 15,
+   "kthScore": 0.434123,
+   "nextScore": 0.430791,
+   "gap": 0.003332,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 16,
+   "kthScore": 0.495347,
+   "nextScore": 0.492766,
+   "gap": 0.002581,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 17,
+   "kthScore": 0.300604,
+   "nextScore": 0.300377,
+   "gap": 0.000227,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 18,
+   "kthScore": 0.551074,
+   "nextScore": 0.544643,
+   "gap": 0.006431,
+   "rowsOutsideTopKWithinEpsilon": 0
+  },
+  {
+   "query": 19,
+   "kthScore": 0.394256,
+   "nextScore": 0.392949,
+   "gap": 0.001307,
+   "rowsOutsideTopKWithinEpsilon": 0
+  }
+ ],
+ "seconds": 5.7
+}

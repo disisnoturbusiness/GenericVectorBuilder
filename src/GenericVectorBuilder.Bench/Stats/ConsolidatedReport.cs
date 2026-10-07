@@ -103,6 +103,15 @@ public sealed class ConsolidatedReport
    /// <summary>The observer summary given with --observer, read for the disclosures; null when none was given.</summary>
    public ObserverInfo? Observer { get; set; }
 
+   /// <summary>The observer summaries that cover older claim sessions, one per session; empty when none was given. Why: an observer that ran beside v7 shows the clock and the outside load of v7 too.</summary>
+   public List<ObserverInfo> ObserverOthers { get; set; } = new();
+
+   /// <summary>
+   /// Every recorded text the report prints, classified clause by clause: the durability and index texts of the reported targets and the run notes of the method.
+   /// Why in the result: the sweep table of how each printed clause is backed is data, so a reader and a test can read it without the page.
+   /// </summary>
+   public List<RecordedTextRecord> RecordedTexts { get; set; } = new();
+
    /// <summary>Every sentence consolidated.md or the page prints, in reading order, each with its sources.</summary>
    public List<SentenceRecord> Sentences { get; set; } = new();
 
@@ -669,6 +678,9 @@ public sealed class MetricRow
    /// </summary>
    public string? SearchMode { get; set; }
 
+   /// <summary>The confidence label of the search fact <see cref="SearchMode"/> comes from (measured, recorded, "recorded (engine's own report)" and the like), so a table shows how sure the mode is; null when there is no mode.</summary>
+   public string? SearchConfidence { get; set; }
+
    /// <summary>The row's note sentence (the Redis in-memory note), or null.</summary>
    public string? Note { get; set; }
 
@@ -1128,8 +1140,14 @@ public sealed class WhyFact
    /// <summary>Its source.</summary>
    public string Source { get; set; } = string.Empty;
 
-   /// <summary>recorded, measured, documented or set-by-code.</summary>
+   /// <summary>
+   /// The fact sheet's confidence label: recorded, measured, documented, set-by-code, checked or "recorded (engine's own report)"; a recorded row also names the class
+   /// of the clause of the recorded text it rests on, as "recorded, unverified", "recorded, documented" or "recorded, read-back".
+   /// </summary>
    public string Confidence { get; set; } = string.Empty;
+
+   /// <summary>How the fact is backed: read-back, measured, documented or unverified (see <see cref="GenericVectorBuilder.Bench.Report.TextClass"/>).</summary>
+   public string Class { get; set; } = string.Empty;
 
    /// <summary>Search rows: exact or approximate.</summary>
    public string? Mode { get; set; }
@@ -1170,6 +1188,12 @@ public sealed class WhyCosts
 public sealed class ObserverInfo
 {
    #region Public Methods
+
+   /// <summary>The claim session the summary covers.</summary>
+   public string Session { get; set; } = string.Empty;
+
+   /// <summary>Where the summary is copied beside the report, such as observer/summary.json.</summary>
+   public string Copy { get; set; } = string.Empty;
 
    /// <summary>The path as given.</summary>
    public string Path { get; set; } = string.Empty;
@@ -1287,6 +1311,15 @@ public sealed class AuditInfo
    /// <summary>SHA-256 of the observer summary given, or null.</summary>
    public string? ObserverSha256 { get; set; }
 
+   /// <summary>SHA-256 of the observer summary of each older session that has one, by session name.</summary>
+   public Dictionary<string, string> ObserverSha256Others { get; set; } = new();
+
+   /// <summary>SHA-256 of recorded-text-classes.json.</summary>
+   public string ClassesSha256 { get; set; } = string.Empty;
+
+   /// <summary>The recorded clauses the list did not classify and the report printed as unverified, each as "where: clause"; empty when every clause was classified.</summary>
+   public List<string> UnlistedClauses { get; set; } = new();
+
    #endregion Public Methods
 }
 
@@ -1329,6 +1362,58 @@ public sealed class ReuseNote
 
    /// <summary>The session's runs (folder names), so a page can say it on the run pages of exactly these runs.</summary>
    public List<string> Runs { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>One recorded text as the report prints it, split into the clauses its classes cover.</summary>
+public sealed class RecordedTextRecord
+{
+   #region Public Methods
+
+   /// <summary>The target, or empty for a run note.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>durability, index or notes.</summary>
+   public string Field { get; set; } = string.Empty;
+
+   /// <summary>The run the text was read from.</summary>
+   public string Run { get; set; } = string.Empty;
+
+   /// <summary>For a run note, its position in the run's notes; null otherwise.</summary>
+   public int? Note { get; set; }
+
+   /// <summary>The clauses in text order.</summary>
+   public List<RecordedClause> Clauses { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>One clause of a recorded text with its class and what backs it.</summary>
+public sealed class RecordedClause
+{
+   #region Public Methods
+
+   /// <summary>The clause, verbatim from the recorded text; for a clause the report does not print, only its first characters, so the table does not print the clause the report dropped.</summary>
+   public string Text { get; set; } = string.Empty;
+
+   /// <summary>The length of the whole clause in the white-space-collapsed recorded text, so the clauses together can be checked against the recorded text.</summary>
+   public int Length { get; set; }
+
+   /// <summary>read-back, measured, documented or unverified.</summary>
+   public string Class { get; set; } = string.Empty;
+
+   /// <summary>The sources that back it; empty when unverified.</summary>
+   public List<string> Basis { get; set; } = new();
+
+   /// <summary>True when the report prints the clause; false when it drops it (and says so).</summary>
+   public bool Printed { get; set; } = true;
+
+   /// <summary>Why the report does not print the clause, or null when it does.</summary>
+   public string? NotPrinted { get; set; }
+
+   /// <summary>True when no entry of the list covered the text and the clause stands for all of it.</summary>
+   public bool Unlisted { get; set; }
 
    #endregion Public Methods
 }

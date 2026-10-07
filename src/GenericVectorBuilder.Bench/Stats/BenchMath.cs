@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace GenericVectorBuilder.Bench.Stats;
 
 /// <summary>
@@ -160,9 +162,73 @@ public static class BenchMath
       return numbers.Length == 0 ? double.NaN : numbers.Average();
    }
 
+   /// <summary>
+   /// floor(10000 x num / den), computed exactly on the two numbers as stored, with no floating-point rounding step.
+   /// Why exact: 10000.0 * num / den in doubles can round a ratio that is a hair below a whole number of basis points up to it, so a pair whose decimal ratio is exactly
+   /// the threshold but whose stored values put it a hair below would be ordered by the rounding alone. Floored exactly, such a pair stays unordered: rounding never creates a claim.
+   /// </summary>
+   /// <param name="num">Numerator, finite and above zero.</param>
+   /// <param name="den">Denominator, finite and above zero.</param>
+   /// <returns>The ratio in basis points, rounded down.</returns>
+   /// <exception cref="ArgumentOutOfRangeException">A value is not finite or not above zero.</exception>
+   /// <exception cref="OverflowException">The result does not fit an int.</exception>
+   public static int RatioBpFloor( double num, double den )
+   {
+      ( BigInteger n, BigInteger d ) = Ratio10000( num, den );
+      return checked( (int)BigInteger.Divide( n, d ) );
+   }
+
+   /// <summary>
+   /// ceiling(10000 x num / den), computed exactly on the two numbers as stored (see <see cref="RatioBpFloor"/>); a move is rounded up so that none is understated.
+   /// </summary>
+   /// <param name="num">Numerator, finite and above zero.</param>
+   /// <param name="den">Denominator, finite and above zero.</param>
+   /// <returns>The ratio in basis points, rounded up.</returns>
+   /// <exception cref="ArgumentOutOfRangeException">A value is not finite or not above zero.</exception>
+   /// <exception cref="OverflowException">The result does not fit an int.</exception>
+   public static int RatioBpCeiling( double num, double den )
+   {
+      ( BigInteger n, BigInteger d ) = Ratio10000( num, den );
+      return checked( (int)BigInteger.Divide( n + d - BigInteger.One, d ) );
+   }
+
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// 10000 x num / den as an exact fraction of two whole numbers.
+   /// </summary>
+   /// <param name="num">Numerator.</param>
+   /// <param name="den">Denominator.</param>
+   /// <returns>The numerator and the denominator of the fraction.</returns>
+   private static ( BigInteger Numerator, BigInteger Denominator ) Ratio10000( double num, double den )
+   {
+      if( !double.IsFinite( num ) || !double.IsFinite( den ) || num <= 0 || den <= 0 )
+      {
+         throw new ArgumentOutOfRangeException( nameof( num ), $"a ratio needs finite values above zero, got {num} and {den}" );
+      }
+
+      ( BigInteger m1, int e1 ) = Decompose( num );
+      ( BigInteger m2, int e2 ) = Decompose( den );
+      BigInteger n = 10000 * m1;
+      BigInteger d = m2;
+      int shift = e1 - e2;
+      return shift >= 0 ? ( n << shift, d ) : ( n, d << -shift );
+   }
+
+   /// <summary>
+   /// A positive finite double as mantissa x 2^exponent, exactly.
+   /// </summary>
+   /// <param name="value">The value.</param>
+   /// <returns>The whole-number mantissa and the power of two.</returns>
+   private static ( BigInteger Mantissa, int Exponent ) Decompose( double value )
+   {
+      long bits = BitConverter.DoubleToInt64Bits( value );
+      int field = (int)( ( bits >> 52 ) & 0x7FF );
+      long fraction = bits & 0xFFFFFFFFFFFFFL;
+      return field == 0 ? ( fraction, -1074 ) : ( fraction | ( 1L << 52 ), field - 1075 );
+   }
 
    /// <summary>
    /// Forward slashes, no leading "./" or "/".

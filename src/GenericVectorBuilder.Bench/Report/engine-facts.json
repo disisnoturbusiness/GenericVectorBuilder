@@ -86,7 +86,7 @@
   {"target": "weaviate", "kind": "set-by-setup", "text": "GOMEMLIMIT: 6GiB", "source": "deploy/engines/weaviate.compose.yaml#GOMEMLIMIT: 6GiB", "confidence": "set-by-code"},
   {"target": "weaviate", "kind": "set-by-setup", "text": "mem_limit: 8g", "source": "deploy/engines/weaviate.compose.yaml#mem_limit: 8g", "confidence": "set-by-code"},
   {"target": "mongodb", "kind": "index", "text": "vectorSearch index, HNSW maxEdges=16 numEdgeCandidates=128", "source": "results:targets[mongodb].index#vectorSearch index, HNSW maxEdges=16 numEdgeCandidates=128", "confidence": "recorded"},
-  {"target": "mongodb", "kind": "search", "text": "searched through the HNSW graph (Approximate)", "source": "results:targets[mongodb].load.indexNote#searched through the HNSW graph (Approximate)", "confidence": "measured", "mode": "approximate"},
+  {"target": "mongodb", "kind": "search", "text": "searched through the HNSW graph (Approximate)", "source": "results:targets[mongodb].load.indexNote#searched through the HNSW graph (Approximate)", "confidence": "recorded (engine's own report)", "mode": "approximate"},
   {"target": "mongodb", "kind": "storage", "text": "not recorded", "source": "absent:results:targets[mongodb]#in memory|in-memory|memory pool|RAM", "confidence": "checked"},
   {"target": "mongodb", "kind": "protocol", "text": "MongoDB.Driver", "source": "src/GenericVectorBuilder.Engines/Sinks/MongoDbSink.cs#using MongoDB.Driver;", "confidence": "set-by-code"},
   {"target": "mongodb", "kind": "set-by-setup", "text": "mem_limit: 8g", "source": "deploy/engines/mongodb.compose.yaml#mem_limit: 8g", "confidence": "set-by-code"},

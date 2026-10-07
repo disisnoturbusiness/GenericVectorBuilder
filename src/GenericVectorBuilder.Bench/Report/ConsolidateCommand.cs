@@ -84,7 +84,7 @@ public static class ConsolidateCommand
          log( ex.Message );
          return EXIT_USAGE;
       }
-      catch( Exception ex ) when( ex is ConsolidateRefusal or InvalidDataException or IOException or UnauthorizedAccessException or EngineFactsException or JsonException or FormatException )
+      catch( Exception ex ) when( ex is ConsolidateRefusal or InvalidDataException or IOException or UnauthorizedAccessException or EngineFactsException or RecordedTextException or JsonException or FormatException )
       {
          log( $"Refused, nothing was written: {ex.Message}" );
          return EXIT_REFUSED;
@@ -103,7 +103,7 @@ public static class ConsolidateCommand
    public static string Usage()
    {
       return @"consolidate --session NAME=F1,F2,F3 [--session NAME=F1,F2,F3] [--basis-session NAME=F1,F2,F3 ...] --out DIR
-            [--results-dir DIR] [--targets a,b,c] [--facts PATH] [--exclusions PATH] [--repo DIR] [--observer PATH]
+            [--results-dir DIR] [--targets a,b,c] [--facts PATH] [--exclusions PATH] [--repo DIR] [--observer PATH ...]
 
   --session          a claim session: exactly 3 run folders. One session gives a one-session report (rows not ranked);
                      two give the ranked report, the earlier session first. The claim rule is applied in each session separately.
@@ -116,7 +116,8 @@ public static class ConsolidateCommand
   --exclusions       basis-exclusions.json (default: the copy beside this binary). Missing: refused.
   --repo             the repository the facts' file and doc sources resolve in (default: the nearest folder above this binary
                      holding GenericVectorBuilder.slnx). Missing: refused.
-  --observer         the observer's summary.json of the newest session; copied to observer/summary.json in --out and cited.
+  --observer         an observer's summary.json; give it once for the newest session and again for an older session the observer also ran beside
+                     (a file must cover every run of its session). The newest session's is copied to observer/summary.json, an older session's to observer/summary-NAME.json, and each is cited.
   A blocked report of a session, a folder named blocked-DATE-NAME beside the runs, is named in that session's reuse note.
   The other runs of the pipeline in the folders holding the session runs are read too: those without machine control give the
   disclosed no-machine-control maxima, and every one is listed with the reason it is not in the basis.
@@ -145,7 +146,7 @@ public static class ConsolidateCommand
       ConsolidateInput input = ConsolidateLoader.Load( parsed, CommandLine( args ), log, ct );
       ConsolidatedReport report = Consolidator.Build( input );
       ct.ThrowIfCancellationRequested();
-      Write( output, report, input.ObserverPath );
+      Write( output, report );
       log( $"Wrote {Path.Combine( output, "consolidated.json" )} and consolidated.md: {report.Mode}, status {report.Status}, threshold {report.Threshold.TBp} bp, {report.Audit.SentencesChecked} sentences audited ({report.Audit.RowSentencesChecked} of them on table rows), {report.Audit.FactsChecked} facts checked" );
       report.StopReasons.ForEach( r => log( "STOPPED " + r ) );
       return report;
@@ -178,9 +179,8 @@ public static class ConsolidateCommand
    /// Writes the report into a temporary sibling folder, then moves it into place, so a failure never leaves half a report.
    /// </summary>
    /// <param name="output">The output folder.</param>
-   /// <param name="report">The report.</param>
-   /// <param name="observer">The observer summary to copy, or null.</param>
-   private static void Write( string output, ConsolidatedReport report, string? observer )
+   /// <param name="report">The report, whose observer blocks name the summaries to copy and where.</param>
+   private static void Write( string output, ConsolidatedReport report )
    {
       string temp = output + ".tmp-" + Guid.NewGuid().ToString( "N" );
       Directory.CreateDirectory( temp );
@@ -188,10 +188,11 @@ public static class ConsolidateCommand
       {
          File.WriteAllText( Path.Combine( temp, "consolidated.json" ), JsonSerializer.Serialize( report, ConsolidateAudit.JSON ) );
          File.WriteAllText( Path.Combine( temp, "consolidated.md" ), ConsolidatedMarkdown.Render( report ) );
-         if( observer != null )
+         List<ObserverInfo> observers = ( report.Observer == null ? new List<ObserverInfo>() : new List<ObserverInfo> { report.Observer } ).Concat( report.ObserverOthers ).ToList();
+         if( observers.Count > 0 )
          {
             Directory.CreateDirectory( Path.Combine( temp, "observer" ) );
-            File.Copy( observer, Path.Combine( temp, "observer", "summary.json" ) );
+            observers.ForEach( o => File.Copy( o.Path, Path.Combine( temp, o.Copy ) ) );
          }
 
          if( Directory.Exists( output ) )
@@ -258,8 +259,8 @@ public sealed class ConsolidateArgs
    /// <summary>Repository root, or null for the default.</summary>
    public string? Repo { get; private set; }
 
-   /// <summary>Observer summary path, or null.</summary>
-   public string? Observer { get; private set; }
+   /// <summary>Observer summary paths, in the order given.</summary>
+   public List<string> Observers { get; } = new();
 
    /// <summary>
    /// Parses the arguments after the command word.
@@ -352,7 +353,7 @@ public sealed class ConsolidateArgs
          case "facts": Facts = Once( Facts, value, name ); break;
          case "exclusions": Exclusions = Once( Exclusions, value, name ); break;
          case "repo": Repo = Once( Repo, value, name ); break;
-         case "observer": Observer = Once( Observer, value, name ); break;
+         case "observer": Observers.Add( value ); break;
          default: throw new ArgumentException( $"Unknown option --{name} for consolidate." );
       }
    }

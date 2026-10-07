@@ -1,0 +1,1684 @@
+{
+ "texts": [
+  {
+   "target": "chroma",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "SQLite rollback journal with its default synchronous=FULL under the data directory",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "(chroma.compose.yaml sets IS_PERSISTENT=1 and PERSIST_DIRECTORY=/data and no sync setting):",
+     "class": "documented",
+     "basis": [
+      "deploy/engines/chroma.compose.yaml#IS_PERSISTENT: \"1\"",
+      "deploy/engines/chroma.compose.yaml#PERSIST_DIRECTORY: /data"
+     ]
+    },
+    {
+     "text": "every write is committed to chroma.sqlite3 with fsync of the journal, the directory and the database file before the call returns (strace: 15 database fsyncs and 38 journal fsyncs for one create, four 500-vector upserts and one delete), and the HNSW files are written every sync_threshold=1000 vectors and rebuilt from the SQLite log after a crash; measured with kill -9 and a restart: all 50, 300 and 2,000 vectors were still stored and searchable",
+     "class": "unverified",
+     "basis": [],
+     "cites": "measurement"
+    }
+   ]
+  },
+  {
+   "target": "chroma",
+   "field": "index",
+   "spans": [
+    {
+     "text": "HNSW M=16 ef_construction=128, ef_search=100",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/ChromaSink.cs#[\"max_neighbors\"] = _options.MaxNeighbors,",
+      "src/GenericVectorBuilder.Engines/Sinks/ChromaSink.cs#[\"ef_construction\"] = _options.EfConstruction,",
+      "src/GenericVectorBuilder.Engines/Sinks/ChromaSink.cs#[\"ef_search\"] = _options.EfSearch,",
+      "src/GenericVectorBuilder.Engines/Sinks/ChromaSinkOptions.cs#int MaxNeighbors = 16,",
+      "src/GenericVectorBuilder.Engines/Sinks/ChromaSinkOptions.cs#int EfConstruction = 128,",
+      "src/GenericVectorBuilder.Engines/Sinks/ChromaSinkOptions.cs#int EfSearch = 100 );"
+     ]
+    },
+    {
+     "text": "(Chroma default),",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "cosine;",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/ChromaSink.cs#[\"space\"] = \"cosine\","
+     ]
+    },
+    {
+     "text": "approximate only (no exact mode)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "clickhouse",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "Acknowledged inserts are not fsynced. The sink creates plain MergeTree tables, so the MergeTree settings are the defaults: fsync_after_insert 0 and fsync_part_directory 0 (system.merge_tree_settings), and async_insert 1 with wait_for_async_insert 1 is the server default for the gvb login (system.settings), so an insert is acknowledged once its part is written, not once it is on disk.",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "Measured 2026-10-04 with strace over 30 acknowledged single-row inserts (30 Ok rows in system.asynchronous_insert_log):",
+     "class": "unverified",
+     "basis": [],
+     "cites": "measurement"
+    },
+    {
+     "text": "zero fsync, fdatasync or sync_file_range calls,",
+     "class": "documented",
+     "basis": [
+      "design/engine-docs/durability-logs-2026-10-04/clickhouse-acknowledged-inserts.strace#SIGUSR1"
+     ]
+    },
+    {
+     "text": "while the control, a table created with fsync_after_insert=1, made 61 fdatasync calls",
+     "class": "documented",
+     "basis": [
+      "design/engine-docs/durability-logs-2026-10-04/clickhouse-control-fsync-after-insert.strace#fdatasync"
+     ]
+    },
+    {
+     "text": "for 5 inserts.",
+     "class": "unverified",
+     "basis": [],
+     "cites": "measurement"
+    },
+    {
+     "text": "A host power loss or kernel crash can lose acknowledged rows that are still in the OS page cache; a ClickHouse process crash alone should not (inferred, not tested).",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "clickhouse",
+   "field": "index",
+   "spans": [
+    {
+     "text": "vector_similarity HNSW cosineDistance, quantization bf16, M=16 ef_construction=128,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSink.cs#INDEX vec_idx embedding TYPE vector_similarity( 'hnsw', 'cosineDistance', {dimension}, '{_options.Quantization}', {_options.HnswM}, {_options.HnswEfConstruction} )",
+      "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSinkOptions.cs#public string Quantization { get; set; } = \"bf16\";",
+      "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSinkOptions.cs#public int HnswM { get; set; } = 16;",
+      "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSinkOptions.cs#public int HnswEfConstruction { get; set; } = 128;"
+     ]
+    },
+    {
+     "text": "hnsw_candidate_list_size_for_search=256, rescoring off;",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSink.cs#hnsw_candidate_list_size_for_search = {_options.HnswEfSearch}, vector_search_with_rescoring = {_options.Rescoring}",
+      "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSinkOptions.cs#public int HnswEfSearch { get; set; } = 256;",
+      "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSinkOptions.cs#public int Rescoring { get; set; }"
+     ]
+    },
+    {
+     "text": "exact mode = full scan with skip indexes off",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "duckdb",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "DuckDB's write-ahead log is fsynced at every commit and no DuckDbSink setting changes that",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "(checkpoint_threshold=256MB",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/DuckDbSinkOptions.cs#CheckpointThreshold { get; set; } = \"256MB\"",
+      "src/GenericVectorBuilder.Engines/Sinks/DuckDbSink.cs#SET checkpoint_threshold"
+     ]
+    },
+    {
+     "text": "only spaces out the checkpoints that write the database file; measured with strace: 42 WAL fsyncs for 40 single-record commits plus 2 setup statements), so an operating-system crash or power cut loses no committed row; measured with kill -9 right after the last commit and a reopen: all 50, 300 and 2,000 rows and an HNSW index that counted the same number were recovered from the log; not tested and documented by DuckDB: the HNSW index is file-backed only through hnsw_enable_experimental_persistence = true,",
+     "class": "unverified",
+     "basis": [],
+     "cites": "measurement"
+    },
+    {
+     "text": "which this sink turns on,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/DuckDbSink.cs#SET hnsw_enable_experimental_persistence = true;"
+     ]
+    },
+    {
+     "text": "and WAL recovery for such custom indexes is not complete, so a crash during a checkpoint or a later commit can damage the index while the rows survive",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "duckdb",
+   "field": "index",
+   "spans": [
+    {
+     "text": "HNSW (vss extension) FLOAT[n] metric=cosine m=16 ef_construction=128,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/DuckDbSink.cs#WITH ( metric = 'cosine', m =",
+      "src/GenericVectorBuilder.Engines/Sinks/DuckDbSink.cs#Run( connection, \"LOAD vss;\" )",
+      "src/GenericVectorBuilder.Engines/Sinks/DuckDbSink.cs#{VECTOR_COLUMN} FLOAT[{dimension.ToString( CultureInfo.InvariantCulture )}] NOT NULL );",
+      "src/GenericVectorBuilder.Engines/Sinks/DuckDbSinkOptions.cs#public int HnswM { get; set; } = 16;",
+      "src/GenericVectorBuilder.Engines/Sinks/DuckDbSinkOptions.cs#public int HnswEfConstruction { get; set; } = 128;"
+     ]
+    },
+    {
+     "text": "ef_search=100 per connection,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/DuckDbSink.cs#SET hnsw_ef_search",
+      "src/GenericVectorBuilder.Engines/Sinks/DuckDbSinkOptions.cs#public int HnswEfSearch { get; set; } = 100;"
+     ]
+    },
+    {
+     "text": "persistent (hnsw_enable_experimental_persistence=true, checkpoint_threshold=256MB);",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/DuckDbSink.cs#SET hnsw_enable_experimental_persistence = true;",
+      "src/GenericVectorBuilder.Engines/Sinks/DuckDbSink.cs#SET checkpoint_threshold",
+      "src/GenericVectorBuilder.Engines/Sinks/DuckDbSinkOptions.cs#public string CheckpointThreshold { get; set; } = \"256MB\";"
+     ]
+    },
+    {
+     "text": "exact mode = array_cosine_similarity sequential scan;",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "score = 1 - cosine distance;",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "searches run concurrently, one connection per searcher (opened as searchers arrive, at most 32), writes run one at a time and never overlap a search",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "elasticsearch",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "Every acknowledged bulk request is fsynced to the translog before the answer: index.translog.durability=request, the Elasticsearch default, which neither this sink nor elasticsearch.compose.yaml overrides",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "(ElasticsearchReadinessTests reads it back from the live index).",
+     "class": "documented",
+     "basis": [
+      "tests/GenericVectorBuilder.Engines.Tests/ElasticsearchReadinessTests.cs#index.translog.durability"
+     ]
+    },
+    {
+     "text": "By that setting a process crash or power loss loses no acknowledged write; this is read from the setting, not shown by pulling power.",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "One node and no replicas,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/ElasticsearchSink.cs#settings = new { number_of_shards = 1, number_of_replicas = 0 }"
+     ]
+    },
+    {
+     "text": "so a lost disk loses the data.",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "elasticsearch",
+   "field": "index",
+   "spans": [
+    {
+     "text": "HNSW float32, no quantization, m=16, ef_construction=128,",
+     "class": "read-back",
+     "basis": [
+      "results:targets[elasticsearch].load.indexNote#index_options hnsw m=16 ef_construction=128"
+     ]
+    },
+    {
+     "text": "cosine;",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/ElasticsearchSink.cs#similarity = \"cosine\","
+     ]
+    },
+    {
+     "text": "search k=top, num_candidates=100;",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/ElasticsearchSink.cs#knn = new { field = \"vector\", query_vector = vector, k = top, num_candidates = candidates }",
+      "src/GenericVectorBuilder.Engines/Sinks/ElasticsearchSinkOptions.cs#int NumCandidates = 100"
+     ]
+    },
+    {
+     "text": "1 shard, 0 replicas;",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/ElasticsearchSink.cs#settings = new { number_of_shards = 1, number_of_replicas = 0 }"
+     ]
+    },
+    {
+     "text": "force-merged to one segment after the load",
+     "class": "read-back",
+     "basis": [
+      "results:targets[elasticsearch].load.indexNote#1 segment(s), 524 vectors"
+     ]
+    },
+    {
+     "text": "(at 1,024 dimensions a segment under 1,043 vectors gets no graph)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "mariadb",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "innodb_flush_log_at_trx_commit=2 (set in mariadb-bench.compose.yaml for the benchmark's own container gvbbench-mariadb, and in mariadb.compose.yaml for the daily gvb-mariadb, which has the same server settings):",
+     "class": "documented",
+     "basis": [
+      "deploy/engines/mariadb-bench.compose.yaml#--innodb-flush-log-at-trx-commit=2",
+      "deploy/engines/mariadb.compose.yaml#--innodb-flush-log-at-trx-commit=2",
+      "design/bench-inputs/mariadb-effort-2026-10-07/run.log#SETTING innodb_flush_log_at_trx_commit = 2"
+     ]
+    },
+    {
+     "text": "the InnoDB redo log is written to the operating system at every commit but fsynced about once a second, so a crash of the mariadbd process loses nothing, while an operating-system crash or power cut can lose the last second of commits;",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "innodb_doublewrite is on",
+     "class": "documented",
+     "basis": [
+      "design/bench-inputs/mariadb-effort-2026-10-07/run.log#SETTING innodb_doublewrite = ON"
+     ]
+    },
+    {
+     "text": "(default),",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "the binary log is off,",
+     "class": "documented",
+     "basis": [
+      "design/bench-inputs/mariadb-effort-2026-10-07/run.log#SETTING log_bin = OFF"
+     ]
+    },
+    {
+     "text": "and the vector graph is an InnoDB table under the same log",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "(settings read from the running server with SHOW VARIABLES;",
+     "class": "documented",
+     "basis": [
+      "design/bench-inputs/mariadb-effort-2026-10-07/run.log#SETTING innodb_flush_log_at_trx_commit = 2"
+     ]
+    },
+    {
+     "text": "the crash behaviour is InnoDB's documented behaviour for this setting and was not tested on either container)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "mariadb",
+   "field": "index",
+   "spans": [
+    {
+     "text": "VECTOR INDEX",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/MariaDbSink.cs#VECTOR INDEX {INDEX_NAME} ( embedding ) M={_options.HnswM} DISTANCE=cosine"
+     ]
+    },
+    {
+     "text": "(HNSW variant)",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "DISTANCE=cosine, M=16",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/MariaDbSink.cs#VECTOR INDEX {INDEX_NAME} ( embedding ) M={_options.HnswM} DISTANCE=cosine",
+      "src/GenericVectorBuilder.Engines/Sinks/MariaDbSinkOptions.cs#public int HnswM { get; set; } = 16;"
+     ]
+    },
+    {
+     "text": "(no ef_construction setting exists),",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "mhnsw_ef_search=100 per statement",
+     "class": "read-back",
+     "basis": [
+      "results:targets[mariadb].load.indexNote#the server applied mhnsw_ef_search 100"
+     ]
+    },
+    {
+     "text": "(the ef 100 most engines here use, so the search effort matches;",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "MariaDB's own default is 20;",
+     "class": "documented",
+     "basis": [
+      "design/bench-inputs/mariadb-effort-2026-10-07/run.log#SETTING mhnsw_ef_search = 20"
+     ]
+    },
+    {
+     "text": "recall@10 at ef 100 falls as the set grows (random 1024-dimension vectors, measured 2026-10-04: 0.99 at 524, 0.89 to 0.92 at 2,000; an earlier run gave about 0.09 at 100,000)),",
+     "class": "unverified",
+     "basis": [],
+     "drop": "mariadb-recall",
+     "evidence": "mariadbRecallLog"
+    },
+    {
+     "text": "mhnsw_max_cache_size 4G;",
+     "class": "documented",
+     "basis": [
+      "deploy/engines/mariadb-bench.compose.yaml#--mhnsw-max-cache-size=4G",
+      "design/bench-inputs/mariadb-effort-2026-10-07/run.log#SETTING mhnsw_max_cache_size = 4294967296"
+     ]
+    },
+    {
+     "text": "exact mode = IGNORE INDEX full scan",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/MariaDbSink.cs#SearchSql( collection, top, $\"IGNORE INDEX ( {INDEX_NAME} )\" )"
+     ]
+    }
+   ]
+  },
+  {
+   "target": "milvus",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "Writes are not fsynced. Standalone uses the default message queue rocksmq (RocksDB, /var/lib/milvus/rdb_data, mq.type default) and flushed segments go to local-disk object storage",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "(COMMON_STORAGETYPE=local in milvus.compose.yaml).",
+     "class": "documented",
+     "basis": [
+      "deploy/engines/milvus.compose.yaml#COMMON_STORAGETYPE: local"
+     ]
+    },
+    {
+     "text": "Measured 2026-10-04 with strace over 30 acknowledged single-row upserts and one flush: fdatasync ran only on the embedded etcd files (member/wal, member/snap/db), never on rdb_data or the segment files.",
+     "class": "documented",
+     "basis": [
+      "design/engine-docs/durability-logs-2026-10-04/milvus-acknowledged-upserts.strace#member/wal"
+     ]
+    },
+    {
+     "text": "A host power loss or kernel crash can lose acknowledged rows that are still in the OS page cache; a Milvus process crash alone should not (inferred, not tested). Metadata in embedded etcd is fdatasynced on every commit.",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "milvus",
+   "field": "index",
+   "spans": [
+    {
+     "text": "HNSW M=16 efConstruction=128,",
+     "class": "read-back",
+     "basis": [
+      "results:targets[milvus].load.indexNote#type HNSW (COSINE, {\"M\":16,\"efConstruction\":128})"
+     ]
+    },
+    {
+     "text": "ef=100, metric COSINE,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/MilvusSink.cs#writer.WriteNumber( \"ef\", _options.Ef.Value );",
+      "src/GenericVectorBuilder.Engines/Sinks/MilvusSinkOptions.cs#int? Ef = 100,",
+      "src/GenericVectorBuilder.Engines/Sinks/MilvusSink.cs#[\"metricType\"] = \"COSINE\","
+     ]
+    },
+    {
+     "text": "Strong consistency searches;",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "approximate only (no exact mode)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "mongodb",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "Acknowledged writes are journaled before the acknowledgement. The sink sets no write concern, so the server default applies: getDefaultRWConcern gives w majority and the one-member replica set (--replSet gvbmongo in the image) has writeConcernMajorityJournalDefault true, with WiredTiger journaling on (journalCommitInterval 100 ms is only the interval for unacknowledged work).",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "Measured 2026-10-04: 30 acknowledged single-document inserts raised WiredTiger 'log sync operations' by 30 and",
+     "class": "unverified",
+     "basis": [],
+     "cites": "measurement"
+    },
+    {
+     "text": "strace showed fdatasync on /data/db/journal/WiredTigerLog files.",
+     "class": "documented",
+     "basis": [
+      "design/engine-docs/durability-logs-2026-10-04/mongodb-acknowledged-inserts.strace#WiredTigerLog"
+     ]
+    },
+    {
+     "text": "A crash loses no acknowledged write. mongot's search index is not part of that promise: it follows the collection asynchronously and is rebuilt from it.",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "mongodb",
+   "field": "index",
+   "spans": [
+    {
+     "text": "vectorSearch index, HNSW maxEdges=16 numEdgeCandidates=128,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/MongoDbSinkOptions.cs#public int HnswMaxEdges { get; set; } = 16;",
+      "src/GenericVectorBuilder.Engines/Sinks/MongoDbSinkOptions.cs#public int HnswNumEdgeCandidates { get; set; } = 128;"
+     ]
+    },
+    {
+     "text": "float32 binData, cosine,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/MongoDbSink.cs#VectorSimilarity.Cosine"
+     ]
+    },
+    {
+     "text": "numCandidates=20x hits (min 100);",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/MongoDbSinkOptions.cs#public int NumCandidatesFactor { get; set; } = 20;",
+      "src/GenericVectorBuilder.Engines/Sinks/MongoDbSinkOptions.cs#public int MinNumCandidates { get; set; } = 100;"
+     ]
+    },
+    {
+     "text": "exact mode = $vectorSearch exact:true",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "opensearch",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "Every acknowledged bulk request is fsynced to the translog before the answer: index.translog.durability=request, the OpenSearch default, which neither this sink nor opensearch.compose.yaml overrides",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "(OpenSearchReadinessTests reads it back from the live index).",
+     "class": "documented",
+     "basis": [
+      "tests/GenericVectorBuilder.Engines.Tests/OpenSearchReadinessTests.cs#index.translog.durability"
+     ]
+    },
+    {
+     "text": "By that setting a process crash or power loss loses no acknowledged write; this is read from the setting, not shown by pulling power.",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "One node and no replicas,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/OpenSearchSink.cs#[\"number_of_shards\"] = 1, [\"number_of_replicas\"] = 0"
+     ]
+    },
+    {
+     "text": "so a lost disk loses the data.",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "opensearch",
+   "field": "index",
+   "spans": [
+    {
+     "text": "faiss HNSW float32, no compression, m=16, ef_construction=128, cosinesimil;",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/OpenSearchSink.cs#parameters = new { m = HNSW_M, ef_construction = HNSW_EF_CONSTRUCTION }",
+      "src/GenericVectorBuilder.Engines/Sinks/OpenSearchSink.cs#private const int HNSW_M = 16;",
+      "src/GenericVectorBuilder.Engines/Sinks/OpenSearchSink.cs#private const int HNSW_EF_CONSTRUCTION = 128;"
+     ]
+    },
+    {
+     "text": "search k=top, ef_search=100;",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/OpenSearchSink.cs#method_parameters = new { ef_search = Math.Max( _options.EfSearch, top ) }",
+      "src/GenericVectorBuilder.Engines/Sinks/OpenSearchSinkOptions.cs#int EfSearch = 100"
+     ]
+    },
+    {
+     "text": "1 shard, 0 replicas;",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/OpenSearchSink.cs#[\"number_of_shards\"] = 1, [\"number_of_replicas\"] = 0"
+     ]
+    },
+    {
+     "text": "graph built at any segment size (approximate_threshold=0);",
+     "class": "read-back",
+     "basis": [
+      "results:targets[opensearch].load.indexNote#approximate_threshold 0"
+     ]
+    },
+    {
+     "text": "force-merged to one segment after the load",
+     "class": "read-back",
+     "basis": [
+      "results:targets[opensearch].load.indexNote#force-merged to one segment"
+     ]
+    }
+   ]
+  },
+  {
+   "target": "oracle",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "By these settings a committed row should survive a crash or power loss. The sink uses a plain COMMIT and commit_logging, commit_wait and commit_write are unset in the database, so every commit waits for its redo to be written.",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "Measured 2026-10-04: 50 separate client commits raised V$SYSSTAT 'redo synch writes' by 55 (the 50 commits plus the CREATE and DROP of the probe table), and the log writer and the datafile writer hold their files open with O_DSYNC (open flags 02110002, filesystemio_options none).",
+     "class": "unverified",
+     "basis": [],
+     "cites": "measurement"
+    },
+    {
+     "text": "The database runs NOARCHIVELOG (V$DATABASE.LOG_MODE), so redo serves crash recovery only and there is no point-in-time restore.",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "The HNSW graph lives in the 768 MB vector memory pool (oracle-init/01-vector-memory.sh)",
+     "class": "documented",
+     "basis": [
+      "deploy/engines/oracle-init/01-vector-memory.sh#POOL_SIZE=768M"
+     ]
+    },
+    {
+     "text": "and is not the durable copy; the table is.",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "Not tested by cutting power; whether the disk's own write cache reaches the media was not checked.",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "CPU: Oracle Free caps itself at 2 CPUs (cpu_count 2 in V$PARAMETER, edition FREE in V$INSTANCE, 8 host CPUs in V$OSSTAT NUM_CPUS;",
+     "class": "read-back",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/OracleCpuCap.cs#cpu_count {CpuCount.ToString( CultureInfo.InvariantCulture )} in V$PARAMETER"
+     ]
+    },
+    {
+     "text": "the 2 CPU thread limit is Oracle's documented Free edition limit).",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "oracle",
+   "field": "index",
+   "spans": [
+    {
+     "text": "HNSW in-memory neighbor graph NEIGHBORS=16 EFCONSTRUCTION=128,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/OracleSink.cs#ORGANIZATION INMEMORY NEIGHBOR GRAPH DISTANCE COSINE",
+      "src/GenericVectorBuilder.Engines/Sinks/OracleSink.cs#PARAMETERS ( TYPE HNSW, NEIGHBORS {_options.HnswNeighbors}, EFCONSTRUCTION {_options.HnswEfConstruction} )",
+      "src/GenericVectorBuilder.Engines/Sinks/OracleSinkOptions.cs#public int HnswNeighbors { get; set; } = 16;",
+      "src/GenericVectorBuilder.Engines/Sinks/OracleSinkOptions.cs#public int HnswEfConstruction { get; set; } = 128;"
+     ]
+    },
+    {
+     "text": "EFSEARCH=100 per query, cosine;",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/OracleSink.cs#APPROX FIRST :top ROWS ONLY WITH TARGET ACCURACY PARAMETERS ( EFSEARCH {Math.Max( _options.HnswEfSearch, top )} )",
+      "src/GenericVectorBuilder.Engines/Sinks/OracleSink.cs#VECTOR_DISTANCE( embedding, :query, COSINE )",
+      "src/GenericVectorBuilder.Engines/Sinks/OracleSinkOptions.cs#public int HnswEfSearch { get; set; } = 100;"
+     ]
+    },
+    {
+     "text": "exact mode = FETCH EXACT FIRST (full scan);",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/OracleSink.cs#\"EXACT FIRST :top ROWS ONLY\""
+     ]
+    },
+    {
+     "text": "Oracle Free caps itself at 2 CPUs (cpu_count 2 in V$PARAMETER, edition FREE in V$INSTANCE, 8 host CPUs in V$OSSTAT NUM_CPUS;",
+     "class": "read-back",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/OracleCpuCap.cs#cpu_count {CpuCount.ToString( CultureInfo.InvariantCulture )} in V$PARAMETER"
+     ]
+    },
+    {
+     "text": "the 2 CPU thread limit is Oracle's documented Free edition limit)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "pgvector",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "fsync on, synchronous_commit on, full_page_writes on, wal_sync_method fdatasync (PostgreSQL defaults;",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "pgvector.compose.yaml sets only shared_buffers, maintenance_work_mem and max_wal_size):",
+     "class": "documented",
+     "basis": [
+      "deploy/engines/pgvector.compose.yaml#shared_buffers=2GB",
+      "deploy/engines/pgvector.compose.yaml#maintenance_work_mem=1GB",
+      "deploy/engines/pgvector.compose.yaml#max_wal_size=4GB"
+     ]
+    },
+    {
+     "text": "every commit is flushed to the write-ahead log before it returns and HNSW index changes are WAL-logged, so a crash loses no committed row (max_wal_size 4GB only spaces out checkpoints; measured with docker kill, which is SIGKILL, right after a 2,000-vector load and a restart: all 2,000 rows were there and the HNSW index was valid and used by the default search)",
+     "class": "unverified",
+     "basis": [],
+     "cites": "measurement"
+    }
+   ]
+  },
+  {
+   "target": "pgvector",
+   "field": "index",
+   "spans": [
+    {
+     "text": "HNSW vector_cosine_ops m=16 ef_construction=128,",
+     "class": "read-back",
+     "basis": [
+      "results:targets[pgvector].load.indexNote#USING hnsw (embedding vector_cosine_ops) WITH (m='16', ef_construction='128')"
+     ]
+    },
+    {
+     "text": "hnsw.ef_search=100 per query,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/PgVectorSink.cs#SET LOCAL hnsw.ef_search = ",
+      "src/GenericVectorBuilder.Engines/Sinks/PgVectorSinkOptions.cs#public int HnswEfSearch { get; set; } = 100;"
+     ]
+    },
+    {
+     "text": "float32 vector(n), cosine;",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "exact mode = same query with index scans off (sequential scan)",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/PgVectorSink.cs#EXACT_SETTINGS = \"SET LOCAL enable_indexscan = off; SET LOCAL jit = off\""
+     ]
+    }
+   ]
+  },
+  {
+   "target": "qdrant",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "What was measured (strace -f on the Qdrant server process, 30 single-point REST upserts per setting, every sync call timed against the request that caused it): with wait=true each upsert had exactly one msync(MS_SYNC) of the write-ahead-log segment inside the request, before the reply (30 of 30);",
+     "class": "documented",
+     "basis": [
+      "design/engine-docs/durability-logs-2026-10-04/qdrant-wait-true.strace#MS_SYNC",
+      "design/engine-docs/durability-logs-2026-10-04/qdrant-wait-true.marks.json#\"mode\": \"true\""
+     ]
+    },
+    {
+     "text": "with wait=false the 30 upserts were acknowledged within 0.26 s with no sync call, and the first WAL msync (one call covering all 30 records) came 2.7 s after the last reply, followed by the segment-file flushes.",
+     "class": "documented",
+     "basis": [
+      "design/engine-docs/durability-logs-2026-10-04/qdrant-wait-false.strace#msync",
+      "design/engine-docs/durability-logs-2026-10-04/qdrant-wait-false.marks.json#\"mode\": \"false\""
+     ]
+    },
+    {
+     "text": "So the log is flushed to disk under both settings, but with wait=false the flush comes after the acknowledgement: an operating-system crash or power cut in that gap loses acknowledged writes, while a crash of the Qdrant process alone should not, because the bytes are already in the kernel's page cache (inferred, not tested).",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "Every upsert here is sent with wait=true in batches of 256 over gRPC;",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Core/Sinks/QdrantSink.cs#_client.UpsertAsync( name, points, wait: true",
+      "src/GenericVectorBuilder.Core/Sinks/QdrantSink.cs#private const int UPSERT_BATCH = 256;"
+     ]
+    },
+    {
+     "text": "the strace used one point per request, so one flush per batch is inferred, not measured.",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "Segment files are flushed every 5 s; log segments 32 MB, 0 created ahead. /qdrant/config/config.yaml in container gvb-qdrant (the image's own file; its storage keys are listed) sets: storage.collection.quantization = null, storage.collection.replication_factor = 1, storage.collection.vectors.on_disk = null, storage.collection.write_consistency_factor = 1, storage.hnsw_index.ef_construct = 100, storage.hnsw_index.full_scan_threshold_kb = 10000, storage.hnsw_index.m = 16, storage.hnsw_index.max_indexing_threads = 0, storage.hnsw_index.on_disk = false, storage.hnsw_index.payload_m = null, storage.max_collections = null, storage.node_type = Normal, storage.on_disk_payload = true, storage.optimizers.default_segment_number = 0, storage.optimizers.deleted_threshold = 0.2, storage.optimizers.flush_interval_sec = 5, storage.optimizers.indexing_threshold_kb = 10000, storage.optimizers.max_optimization_threads = null, storage.optimizers.max_segment_size_kb = null, storage.optimizers.vacuum_min_vector_number = 1000, storage.performance.max_search_threads = 0, storage.performance.optimizer_cpu_budget = 0, storage.performance.update_rate_limit = null, storage.shard_transfer_method = null, storage.snapshots_config.snapshots_storage = local, storage.snapshots_path = ./snapshots, storage.storage_path = ./storage, storage.temp_path = null, storage.update_concurrency = null, storage.wal.wal_capacity_mb = 32, storage.wal.wal_segments_ahead = 0; no QDRANT__ environment overrides in the server process.",
+     "class": "read-back",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Targets/QdrantServer.cs#ConfigFiles.ReadContainerFileAsync( container, configPath, ct )"
+     ]
+    },
+    {
+     "text": "Not tested by cutting power; whether the disk's own write cache reaches the media was not checked.",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "qdrant",
+   "field": "index",
+   "spans": [
+    {
+     "text": "exact scan: the builder's sink sends exact=true on every search,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Targets/TargetFactory.cs#private const string QDRANT_EXACT_INDEX = \"exact scan: the builder's sink sends exact=true on every search"
+     ]
+    },
+    {
+     "text": "so no HNSW graph is used whether or not Qdrant has built one (see the index state)",
+     "class": "read-back",
+     "basis": [
+      "results:targets[qdrant].load.indexNote#0 of 524 vectors in HNSW segments"
+     ]
+    }
+   ]
+  },
+  {
+   "target": "qdrant-hnsw",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "What was measured (strace -f on the Qdrant server process, 30 single-point REST upserts per setting, every sync call timed against the request that caused it): with wait=true each upsert had exactly one msync(MS_SYNC) of the write-ahead-log segment inside the request, before the reply (30 of 30);",
+     "class": "documented",
+     "basis": [
+      "design/engine-docs/durability-logs-2026-10-04/qdrant-wait-true.strace#MS_SYNC",
+      "design/engine-docs/durability-logs-2026-10-04/qdrant-wait-true.marks.json#\"mode\": \"true\""
+     ]
+    },
+    {
+     "text": "with wait=false the 30 upserts were acknowledged within 0.26 s with no sync call, and the first WAL msync (one call covering all 30 records) came 2.7 s after the last reply, followed by the segment-file flushes.",
+     "class": "documented",
+     "basis": [
+      "design/engine-docs/durability-logs-2026-10-04/qdrant-wait-false.strace#msync",
+      "design/engine-docs/durability-logs-2026-10-04/qdrant-wait-false.marks.json#\"mode\": \"false\""
+     ]
+    },
+    {
+     "text": "So the log is flushed to disk under both settings, but with wait=false the flush comes after the acknowledgement: an operating-system crash or power cut in that gap loses acknowledged writes, while a crash of the Qdrant process alone should not, because the bytes are already in the kernel's page cache (inferred, not tested).",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "Every upsert here is sent with wait=true in batches of 256 over gRPC;",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Core/Sinks/QdrantSink.cs#_client.UpsertAsync( name, points, wait: true",
+      "src/GenericVectorBuilder.Core/Sinks/QdrantSink.cs#private const int UPSERT_BATCH = 256;"
+     ]
+    },
+    {
+     "text": "the strace used one point per request, so one flush per batch is inferred, not measured.",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "Segment files are flushed every 5 s; log segments 32 MB, 0 created ahead. /qdrant/config/config.yaml in container gvb-qdrant (the image's own file; its storage keys are listed) sets: storage.collection.quantization = null, storage.collection.replication_factor = 1, storage.collection.vectors.on_disk = null, storage.collection.write_consistency_factor = 1, storage.hnsw_index.ef_construct = 100, storage.hnsw_index.full_scan_threshold_kb = 10000, storage.hnsw_index.m = 16, storage.hnsw_index.max_indexing_threads = 0, storage.hnsw_index.on_disk = false, storage.hnsw_index.payload_m = null, storage.max_collections = null, storage.node_type = Normal, storage.on_disk_payload = true, storage.optimizers.default_segment_number = 0, storage.optimizers.deleted_threshold = 0.2, storage.optimizers.flush_interval_sec = 5, storage.optimizers.indexing_threshold_kb = 10000, storage.optimizers.max_optimization_threads = null, storage.optimizers.max_segment_size_kb = null, storage.optimizers.vacuum_min_vector_number = 1000, storage.performance.max_search_threads = 0, storage.performance.optimizer_cpu_budget = 0, storage.performance.update_rate_limit = null, storage.shard_transfer_method = null, storage.snapshots_config.snapshots_storage = local, storage.snapshots_path = ./snapshots, storage.storage_path = ./storage, storage.temp_path = null, storage.update_concurrency = null, storage.wal.wal_capacity_mb = 32, storage.wal.wal_segments_ahead = 0; no QDRANT__ environment overrides in the server process.",
+     "class": "read-back",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Targets/QdrantServer.cs#ConfigFiles.ReadContainerFileAsync( container, configPath, ct )"
+     ]
+    },
+    {
+     "text": "Not tested by cutting power; whether the disk's own write cache reaches the media was not checked.",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "qdrant-hnsw",
+   "field": "index",
+   "spans": [
+    {
+     "text": "HNSW m=16 ef_construct=100,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Targets/QdrantHnswSink.cs#var hnsw = new HnswConfigDiff { M = HNSW_M, EfConstruct = HNSW_EF_CONSTRUCT, FullScanThreshold = FULL_SCAN_THRESHOLD_KB };"
+     ]
+    },
+    {
+     "text": "hnsw_ef=server default,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Targets/QdrantHnswSink.cs#search.HnswEf = _ef.Value;"
+     ]
+    },
+    {
+     "text": "cosine;",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Targets/QdrantHnswSink.cs#new VectorParams { Size = (ulong)dimension, Distance = Distance.Cosine }"
+     ]
+    },
+    {
+     "text": "indexing_threshold_kb 1 and full_scan_threshold_kb 10",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Targets/QdrantHnswSink.cs#var optimizers = new OptimizersConfigDiff { IndexingThreshold = INDEXING_THRESHOLD_KB };",
+      "src/GenericVectorBuilder.Bench/Targets/QdrantHnswSink.cs#var hnsw = new HnswConfigDiff { M = HNSW_M, EfConstruct = HNSW_EF_CONSTRUCT, FullScanThreshold = FULL_SCAN_THRESHOLD_KB };"
+     ]
+    },
+    {
+     "text": "(server defaults are 10,000 each)",
+     "class": "read-back",
+     "basis": [
+      "results:targets[qdrant-hnsw].durability#storage.optimizers.indexing_threshold_kb = 10000",
+      "results:targets[qdrant-hnsw].durability#storage.hnsw_index.full_scan_threshold_kb = 10000"
+     ]
+    },
+    {
+     "text": "so a small collection builds and walks its graph",
+     "class": "read-back",
+     "basis": [
+      "results:targets[qdrant-hnsw].load.indexNote#524 of 524 vectors in HNSW segments"
+     ]
+    }
+   ]
+  },
+  {
+   "target": "redis",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "save \"300 1\" and appendonly no (redis.compose.yaml):",
+     "class": "documented",
+     "basis": [
+      "deploy/engines/redis.compose.yaml#--save \"300 1\"",
+      "deploy/engines/redis.compose.yaml#--appendonly no"
+     ]
+    },
+    {
+     "text": "an RDB snapshot is written every 5 minutes if at least one key changed, and on a clean stop; there is no append-only log, so a crash loses every write since the last snapshot (up to 5 minutes plus the time a snapshot takes; measured with docker kill, which is SIGKILL, right after a 2,000-vector load: none of the 2,000 hashes were there after the restart, and the restart loaded an older snapshot that still held keys of a collection that had been dropped since)",
+     "class": "unverified",
+     "basis": [],
+     "cites": "measurement"
+    }
+   ]
+  },
+  {
+   "target": "redis",
+   "field": "index",
+   "spans": [
+    {
+     "text": "HNSW TYPE FLOAT32 M=16 EF_CONSTRUCTION=128,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/RedisSink.cs#[\"M\"] = _options.HnswM,",
+      "src/GenericVectorBuilder.Engines/Sinks/RedisSink.cs#[\"EF_CONSTRUCTION\"] = _options.HnswEfConstruction,",
+      "src/GenericVectorBuilder.Engines/Sinks/RedisSinkOptions.cs#public int HnswM { get; set; } = 16;",
+      "src/GenericVectorBuilder.Engines/Sinks/RedisSinkOptions.cs#public int HnswEfConstruction { get; set; } = 128;"
+     ]
+    },
+    {
+     "text": "EF_RUNTIME=100 per query,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/RedisSink.cs#$\"EF_RUNTIME {Math.Max( _options.HnswEfRuntime, top )}\"",
+      "src/GenericVectorBuilder.Engines/Sinks/RedisSinkOptions.cs#public int HnswEfRuntime { get; set; } = 100;"
+     ]
+    },
+    {
+     "text": "cosine;",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/RedisSink.cs#[\"DISTANCE_METRIC\"] = \"COSINE\","
+     ]
+    },
+    {
+     "text": "exact mode = FLAT index built on first exact query",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "sql",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "A commit returns after its transaction-log records are written to disk (SQL Server write-ahead logging;",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "delayed durability is DISABLED);",
+     "class": "read-back",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Targets/SqlDurability.cs#SELECT name, recovery_model_desc, delayed_durability_desc, page_verify_option_desc FROM sys.databases"
+     ]
+    },
+    {
+     "text": "a database created here copies the model database:",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "recovery model FULL, page_verify CHECKSUM; no global trace flags are enabled;",
+     "class": "read-back",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Targets/SqlDurability.cs#SELECT name, recovery_model_desc, delayed_durability_desc, page_verify_option_desc FROM sys.databases",
+      "src/GenericVectorBuilder.Bench/Targets/SqlDurability.cs#DBCC TRACESTATUS( -1 ) WITH NO_INFOMSGS;"
+     ]
+    },
+    {
+     "text": "mssql.conf of container gvb-mssql (/var/opt/mssql/mssql.conf, on the host at /home/dan/gvb-data/engines/mssql/mssql.conf) does not exist, so it sets: nothing; it has no [control] or [traceflag] entry,",
+     "class": "read-back",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Targets/SqlDurability.cs#ConfigFiles.ExistsWithSudoAsync( confPath, ct )"
+     ]
+    },
+    {
+     "text": "so SQL Server's own Linux defaults for flushing writes apply (Microsoft's Linux performance guide names trace flag 3982 as that default; read from the guide, not tested here).",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "Not tested by cutting power; whether the disk's own write cache reaches the media was not checked.",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "Container settings from its environment (names only): MSSQL_AGENT_ENABLED, MSSQL_MEMORY_LIMIT_MB, MSSQL_PID, MSSQL_RPC_PORT, MSSQL_SA_PASSWORD.",
+     "class": "read-back",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Targets/SqlServerContainer.cs#n.StartsWith( \"MSSQL_\""
+     ]
+    }
+   ]
+  },
+  {
+   "target": "sql",
+   "field": "index",
+   "spans": [
+    {
+     "text": "exact VECTOR_DISTANCE cosine, no vector index (full scan)",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Targets/TargetFactory.cs#private const string SQL_EXACT_INDEX = \"exact VECTOR_DISTANCE cosine, no vector index (full scan)\""
+     ]
+    }
+   ]
+  },
+  {
+   "target": "sql-diskann",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "A commit returns after its transaction-log records are written to disk (SQL Server write-ahead logging;",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "delayed durability is DISABLED);",
+     "class": "read-back",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Targets/SqlDurability.cs#SELECT name, recovery_model_desc, delayed_durability_desc, page_verify_option_desc FROM sys.databases"
+     ]
+    },
+    {
+     "text": "a database created here copies the model database:",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "recovery model FULL, page_verify CHECKSUM; no global trace flags are enabled;",
+     "class": "read-back",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Targets/SqlDurability.cs#SELECT name, recovery_model_desc, delayed_durability_desc, page_verify_option_desc FROM sys.databases",
+      "src/GenericVectorBuilder.Bench/Targets/SqlDurability.cs#DBCC TRACESTATUS( -1 ) WITH NO_INFOMSGS;"
+     ]
+    },
+    {
+     "text": "mssql.conf of container gvb-mssql (/var/opt/mssql/mssql.conf, on the host at /home/dan/gvb-data/engines/mssql/mssql.conf) does not exist, so it sets: nothing; it has no [control] or [traceflag] entry,",
+     "class": "read-back",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Targets/SqlDurability.cs#ConfigFiles.ExistsWithSudoAsync( confPath, ct )"
+     ]
+    },
+    {
+     "text": "so SQL Server's own Linux defaults for flushing writes apply (Microsoft's Linux performance guide names trace flag 3982 as that default; read from the guide, not tested here).",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "Not tested by cutting power; whether the disk's own write cache reaches the media was not checked.",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "Container settings from its environment (names only): MSSQL_AGENT_ENABLED, MSSQL_MEMORY_LIMIT_MB, MSSQL_PID, MSSQL_RPC_PORT, MSSQL_SA_PASSWORD.",
+     "class": "read-back",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Targets/SqlServerContainer.cs#n.StartsWith( \"MSSQL_\""
+     ]
+    }
+   ]
+  },
+  {
+   "target": "sql-diskann",
+   "field": "index",
+   "spans": [
+    {
+     "text": "DiskANN (preview) via VECTOR_SEARCH, cosine,",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "build {\"StartId\":\"306\", \"L\":\"48\", \"M\":\"8\", \"R\":\"48\"};",
+     "class": "read-back",
+     "basis": [
+      "results:targets[sql-diskann].load.indexNote#built DiskANN, parameters {\"StartId\":\"306\", \"L\":\"48\", \"M\":\"8\", \"R\":\"48\"}",
+      "src/GenericVectorBuilder.Bench/Targets/SqlDiskAnnSink.cs#_buildParameters = index?.Build ?? \"unknown\";"
+     ]
+    },
+    {
+     "text": "the exact mode scans the same table",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "sqlitevec",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "PRAGMA journal_mode=WAL and PRAGMA synchronous=NORMAL (set by this sink when it opens the file):",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/SqliteVecSink.cs#Run( connection, \"PRAGMA journal_mode=WAL;\" )",
+      "src/GenericVectorBuilder.Engines/Sinks/SqliteVecSink.cs#Run( connection, \"PRAGMA synchronous=NORMAL;\" )"
+     ]
+    },
+    {
+     "text": "each commit is appended to the -wal file and handed to the operating system, but the WAL is fsynced only when SQLite checkpoints it (measured with strace: 40 single-record commits caused 3 WAL fsyncs), so a crash of the process loses nothing (measured with kill -9 and a reopen: all 50, 300 and 2,000 rows were there), while an operating-system crash or power cut can lose the newest commits since the last checkpoint and leaves the database consistent",
+     "class": "unverified",
+     "basis": [],
+     "cites": "measurement"
+    }
+   ]
+  },
+  {
+   "target": "sqlitevec",
+   "field": "index",
+   "spans": [
+    {
+     "text": "vec0 brute-force scan, no ANN index (exact),",
+     "class": "read-back",
+     "basis": [
+      "results:targets[sqlitevec].load.indexNote#EXPLAIN QUERY PLAN: SCAN"
+     ]
+    },
+    {
+     "text": "float32, cosine distance,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/SqliteVecSink.cs#embedding float[{dimension}] distance_metric=cosine,"
+     ]
+    },
+    {
+     "text": "default chunk_size=1024; score = 1 - cosine distance;",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "searches run concurrently, one WAL reader connection per searcher (opened as searchers arrive, at most 32), writes run one at a time and may overlap searches",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/SqliteVecSinkOptions.cs#public int MaxSearchConnections { get; set; } = 32;",
+      "src/GenericVectorBuilder.Engines/Sinks/SqliteVecSink.cs#return Math.Max( MIN_SEARCH_CONNECTIONS, _options.MaxSearchConnections );"
+     ]
+    }
+   ]
+  },
+  {
+   "target": "typesense",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "Every acknowledged write is appended to Typesense's raft log and fsynced before the answer: braft raft_sync=true with raft_sync_policy=0 (sync immediately), read from the running container's brpc /flags page on 2026-10-04. A restart replays the log from the last snapshot",
+     "class": "unverified",
+     "basis": [],
+     "cites": "measurement"
+    },
+    {
+     "text": "(typesense.compose.yaml sets TYPESENSE_SNAPSHOT_INTERVAL_SECONDS=300)",
+     "class": "documented",
+     "basis": [
+      "deploy/engines/typesense.compose.yaml#TYPESENSE_SNAPSHOT_INTERVAL_SECONDS: \"300\""
+     ]
+    },
+    {
+     "text": "and rebuilds the in-memory HNSW graph, so by those settings a crash loses no acknowledged write, but the restart is slow after a big load. This is read from the settings, not shown by pulling power. One node and no replicas, so a lost disk loses the data.",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "typesense",
+   "field": "index",
+   "spans": [
+    {
+     "text": "HNSW float32 (hnswlib), m=16, ef_construction=128, cosine;",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/TypesenseSink.cs#hnsw_params = new { M = HNSW_M, ef_construction = HNSW_EF_CONSTRUCTION }",
+      "src/GenericVectorBuilder.Engines/Sinks/TypesenseSink.cs#private const int HNSW_M = 16;",
+      "src/GenericVectorBuilder.Engines/Sinks/TypesenseSink.cs#private const int HNSW_EF_CONSTRUCTION = 128;"
+     ]
+    },
+    {
+     "text": "search k=top, ef=100;",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/TypesenseSink.cs#string options = $\"k:{top}, ef:{Math.Max( _options.Ef, top )}\";",
+      "src/GenericVectorBuilder.Engines/Sinks/TypesenseSinkOptions.cs#int Ef = 100"
+     ]
+    },
+    {
+     "text": "exact mode = filter ordinal:>=0 with flat_search_cutoff;",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "index held in memory",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "vespa",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "Vespa's transaction log server fsyncs after each commit: searchlib.translogserver usefsync=true, and an operation is searchable when it is acknowledged: proton documentdb visibilitydelay=0. Neither is overridden by this sink or by the services.xml it deploys;",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "VespaReadinessTests reads both from the live config server.",
+     "class": "documented",
+     "basis": [
+      "tests/GenericVectorBuilder.Engines.Tests/VespaReadinessTests.cs#usefsync"
+     ]
+    },
+    {
+     "text": "After a crash the node replays the transaction log over its last flushed data and rebuilds the in-memory HNSW graph. By those settings an acknowledged write survives a crash; this is read from the settings, not shown by pulling power.",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "One node and min-redundancy 1,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/VespaApplicationPackage.cs#<min-redundancy>1</min-redundancy>"
+     ]
+    },
+    {
+     "text": "so a lost disk loses the data.",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "vespa",
+   "field": "index",
+   "spans": [
+    {
+     "text": "HNSW float32 tensor, prenormalized-angular (cosine), max-links-per-node=16, neighbors-to-explore-at-insert=128;",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/VespaApplicationPackage.cs#type tensor<float>(x[{{dimension}}])",
+      "src/GenericVectorBuilder.Engines/Sinks/VespaApplicationPackage.cs#distance-metric: prenormalized-angular",
+      "src/GenericVectorBuilder.Engines/Sinks/VespaApplicationPackage.cs#max-links-per-node: 16",
+      "src/GenericVectorBuilder.Engines/Sinks/VespaApplicationPackage.cs#neighbors-to-explore-at-insert: 128"
+     ]
+    },
+    {
+     "text": "search targetHits=top, ef=100 via exploreAdditionalHits;",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/VespaSink.cs#targetHits:{top},hnsw.exploreAdditionalHits:{extra}",
+      "src/GenericVectorBuilder.Engines/Sinks/VespaSinkOptions.cs#int EfSearch = 100"
+     ]
+    },
+    {
+     "text": "exact mode = approximate:false;",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/VespaSink.cs#targetHits:{top},approximate:false"
+     ]
+    },
+    {
+     "text": "vectors held in memory",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "target": "weaviate",
+   "field": "durability",
+   "spans": [
+    {
+     "text": "Weaviate 1.39.8 defaults, weaviate.compose.yaml sets no persistence variable:",
+     "class": "unverified",
+     "basis": [],
+     "contradictedBy": {
+      "file": "deploy/engines/weaviate.compose.yaml",
+      "prefix": "PERSISTENCE_",
+      "words": "sets no persistence variable"
+     }
+    },
+    {
+     "text": "every object is appended to the LSM write-ahead log with a plain write and no fsync, and the log is fsynced only when its memtable is flushed, 60 seconds after the last write (PERSISTENCE_MEMTABLES_FLUSH_IDLE_AFTER_SECONDS default; measured with strace: 2,080 writes into the objects log during a 2,000-object load, the first fsync 60 s after the last write), so a power cut can lose the last minute of writes; the HNSW commit log is buffered inside the process (77 writes for 2,000 vectors), so a killed process loses the newest vectors from the vector index while their objects survive (measured with docker kill, which is SIGKILL, one second after the load and a restart, two runs each: 0 to 1 of 50, 264 to 267 of 300 and 1,992 to 1,997 of 2,000 stored objects were still reachable through a vector search)",
+     "class": "unverified",
+     "basis": [],
+     "cites": "measurement"
+    }
+   ]
+  },
+  {
+   "target": "weaviate",
+   "field": "index",
+   "spans": [
+    {
+     "text": "HNSW maxConnections(M)=16 efConstruction=128,",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/WeaviateSink.cs#[\"maxConnections\"] = _options.MaxConnections,",
+      "src/GenericVectorBuilder.Engines/Sinks/WeaviateSink.cs#[\"efConstruction\"] = _options.EfConstruction,",
+      "src/GenericVectorBuilder.Engines/Sinks/WeaviateSinkOptions.cs#int MaxConnections = 16,",
+      "src/GenericVectorBuilder.Engines/Sinks/WeaviateSinkOptions.cs#int EfConstruction = 128,"
+     ]
+    },
+    {
+     "text": "ef=-1",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Engines/Sinks/WeaviateSink.cs#[\"ef\"] = _options.Ef,",
+      "src/GenericVectorBuilder.Engines/Sinks/WeaviateSinkOptions.cs#int Ef = -1 );"
+     ]
+    },
+    {
+     "text": "(dynamic: limit x 8 clamped 100..500),",
+     "class": "documented",
+     "basis": [
+      "design/engine-docs/weaviate-vector-index-reference-2026-10-07.mdx#`dynamicEfFactor`",
+      "design/engine-docs/weaviate-vector-index-reference-2026-10-07.mdx#`dynamicEfMin`",
+      "design/engine-docs/weaviate-vector-index-reference-2026-10-07.mdx#`dynamicEfMax`",
+      "design/engine-docs/weaviate-vector-index-concepts-2026-10-07.md#The dynamic list size will be set as the query limit multiplied by `dynamicEfFactor`, modified by a minimum of `dynamicEfMin` and a maximum of `dynamicEfMax`."
+     ],
+     "docRows": [
+      [
+       "dynamicEfFactor",
+       "8"
+      ],
+      [
+       "dynamicEfMin",
+       "100"
+      ],
+      [
+       "dynamicEfMax",
+       "500"
+      ]
+     ]
+    },
+    {
+     "text": "cosine, no quantization;",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "text": "approximate only (no exact mode)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  }
+ ],
+ "policy": {
+  "durability": "refuse",
+  "index": "refuse",
+  "notes": "label"
+ },
+ "evidence": {
+  "mariadbRecallLog": "design/bench-inputs/mariadb-effort-2026-10-07/run.log",
+  "tieCheck": "design/bench-inputs/tie-check-eshoponweb-2026-10-07.json"
+ },
+ "notes": [
+  {
+   "match": "^Load average at start: ",
+   "spans": [
+    {
+     "pattern": "Load average at start: \\S+ \\S+ \\S+ on \\d+ logical CPUs \\(1/5/15 min\\)\\.",
+     "class": "read-back",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Report/MachineFacts.cs#File.ReadAllText( \"/proc/loadavg\" )"
+     ]
+    },
+    {
+     "pattern": "It counts this benchmark\\'s own earlier work and the engines it started, so it is recorded here and never judged; each timed pass is judged by the outside load machine control measures \\(conditions\\.passes\\)\\.",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "match": "^Order: ",
+   "spans": [
+    {
+     "pattern": "Order: targets ran one at a time in a random order from seed \\d+ \\(runSeed; --seed \\d+ repeats it, targetOrder lists it\\)\\.",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Running/RunOrder.cs#return Shuffle( names, Mix( (ulong)(uint)runSeed ^ TARGET_SALT ) );"
+     ]
+    },
+    {
+     "pattern": "Inside each target the timed passes also ran in a random order from the same seed and the target\\'s name \\(passOrder\\):",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Running/RunOrder.cs#return Shuffle( passes, Mix( (ulong)(uint)runSeed ^ PASS_SALT ^ StableHash( targetName.ToLowerInvariant() ) ) );"
+     ]
+    },
+    {
+     "pattern": "(?s:.*)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "match": "^Preparation, untimed",
+   "spans": [
+    {
+     "pattern": "(?s:.*)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "match": "^Warm-up and settle check",
+   "spans": [
+    {
+     "pattern": "(?s:.*)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "match": "^Load rows/s counts only time",
+   "spans": [
+    {
+     "pattern": "(?s:.*)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "match": "^Index proof: ",
+   "spans": [
+    {
+     "pattern": "(?s:.*)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "match": "^Search settings: ",
+   "spans": [
+    {
+     "pattern": "(?s:.*)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "match": "^Durability: each target",
+   "spans": [
+    {
+     "pattern": "(?s:.*)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "match": "^Engine record: ",
+   "spans": [
+    {
+     "pattern": "(?s:.*)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "match": "^Latency is client-side wall time",
+   "spans": [
+    {
+     "pattern": "(?s:.*)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "match": "^QPS: N searchers",
+   "spans": [
+    {
+     "pattern": "(?s:.*)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "match": "^Recall@\\d+: ",
+   "spans": [
+    {
+     "pattern": "Recall@\\d+: share of the exact top \\d+ \\(brute force in memory\\) that the engine returned\\.",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "pattern": "A hit whose exact similarity ties the \\d+th best \\(within 1e-5\\) also counts",
+     "class": "documented",
+     "basis": [
+      "src/GenericVectorBuilder.Bench/Stats/BenchMath.cs#public const double TIE_TOLERANCE = 1e-5;"
+     ],
+     "evidence": "tieCheck"
+    },
+    {
+     "pattern": ", because duplicate rows embed to identical vectors\\.",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "match": "^Routes: ",
+   "spans": [
+    {
+     "pattern": "Routes: a container engine \\(the benchmark\\'s own SQL Server and Qdrant containers included\\) is reached at its container\\'s own address on its Docker network, never through the published 127\\.0\\.0\\.1 port \\(docker-proxy\\);",
+     "class": "read-back",
+     "basis": [
+      "results:conditions.connections#this target"
+     ]
+    },
+    {
+     "pattern": "the native comparison targets \\(sql-native, qdrant-native\\) are native services reached directly over loopback\\.",
+     "class": "unverified",
+     "basis": [],
+     "dropWhenAbsent": [
+      "sql-native",
+      "qdrant-native"
+     ]
+    },
+    {
+     "pattern": "(?s:.*)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "match": "^RAM of compose engines",
+   "spans": [
+    {
+     "pattern": "RAM of compose engines, the benchmark\\'s own SQL Server and Qdrant containers \\(sql, sql-diskann, qdrant, qdrant-hnsw\\) included, is docker stats of the engine\\'s containers;",
+     "class": "unverified",
+     "basis": []
+    },
+    {
+     "pattern": "for the native comparison targets \\(sql-native, qdrant-native\\) it is the whole native process, including every other database or collection it serves\\.",
+     "class": "unverified",
+     "basis": [],
+     "dropWhenAbsent": [
+      "sql-native",
+      "qdrant-native"
+     ]
+    },
+    {
+     "pattern": "(?s:.*)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "match": "^Engines: ",
+   "spans": [
+    {
+     "pattern": "(?s:.*)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "match": "^Machine control on: ",
+   "spans": [
+    {
+     "pattern": "Machine control on: .*?(?= Busy box: )",
+     "class": "read-back",
+     "basis": [
+      "results:conditions.governor#performance",
+      "results:conditions.clientCpus#0-1,4-5",
+      "results:conditions.engineCpus#2-3,6-7"
+     ]
+    },
+    {
+     "pattern": "(?s:.*)",
+     "class": "unverified",
+     "basis": []
+    }
+   ]
+  },
+  {
+   "match": "^\\S+ is embedded: it ran inside the client process on the client CPUs ",
+   "spans": [
+    {
+     "pattern": "\\S+ is embedded: it ran inside the client process on the client CPUs \\S+, sharing them with the client\\.",
+     "class": "read-back",
+     "basis": [
+      "results:conditions.engines#embedded"
+     ]
+    }
+   ]
+  }
+ ]
+}

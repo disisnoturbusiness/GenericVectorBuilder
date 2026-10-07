@@ -80,6 +80,7 @@ public static class BenchConsolidatedHtml
       AppendRuns( html, model, placed );
       AppendSection( html, model, placed, BenchSlots.METHOD, null );
       AppendUnplaced( html, model, placed );
+      AppendUnread( html, model );
       AppendAudit( html, model );
       return html.Append( "</section>" ).ToString();
    }
@@ -95,26 +96,29 @@ public static class BenchConsolidatedHtml
    {
       string text = sentence.Quote ? $"<blockquote class=\"bench-quote\">{BenchFormat.Enc( sentence.Text )}</blockquote>" : $"<p class=\"{css}\">{BenchFormat.Enc( sentence.Text )}</p>";
       var html = new StringBuilder( $"<div class=\"bench-sentence-block\" data-slot=\"{BenchFormat.Enc( sentence.Slot )}\">{text}" );
-      if( sentence.Sources.Count == 0 )
-      {
-         html.Append( "<p class=\"muted bench-sources\">no sources recorded</p>" );
-      }
-      else
-      {
-         html.Append( "<details class=\"bench-sources muted\"><summary>sources</summary><ul>" );
-         foreach( BenchSource source in sentence.Sources )
-         {
-            string value = source.Value.Length > MAX_SOURCE_VALUE ? source.Value[..MAX_SOURCE_VALUE] + "..." : source.Value;
-            bool echoesTheText = sentence.Quote && source.Value == sentence.Text;
-            html.Append( echoesTheText
-               ? $"<li>{BenchFormat.Enc( source.Kind )} <code>{BenchFormat.Enc( source.Ref )}</code></li>"
-               : $"<li>{BenchFormat.Enc( source.Kind )} <code>{BenchFormat.Enc( source.Ref )}</code> = {BenchFormat.Enc( value )}</li>" );
-         }
-
-         html.Append( "</ul></details>" );
-      }
-
+      html.Append( sentence.Sources.Count == 0 ? "<p class=\"muted bench-sources\">no sources recorded</p>" : SourceList( sentence.Sources, sentence.Quote ? sentence.Text : null ) );
       return html.Append( "</div>" ).ToString();
+   }
+
+   /// <summary>
+   /// A list of sources in a closed details, so the page works without hover: the kind, the place and the value each source gives.
+   /// </summary>
+   /// <param name="sources">The sources (at least one).</param>
+   /// <param name="quoted">The text of a quotation the sources belong to, so a source that only repeats it is printed without the value; null for none.</param>
+   /// <returns>HTML fragment.</returns>
+   public static string SourceList( IReadOnlyList<BenchSource> sources, string? quoted = null )
+   {
+      var html = new StringBuilder( "<details class=\"bench-sources muted\"><summary>sources</summary><ul>" );
+      foreach( BenchSource source in sources )
+      {
+         string value = source.Value.Length > MAX_SOURCE_VALUE ? source.Value[..MAX_SOURCE_VALUE] + "..." : source.Value;
+         bool echoesTheText = quoted != null && source.Value == quoted;
+         html.Append( echoesTheText
+            ? $"<li>{BenchFormat.Enc( source.Kind )} <code>{BenchFormat.Enc( source.Ref )}</code></li>"
+            : $"<li>{BenchFormat.Enc( source.Kind )} <code>{BenchFormat.Enc( source.Ref )}</code> = {BenchFormat.Enc( value )}</li>" );
+      }
+
+      return html.Append( "</ul></details>" ).ToString();
    }
 
    /// <summary>
@@ -122,9 +126,11 @@ public static class BenchConsolidatedHtml
    /// </summary>
    /// <param name="metric">The metric.</param>
    /// <param name="sessions">The sessions, in file order, for the per-session columns.</param>
+   /// <param name="why">The facts table, so the search column can print the label of the fact behind each mode; null for none.</param>
    /// <returns>HTML fragment.</returns>
-   public static string MetricTable( BenchMetric metric, IReadOnlyList<BenchSession> sessions )
+   public static string MetricTable( BenchMetric metric, IReadOnlyList<BenchSession> sessions, IReadOnlyList<BenchWhy>? why = null )
    {
+      bool search = metric.Rows.Any( r => r.SearchMode != null );
       var names = metric.Rows.ToDictionary( r => r.Target, r => r.Display, StringComparer.Ordinal );
       var html = new StringBuilder( $"<h2 class=\"bench-metric\" data-metric=\"{BenchFormat.Enc( metric.Metric )}\">{BenchFormat.Enc( Heading( metric.Metric ) )}</h2>" );
       html.Append( "<div class=\"preview\"><table class=\"bench-table\"><thead><tr><th>Engine</th>" );
@@ -133,7 +139,7 @@ public static class BenchConsolidatedHtml
          html.Append( $"<th class=\"n\">{BenchFormat.Enc( session.Name )} min to max</th>" );
       }
 
-      html.Append( "<th class=\"n\">Median of all runs</th><th>Not separated from</th><th>Flags</th></tr></thead><tbody>" );
+      html.Append( $"<th class=\"n\">Median of all runs</th>{( search ? $"<th data-column=\"search\">{BenchFormat.Enc( BenchLegends.H_SEARCH_MODE )}</th>" : string.Empty )}<th>Not separated from</th><th>Flags</th></tr></thead><tbody>" );
       foreach( BenchRow row in metric.Rows )
       {
          html.Append( $"<tr data-target=\"{BenchFormat.Enc( row.Target )}\"><td>{BenchFormat.Enc( row.Display )}{Note( row )}</td>" );
@@ -143,6 +149,7 @@ public static class BenchConsolidatedHtml
          }
 
          html.Append( $"<td class=\"n\">{BenchFormat.Enc( row.Median == null ? "-" : BenchFormat.Figure( row.Median.Value, metric.LowerIsBetter ) )}</td>" );
+         html.Append( search ? $"<td data-column=\"search\">{SearchCell( row, why )}</td>" : string.Empty );
          html.Append( $"<td>{Separation( row, names )}</td><td>{Markers( row )}</td></tr>" );
       }
 
@@ -235,11 +242,16 @@ public static class BenchConsolidatedHtml
    {
       foreach( BenchMetric metric in model.Metrics )
       {
-         html.Append( MetricTable( metric, model.Sessions ) );
+         html.Append( MetricTable( metric, model.Sessions, model.Why ) );
          AppendSentences( html, Take( model, placed, BenchSlots.TABLE, metric.Metric ) );
       }
 
       html.Append( $"<p class=\"bench-legend muted\">{BenchFormat.Enc( BenchLegends.ROW_ORDER )} {BenchFormat.Enc( BenchLegends.ROW_SEPARATION )}</p>" );
+      if( model.Metrics.Any( m => m.Rows.Any( r => r.SearchMode != null ) ) )
+      {
+         html.Append( $"<p class=\"bench-legend muted\">{BenchFormat.Enc( model.Why.Count > 0 ? BenchLegends.SEARCH_COLUMN : BenchLegends.SEARCH_COLUMN_BARE )}</p>" );
+      }
+
       if( model.Metrics.Any( m => m.Rows.Any( r => r.Status == "one-session" ) ) )
       {
          html.Append( $"<p class=\"bench-legend muted\">{BenchFormat.Enc( BenchLegends.ONE_SESSION )}</p>" );
@@ -342,8 +354,8 @@ public static class BenchConsolidatedHtml
       html.Append( $"<h2>{BenchLegends.H_WHY}</h2>" );
       AppendSentences( html, Take( model, placed, BenchSlots.WHY ) );
 
-      html.Append( $"<div class=\"preview\"><table class=\"bench-table\"><thead><tr><th>Engine</th><th>Facts</th><th>{BenchFormat.Enc( BenchLegends.H_SEARCH_EFFORT )}</th><th class=\"n\">Engine CPU per search, one searcher (ms)</th><th class=\"n\">Engine CPU per search, eight searchers (ms)</th>" );
-      html.Append( "<th class=\"n\">Client CPU per search, one searcher (ms)</th><th class=\"n\">Client CPU per search, eight searchers (ms)</th><th class=\"n\">Engine CPUs busy, eight searchers</th></tr></thead><tbody>" );
+      html.Append( $"<div class=\"preview\"><table class=\"bench-table\"><thead><tr><th>Engine</th><th>Facts</th><th>{BenchFormat.Enc( BenchLegends.H_SEARCH_EFFORT )}</th><th class=\"n\">{BenchFormat.Enc( BenchLegends.H_ENGINE_CPU_1 )}</th><th class=\"n\">{BenchFormat.Enc( BenchLegends.H_ENGINE_CPU_8 )}</th>" );
+      html.Append( $"<th class=\"n\">{BenchFormat.Enc( BenchLegends.H_CLIENT_CPU_1 )}</th><th class=\"n\">{BenchFormat.Enc( BenchLegends.H_CLIENT_CPU_8 )}</th><th class=\"n\">{BenchFormat.Enc( BenchLegends.H_ENGINE_CPUS_BUSY )}</th></tr></thead><tbody>" );
       foreach( BenchWhy why in model.Why )
       {
          html.Append( $"<tr data-target=\"{BenchFormat.Enc( why.Target )}\"><td>{BenchFormat.Enc( DisplayOf( model, why.Target ) )}</td><td>{Facts( why )}</td><td data-column=\"effort\">{Effort( why, settings.GetValueOrDefault( why.Target ), caveats.GetValueOrDefault( why.Target ) )}</td>" );
@@ -448,7 +460,9 @@ public static class BenchConsolidatedHtml
       var html = new StringBuilder( "<ul class=\"bench-facts\">" );
       foreach( BenchFact fact in why.Facts )
       {
-         html.Append( $"<li><strong>{BenchFormat.Enc( fact.Kind )}</strong> {BenchFormat.Enc( fact.Text )} <span class=\"muted\">({BenchFormat.Enc( fact.Confidence )}; <code>{BenchFormat.Enc( fact.Source )}</code>)</span></li>" );
+         string kind = fact.Mode == null ? fact.Kind : $"{fact.Kind} ({fact.Mode})";
+         string where = fact.Where == null ? string.Empty : $"; {BenchFormat.Enc( fact.Where )}";
+         html.Append( $"<li data-kind=\"{BenchFormat.Enc( fact.Kind )}\"><strong>{BenchFormat.Enc( kind )}</strong> {BenchFormat.Enc( fact.Text )} <span class=\"muted\">(<span class=\"bench-label\">{BenchFormat.Enc( fact.Confidence )}</span>; <code>{BenchFormat.Enc( fact.Source )}</code>{where})</span></li>" );
       }
 
       return html.Append( "</ul>" ).ToString();
@@ -508,8 +522,88 @@ public static class BenchConsolidatedHtml
 
       if( model.Basis != null )
       {
+         html.Append( SetupSplits( model, model.Basis ) );
          html.Append( BasisFigures( model.Basis ) );
       }
+   }
+
+   /// <summary>
+   /// The changes of an engine's recorded setup that the basis does not compare across, as a table: the engine, each field that changed with the text before and
+   /// after, the runs on each side, the largest one-engine and pair moves the change hides, and the threshold the basis would give with the change counted.
+   /// Why drawn in the open: the threshold, and with it every ahead-of pair, depends on which changes the basis leaves out, so a reader must see them without a click.
+   /// </summary>
+   /// <param name="model">The file, for display names.</param>
+   /// <param name="basis">The basis.</param>
+   /// <returns>HTML fragment; empty when the file lists no change.</returns>
+   private static string SetupSplits( BenchConsolidated model, BenchBasis basis )
+   {
+      if( basis.Splits.Count == 0 )
+      {
+         return string.Empty;
+      }
+
+      var html = new StringBuilder( $"<h3>{BenchFormat.Enc( BenchLegends.H_SETUP_SPLITS )}</h3><div class=\"preview\"><table class=\"bench-table\" data-table=\"setup-splits\"><thead><tr><th>Engine</th><th>What changed</th>" );
+      html.Append( "<th>Runs before the change</th><th>Runs after the change</th><th>Largest one-engine move across the change</th><th>Largest pair move across the change</th><th class=\"n\">Threshold if counted</th></tr></thead><tbody>" );
+      foreach( BenchSetupSplit split in basis.Splits )
+      {
+         html.Append( $"<tr data-target=\"{BenchFormat.Enc( split.Target )}\"><td>{BenchFormat.Enc( DisplayOf( model, split.Target ) )}</td><td>{SplitChanges( split )}</td>" );
+         html.Append( $"<td>{SplitRuns( split.BeforeSessions, split.BeforeRuns )}</td><td>{SplitRuns( split.AfterSessions, split.AfterRuns )}</td>" );
+         html.Append( $"<td>{SplitMove( split.OneEngine )}</td><td>{SplitMove( split.Pair )}</td>" );
+         html.Append( $"<td class=\"n\">{BenchFormat.Enc( split.TBpIfCounted == null ? "-" : BenchFormat.Percent( split.TBpIfCounted.Value ) )}</td></tr>" );
+      }
+
+      return html.Append( "</tbody></table></div>" ).ToString();
+   }
+
+   /// <summary>
+   /// The fields that changed in one setup split, each with the text the earlier runs recorded and the text the later runs recorded.
+   /// </summary>
+   /// <param name="split">The split.</param>
+   /// <returns>HTML fragment.</returns>
+   private static string SplitChanges( BenchSetupSplit split )
+   {
+      var html = new StringBuilder( "<ul class=\"bench-facts\">" );
+      foreach( BenchSetupChange change in split.Changes )
+      {
+         html.Append( $"<li><code>{BenchFormat.Enc( change.Field )}</code><br><span class=\"muted\">{BenchFormat.Enc( BenchLegends.L_BEFORE )}</span> {BenchFormat.Enc( change.Before.Length == 0 ? "not recorded" : change.Before )}" );
+         html.Append( $"<br><span class=\"muted\">{BenchFormat.Enc( BenchLegends.L_AFTER )}</span> {BenchFormat.Enc( change.After.Length == 0 ? "not recorded" : change.After )}</li>" );
+      }
+
+      return html.Append( "</ul>" ).ToString();
+   }
+
+   /// <summary>
+   /// The sessions and runs on one side of a setup split: the sessions' names and the number of runs, with the runs themselves as links in a closed details.
+   /// </summary>
+   /// <param name="sessions">The sessions.</param>
+   /// <param name="runs">The runs.</param>
+   /// <returns>HTML fragment.</returns>
+   private static string SplitRuns( IReadOnlyList<string> sessions, IReadOnlyList<string> runs )
+   {
+      string head = $"{BenchFormat.Enc( sessions.Count == 0 ? "-" : string.Join( ", ", sessions ) )}, {runs.Count} {( runs.Count == 1 ? "run" : "runs" )}";
+      return runs.Count == 0 ? head : $"{head}<details class=\"bench-sources muted\"><summary>runs</summary>{string.Join( ", ", runs.Select( RunLink ) )}</details>";
+   }
+
+   /// <summary>
+   /// One move a setup split hides: its metric, size and engine or pair, then the two runs, the two figures and the recorded differences between the runs.
+   /// </summary>
+   /// <param name="move">The move, or null.</param>
+   /// <returns>HTML fragment; a dash when the split has none of that kind.</returns>
+   private static string SplitMove( BenchSplitMove? move )
+   {
+      if( move == null )
+      {
+         return "-";
+      }
+
+      var html = new StringBuilder( $"{BenchFormat.Enc( Heading( move.Metric ) )}: {BenchFormat.Enc( BenchFormat.Percent( move.Move.MoveBp ) )}, {BenchFormat.Enc( move.Move.Who )}" );
+      html.Append( $"<br><small class=\"muted\">runs {BenchFormat.Enc( string.Join( ", ", move.Move.Runs ) )}; values {BenchFormat.Enc( string.Join( ", ", move.Move.Values ) )}</small>" );
+      if( move.Move.Differences.Count > 0 )
+      {
+         html.Append( $"<details class=\"bench-sources muted\"><summary>differences between the two runs</summary><ul>{string.Concat( move.Move.Differences.Select( d => $"<li>{BenchFormat.Enc( d )}</li>" ) )}</ul></details>" );
+      }
+
+      return html.ToString();
    }
 
    /// <summary>
@@ -521,10 +615,16 @@ public static class BenchConsolidatedHtml
    {
       var html = new StringBuilder( $"<details class=\"bench-target\"><summary>{BenchLegends.H_BASIS_FIGURES}</summary>" );
       html.Append( "<div class=\"preview\"><table class=\"bench-table\"><thead><tr><th>Kind</th><th>Metric</th><th class=\"n\">Move</th><th>Engines</th><th>Runs</th><th>Values</th><th>Differences</th></tr></thead><tbody>" );
+      var printed = new HashSet<string>( StringComparer.Ordinal );
       foreach( BenchBasisMoves group in basis.Moves.Concat( basis.NoMachineControl.Select( g => g with { Kind = g.Kind + " without machine control" } ) ) )
       {
          foreach( ( string metric, BenchMove move ) in group.Moves )
          {
+            if( !printed.Add( $"{group.Kind}|{metric}|{move.MoveBp}|{move.Who}|{string.Join( ",", move.Runs )}|{string.Join( ",", move.Values )}|{string.Join( ";", move.Differences )}" ) )
+            {
+               continue;
+            }
+
             html.Append( $"<tr><td>{BenchFormat.Enc( group.Kind )}</td><td>{BenchFormat.Enc( metric.Length == 0 ? "-" : metric )}</td><td class=\"n\">{BenchFormat.Enc( BenchFormat.Percent( move.MoveBp ) )}</td><td>{BenchFormat.Enc( move.Who )}</td>" );
             html.Append( $"<td>{BenchFormat.Enc( string.Join( ", ", move.Runs ) )}</td><td>{BenchFormat.Enc( string.Join( ", ", move.Values ) )}</td><td>{BenchFormat.Enc( string.Join( "; ", move.Differences ) )}</td></tr>" );
          }
@@ -532,8 +632,35 @@ public static class BenchConsolidatedHtml
 
       html.Append( "</tbody></table></div>" );
       html.Append( Records( BenchLegends.L_EXCLUSIONS, basis.Exclusions ) ).Append( Records( BenchLegends.L_LEFT_OUT, basis.LeftOut ) );
-      html.Append( Records( BenchLegends.L_BASIS_RUNS, basis.Runs.Select( r => ( IReadOnlyList<BenchPair> )new[] { new BenchPair( "folder", r.Folder ) }.Concat( r.Conditions ).ToList() ).ToList() ) );
+      html.Append( Records( BenchLegends.L_BASIS_RUNS, basis.Runs.Select( r => BasisRunFields( r ) ).ToList() ) );
       return html.Append( "</details>" ).ToString();
+   }
+
+   /// <summary>
+   /// One basis run as its fields: the folder, the seed and the session when the file gives them, then the recorded conditions.
+   /// </summary>
+   /// <param name="run">The run.</param>
+   /// <returns>The fields in the order printed.</returns>
+   private static IReadOnlyList<BenchPair> BasisRunFields( BenchBasisRun run )
+   {
+      var fields = new List<BenchPair> { new( "folder", run.Folder ) };
+      if( run.Seed != null )
+      {
+         fields.Add( new BenchPair( "seed", run.Seed.Value.ToString( System.Globalization.CultureInfo.InvariantCulture ) ) );
+      }
+
+      if( run.Session != null )
+      {
+         fields.Add( new BenchPair( "session", run.Session ) );
+      }
+
+      if( run.StartedUtc != null )
+      {
+         fields.Add( new BenchPair( "startedUtc", run.StartedUtc ) );
+      }
+
+      fields.AddRange( run.Conditions );
+      return fields;
    }
 
    /// <summary>
@@ -600,8 +727,9 @@ public static class BenchConsolidatedHtml
       };
       html.Append( $"<p class=\"bench-conditions muted\">{string.Join( "; ", facts )}</p>" );
       html.Append( DriftMatrix( model, drift ) );
-      html.Append( PairList( BenchLegends.L_UNCONFIRMED, drift.UnconfirmedOrders, model ) );
-      html.Append( PairList( BenchLegends.L_CLOSE, drift.CloseToLine, model ) );
+      html.Append( PairList( BenchLegends.L_UNCONFIRMED, drift.UnconfirmedOrders, model, true ) );
+      html.Append( PairList( BenchLegends.L_CLOSE, drift.CloseToLine, model, false ) );
+      html.Append( PairList( BenchLegends.L_ON_LINE, drift.OnLinePairs, model, true ) );
    }
 
    /// <summary>
@@ -641,13 +769,16 @@ public static class BenchConsolidatedHtml
    }
 
    /// <summary>
-   /// A list of engine pairs with their metric.
+   /// A list of engine pairs with their metric, the smallest ratio when the file gives one, and the session an order held in when the file gives one.
+   /// A list of orders (the unconfirmed orders and the pairs on the line) says which engine is ahead of which, as the file's two fields (a is ahead, b is
+   /// behind) do; a list of unordered pairs (close to the line) names the two without saying one is ahead.
    /// </summary>
    /// <param name="title">Fixed label.</param>
    /// <param name="pairs">The pairs.</param>
    /// <param name="model">The file, for display names.</param>
+   /// <param name="ordered">True for a list of orders, whose first engine is ahead of the second.</param>
    /// <returns>HTML fragment; empty when there are none.</returns>
-   private static string PairList( string title, IReadOnlyList<BenchPairRef> pairs, BenchConsolidated model )
+   private static string PairList( string title, IReadOnlyList<BenchPairRef> pairs, BenchConsolidated model, bool ordered )
    {
       if( pairs.Count == 0 )
       {
@@ -658,7 +789,9 @@ public static class BenchConsolidatedHtml
       foreach( BenchPairRef pair in pairs )
       {
          string ratio = pair.MinRatioBp == null ? string.Empty : $", {BenchFormat.Enc( BenchLegends.L_MIN_RATIO )} {BenchFormat.Enc( ( pair.MinRatioBp.Value / 10000.0 ).ToString( "0.0000", System.Globalization.CultureInfo.InvariantCulture ) )}";
-         html.Append( $"<li><code>{BenchFormat.Enc( pair.Metric )}</code> {BenchFormat.Enc( DisplayOf( model, pair.A ) )} and {BenchFormat.Enc( DisplayOf( model, pair.B ) )}{ratio}</li>" );
+         string held = pair.Session == null ? string.Empty : $", {BenchFormat.Enc( BenchLegends.L_HELD_IN )} {BenchFormat.Enc( pair.Session )}";
+         string link = ordered ? BenchLegends.L_AHEAD_OF : "and";
+         html.Append( $"<li><code>{BenchFormat.Enc( pair.Metric )}</code> {BenchFormat.Enc( DisplayOf( model, pair.A ) )} {BenchFormat.Enc( link )} {BenchFormat.Enc( DisplayOf( model, pair.B ) )}{ratio}{held}</li>" );
       }
 
       return html.Append( "</ul>" ).ToString();
@@ -706,6 +839,7 @@ public static class BenchConsolidatedHtml
       html.Append( Records( string.Empty, clock.Dropped.Select( w => ( IReadOnlyList<BenchPair> )new[]
       {
          new BenchPair( "run", w.Run ), new BenchPair( "text", w.Text ),
+         new BenchPair( "engine", w.Target ?? "-" ), new BenchPair( "pass", w.Pass ?? "-" ),
          new BenchPair( "engine median MHz", w.EngineMedianMhz?.ToString( "0.###", System.Globalization.CultureInfo.InvariantCulture ) ?? "-" ),
          new BenchPair( "client median MHz", w.ClientMedianMhz?.ToString( "0.###", System.Globalization.CultureInfo.InvariantCulture ) ?? "-" ),
       } ).ToList() ) );
@@ -768,16 +902,35 @@ public static class BenchConsolidatedHtml
       html.Append( $"<h2>{BenchLegends.H_RUNS}</h2>" );
       AppendSentences( html, Take( model, placed, BenchSlots.RUNS ) );
 
-      html.Append( "<div class=\"preview\"><table class=\"bench-table\"><thead><tr><th>Session</th><th>Run</th><th class=\"n\">Seed</th><th>Started (UTC)</th></tr></thead><tbody>" );
-      foreach( BenchSession session in model.Sessions )
+      html.Append( "<div class=\"preview\"><table class=\"bench-table\" data-table=\"runs-used\"><thead><tr><th>Session</th><th>Run</th><th class=\"n\">Seed</th><th>Started (UTC)</th></tr></thead><tbody>" );
+      foreach( ( string label, string folder, long? seed, string? started ) in RunsUsed( model ) )
       {
-         foreach( BenchSessionRun run in session.Runs )
-         {
-            html.Append( $"<tr><td>{BenchFormat.Enc( session.Name )}</td><td>{RunLink( run.Folder )}</td><td class=\"n\">{BenchFormat.Enc( run.Seed?.ToString( System.Globalization.CultureInfo.InvariantCulture ) ?? "-" )}</td><td>{BenchFormat.Enc( run.StartedUtc ?? "-" )}</td></tr>" );
-         }
+         html.Append( $"<tr><td>{BenchFormat.Enc( label )}</td><td>{RunLink( folder )}</td><td class=\"n\">{BenchFormat.Enc( seed?.ToString( System.Globalization.CultureInfo.InvariantCulture ) ?? "-" )}</td><td>{BenchFormat.Enc( started ?? "-" )}</td></tr>" );
       }
 
       html.Append( "</tbody></table></div>" );
+   }
+
+   /// <summary>
+   /// Every run the set uses: the runs of the compared sessions first, each under its session's name, then each run that only feeds the threshold, labelled
+   /// with its session and "(basis)" (or "basis" when the file gives no session), with the seed and start the file gives it. A run that is both a compared
+   /// run and a basis run is listed once, under its session. Why all of them: the report says the basis runs are listed with their seeds and start times, and a
+   /// page that lists the compared runs only makes that sentence false.
+   /// </summary>
+   /// <param name="model">The file.</param>
+   /// <returns>The rows: label, folder, seed, start.</returns>
+   private static List<( string Label, string Folder, long? Seed, string? Started )> RunsUsed( BenchConsolidated model )
+   {
+      var rows = model.Sessions.SelectMany( s => s.Runs.Select( r => ( Label: s.Name, r.Folder, r.Seed, Started: r.StartedUtc ) ) ).ToList();
+      foreach( BenchBasisRun run in model.Basis?.Runs ?? new List<BenchBasisRun>() )
+      {
+         if( !rows.Any( r => r.Folder == run.Folder && ( run.Session == null || r.Label == run.Session ) ) )
+         {
+            rows.Add( ( run.Session == null ? "basis" : $"{run.Session} (basis)", run.Folder, run.Seed, run.StartedUtc ) );
+         }
+      }
+
+      return rows;
    }
 
    /// <summary>
@@ -796,6 +949,9 @@ public static class BenchConsolidatedHtml
       html.Append( $"<details class=\"bench-target\"><summary>{BenchLegends.H_AUDIT}</summary><ul>" );
       html.Append( $"<li>Sentences checked <code>{audit.SentencesChecked}</code></li>" );
       html.Append( $"<li>Facts file SHA-256 <code>{BenchFormat.Enc( audit.FactsSha256 ?? "-" )}</code></li><li>Exclusions file SHA-256 <code>{BenchFormat.Enc( audit.ExclusionsSha256 ?? "-" )}</code></li>" );
+      html.Append( audit.ObserverSha256 == null ? string.Empty : $"<li>Observer summary SHA-256 <code>{BenchFormat.Enc( audit.ObserverSha256 )}</code></li>" );
+      html.Append( audit.FactsChecked == null ? string.Empty : $"<li>Facts checked <code>{audit.FactsChecked}</code></li>" );
+      html.Append( audit.RowSentencesChecked == null ? string.Empty : $"<li>Row sentences checked <code>{audit.RowSentencesChecked}</code></li>" );
       foreach( string failure in audit.Failures )
       {
          html.Append( $"<li class=\"errors\">Failure: {BenchFormat.Enc( failure )}</li>" );
@@ -865,6 +1021,24 @@ public static class BenchConsolidatedHtml
    }
 
    /// <summary>
+   /// The fields of the file that the page neither draws nor leaves out on purpose (see <see cref="BenchConsolidatedFields"/>), listed so that anything they
+   /// say is known to be missing from the page; nothing when the page reads the file whole.
+   /// </summary>
+   /// <param name="html">Output.</param>
+   /// <param name="model">The file.</param>
+   private static void AppendUnread( StringBuilder html, BenchConsolidated model )
+   {
+      if( model.UnreadFields is not { Count: > 0 } unread )
+      {
+         return;
+      }
+
+      html.Append( $"<aside class=\"bench-caveats\" data-block=\"unread-fields\"><h2>{BenchFormat.Enc( BenchLegends.H_UNREAD )}</h2><p class=\"errors\">{BenchFormat.Enc( BenchLegends.UNREAD )}</p><ul>" );
+      html.Append( string.Concat( unread.Select( f => $"<li><code>{BenchFormat.Enc( f )}</code></li>" ) ) );
+      html.Append( "</ul></aside>" );
+   }
+
+   /// <summary>
    /// The targets whose recorded setup differs between sessions, with the differing fields.
    /// </summary>
    /// <param name="model">The file.</param>
@@ -904,7 +1078,39 @@ public static class BenchConsolidatedHtml
    /// <returns>HTML fragment.</returns>
    private static string Note( BenchRow row )
    {
-      return string.IsNullOrWhiteSpace( row.Note ) ? string.Empty : $"<br><small class=\"muted bench-note\">{BenchFormat.Enc( row.Note )}</small>";
+      if( string.IsNullOrWhiteSpace( row.Note ) )
+      {
+         return string.Empty;
+      }
+
+      return $"<br><small class=\"muted bench-note\">{BenchFormat.Enc( row.Note )}</small>{( row.NoteSourceList.Count > 0 ? SourceList( row.NoteSourceList ) : string.Empty )}";
+   }
+
+   /// <summary>
+   /// The search cell of a row: the mode the report's search fact states for the engine, and under it the label that fact carries, as written. The label
+   /// is the confidence the report gives the fact (every label of the engine's facts that state this mode, so a weaker one is never hidden behind a
+   /// stronger one); the fact's text and source are the hover text.
+   /// </summary>
+   /// <param name="row">The row.</param>
+   /// <param name="why">The facts table, or null.</param>
+   /// <returns>HTML fragment.</returns>
+   private static string SearchCell( BenchRow row, IReadOnlyList<BenchWhy>? why )
+   {
+      if( row.SearchMode == null )
+      {
+         return "-";
+      }
+
+      List<BenchFact> facts = ( why ?? Array.Empty<BenchWhy>() ).Where( w => w.Target == row.Target ).SelectMany( w => w.Facts )
+         .Where( f => f.Kind == "search" && f.Mode != null && BenchFormat.SameMode( f.Mode, row.SearchMode ) ).ToList();
+      if( facts.Count == 0 )
+      {
+         return BenchFormat.Enc( row.SearchMode );
+      }
+
+      string evidence = string.Join( "\n", facts.Select( f => $"{f.Confidence}: {f.Text} ({f.Source})" ) );
+      string labels = string.Join( ", ", facts.Select( f => f.Confidence ).Distinct( StringComparer.Ordinal ) );
+      return $"{BenchFormat.Enc( row.SearchMode )}<br><small class=\"muted bench-label\" title=\"{BenchFormat.Enc( evidence )}\">{BenchFormat.Enc( labels )}</small>";
    }
 
    /// <summary>

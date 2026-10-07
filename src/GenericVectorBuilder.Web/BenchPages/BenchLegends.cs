@@ -88,6 +88,39 @@ public static class BenchLegends
    /// <summary>Summary line of the block that holds the statements about each engine's search settings, with their sources.</summary>
    public const string H_EFFORT_STATEMENTS = "Statements behind the search effort column";
 
+   /// <summary>Heading of the column of the metric tables that holds the mode of each engine's search.</summary>
+   public const string H_SEARCH_MODE = "Search";
+
+   /// <summary>What the search column of the metric tables is, when the file has a facts table to carry the facts behind it.</summary>
+   public const string SEARCH_COLUMN = "The search column gives the mode the report's search fact states for the engine, with the label that fact carries. The facts table below lists each fact with its source.";
+
+   /// <summary>What the search column of the metric tables is, when the file has no facts table.</summary>
+   public const string SEARCH_COLUMN_BARE = "The search column gives the mode the report states for the engine's search.";
+
+   /// <summary>Column heading of the engine's CPU per search with one searcher.</summary>
+   public const string H_ENGINE_CPU_1 = "Engine CPU per search, one searcher (ms)";
+
+   /// <summary>Column heading of the engine's CPU per search with eight searchers.</summary>
+   public const string H_ENGINE_CPU_8 = "Engine CPU per search, eight searchers (ms)";
+
+   /// <summary>Column heading of the client's CPU per search with one searcher.</summary>
+   public const string H_CLIENT_CPU_1 = "Client CPU per search, one searcher (ms)";
+
+   /// <summary>Column heading of the client's CPU per search with eight searchers.</summary>
+   public const string H_CLIENT_CPU_8 = "Client CPU per search, eight searchers (ms)";
+
+   /// <summary>Column heading of the number of engine CPUs busy with eight searchers.</summary>
+   public const string H_ENGINE_CPUS_BUSY = "Engine CPUs busy, eight searchers";
+
+   /// <summary>Heading of the table of changes of recorded setup that the threshold basis does not compare across.</summary>
+   public const string H_SETUP_SPLITS = "Changes of recorded setup the threshold basis does not compare across";
+
+   /// <summary>Label before the text the earlier runs recorded, in the table of changes of recorded setup.</summary>
+   public const string L_BEFORE = "Before:";
+
+   /// <summary>Label before the text the later runs recorded, in the table of changes of recorded setup.</summary>
+   public const string L_AFTER = "After:";
+
    /// <summary>Label before the first sentence of a run's own note on its warm-up.</summary>
    public const string L_WARMUP_RECORDED = "Warm-up, as this run's notes record it:";
 
@@ -139,6 +172,9 @@ public static class BenchLegends
    /// <summary>Banner of a withdrawn folder.</summary>
    public const string BANNER_WITHDRAWN = "This set is marked withdrawn by its folder name. It is not the current result and is kept for the record.";
 
+   /// <summary>Banner of a folder named published whose file is in an older format or cannot be read: the name says more than the page does.</summary>
+   public const string BANNER_PUBLISHED_RECORD = "This folder is named published, but its file is in an older format or cannot be read. The page does not show it as a result.";
+
    /// <summary>Banner of a blocked folder.</summary>
    public const string BANNER_BLOCKED = "This set is marked blocked by its folder name. It is kept as evidence. The summary page does not use it and its numbers are not the published ones.";
 
@@ -160,6 +196,15 @@ public static class BenchLegends
    /// </summary>
    public const string STRIPPED = "Report sentences that predate the current framing and relate client CPU to the latency are left out of this copy. The unedited report is under Raw files. Count left out:";
 
+   /// <summary>Words after a report's file name, above the count of retired sentences it still holds, in the raw files list of a page that left them out of its copy.</summary>
+   public const string RAW_UNEDITED = "is kept unedited. It still holds the sentences this page leaves out of its copy. Count:";
+
+   /// <summary>First sentence above the copy of a run's report: the copy is the run's text.</summary>
+   public const string RUN_REPORT_AS_WRITTEN = "This report is printed as the run wrote it, except for any sentence a note above it says was left out.";
+
+   /// <summary>Second sentence above the copy of a run's report: what the page did not check.</summary>
+   public const string RUN_REPORT_UNCHECKED = "This page does not check the engine texts in it. The summary page's facts table gives the label of each fact it uses.";
+
    /// <summary>Banner of a run page whose report carries a clock warning that a consolidated set dropped.</summary>
    public const string DROPPED_WARNING = "dropped a clock warning recorded in this run's report. The median clock figures are listed here.";
 
@@ -177,6 +222,21 @@ public static class BenchLegends
 
    /// <summary>Title of the list of pairs near the line the claim rule draws.</summary>
    public const string L_CLOSE = "Pairs close to the line";
+
+   /// <summary>Title of the list of ordered pairs that clear the line by a hair.</summary>
+   public const string L_ON_LINE = "Ordered pairs on the line";
+
+   /// <summary>Between the two engines of an ordered pair: the first is ahead of the second.</summary>
+   public const string L_AHEAD_OF = "ahead of";
+
+   /// <summary>Before the session an unconfirmed order held in.</summary>
+   public const string L_HELD_IN = "held in";
+
+   /// <summary>Heading of the list of fields of the file the page does not read.</summary>
+   public const string H_UNREAD = "Fields this page does not read";
+
+   /// <summary>Notice above the list of fields of the file the page does not read.</summary>
+   public const string UNREAD = "The file holds these fields, and this page does not read them. Anything they say is not on this page.";
 
    /// <summary>Label before a pair's smallest ratio in the lists of pairs.</summary>
    public const string L_MIN_RATIO = "minimum ratio";
@@ -204,9 +264,9 @@ public static class BenchLegends
       ["spread"] = ( "Sp", "The runs of this engine differ from each other by more than the spread limit named in the evidence." ),
       ["p50-mean-inconsistent"] = ( "Pm", "The p50 and the mean from the one-searcher pass disagree by more than the limit named in the evidence." ),
       ["unsettled-target"] = ( "Un", "The engine did not pass its own settle check before a timed pass. The evidence names the check." ),
-      ["unsettled"] = ( "Un", "The engine did not pass its own settle check before a timed pass. The evidence names the check." ),
+      ["unsettled"] = ( "Un", "The run recorded the engine as not settled before its timed passes. The evidence names the run." ),
       ["busy-box"] = ( "Bz", "CPUs outside the benchmark were busy during the timed pass. The evidence gives the figure." ),
-      ["governor-not-performance"] = ( "Gv", "The CPU governor was not set to performance during the run." ),
+      ["governor-not-performance"] = ( "Gv", "The CPU governor was not performance during a timed pass. The evidence gives the governor." ),
       ["client-engine-share-cores"] = ( "Sh", "The test client and the engine ran on the same CPU cores." ),
       ["not-release-build"] = ( "Db", "The test client was not a Release build." ),
       ["index-not-ready-after-load"] = ( "Ix", "The engine did not report a finished index after the load or after the searches." ),
@@ -224,6 +284,7 @@ public static class BenchLegends
       ["clock-off"] = ( "Ck", "The CPU clock was off its pinned value during a timed pass." ),
       ["clock-not-read"] = ( "Cn", "The CPU clock was not read during a timed pass." ),
       ["recall-differs"] = ( "Rd", "Recall differs between runs by at least one hit." ),
+      ["throttle-rise"] = ( "Th", "The CPU's thermal throttle counters rose between the start and the end of this engine's turn in the run. The evidence gives the rise." ),
       ["setup-changed"] = ( "St", "The recorded setup of this engine differs between the sessions." ),
       ["one-session"] = ( "Os", "The recorded setup of this engine differs between the sessions, so one session is shown and the row is not ranked." ),
    };

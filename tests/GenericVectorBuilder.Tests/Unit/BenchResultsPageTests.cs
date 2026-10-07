@@ -529,7 +529,8 @@ public class BenchResultsPageTests : IDisposable
       string after = BenchResultsEndpoints.RunPageHtml( _root, RUN )!;
 
       Assert.DoesNotContain( BenchResultsV8Fixture.REDIS_NOTE, before );
-      Assert.Contains( $"<td>Redis<br><small class=\"muted bench-note\">{BenchResultsV8Fixture.REDIS_NOTE}</small></td>", after );
+      Assert.Contains( $"<td>Redis<br><small class=\"muted bench-note\">{BenchResultsV8Fixture.REDIS_NOTE}</small><details class=\"bench-sources muted\"><summary>sources</summary><ul>", after );
+      Assert.Contains( "<li>file <code>deploy/engines/redis.compose.yaml#--appendonly no</code> = --appendonly no</li>", after );
       Assert.Single( Regex.Matches( after, Regex.Escape( BenchResultsV8Fixture.REDIS_NOTE ) ) );
    }
 

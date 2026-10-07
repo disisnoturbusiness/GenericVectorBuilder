@@ -1,0 +1,21 @@
+{
+ "clickhouse": "ClickHouse 26.3.39.7 (MergeTree + vector_similarity index; image-default system logging, each log table with a TTL of 1 hour)",
+ "vespa": "Vespa 8.754.14 (tensor attribute + HNSW)",
+ "oracle": "Oracle AI Database Free 23.26 (23ai line, VECTOR FLOAT32)",
+ "elasticsearch": "Elasticsearch 9.5.3 (dense_vector)",
+ "sql": "Microsoft SQL Server 2025 (RTM-CU9) (KB5122048) - 17.0.5005.3 (X64), Enterprise Developer Edition (64-bit), in container gvb-mssql (image mcr.microsoft.com/mssql/server:2025-CU9-ubuntu-24.04@sha256:2b5b581621126574f3d1f75e78d3eebe8d05aedb59ad0cfdf9aa42cb0634d726; cpuset 2-3,6-7 from its creation; SQL Server counts 4 CPU(s) and runs 4 visible scheduler(s), affinity AUTO)",
+ "pgvector": "PostgreSQL 17 + pgvector 0.8.7",
+ "sqlitevec": "SQLite 3.53.3 + sqlite-vec 0.1.7-alpha.2.1 (vec0, embedded, in process)",
+ "qdrant": "Qdrant 1.17.0 in container gvb-qdrant (image qdrant/qdrant:v1.17.0@sha256:f1c7272cdac52b38c1a0e89313922d940ba50afd90d593a1605dbbc214e66ffb; cpuset 2-3,6-7 from its creation; 3 search thread(s))",
+ "opensearch": "OpenSearch 3.9.0 (k-NN plugin, faiss)",
+ "qdrant-hnsw": "Qdrant 1.17.0 in container gvb-qdrant (image qdrant/qdrant:v1.17.0@sha256:f1c7272cdac52b38c1a0e89313922d940ba50afd90d593a1605dbbc214e66ffb; cpuset 2-3,6-7 from its creation; 3 search thread(s))",
+ "redis": "Redis 8.10.2 (query engine, HASH + vector index)",
+ "milvus": "Milvus 2.6.25 (standalone, embedded etcd, local storage, REST API v2)",
+ "mariadb": "MariaDB 11.8.9 (InnoDB + VECTOR INDEX)",
+ "weaviate": "Weaviate 1.39.8 (single node, REST + GraphQL)",
+ "mongodb": "MongoDB 8.0.32 Atlas Local (mongod + mongot Vector Search)",
+ "chroma": "Chroma 1.4.4 (single node, REST API v2)",
+ "typesense": "Typesense 30.2 (vector search)",
+ "sql-diskann": "Microsoft SQL Server 2025 (RTM-CU9) (KB5122048) - 17.0.5005.3 (X64), Enterprise Developer Edition (64-bit), in container gvb-mssql (image mcr.microsoft.com/mssql/server:2025-CU9-ubuntu-24.04@sha256:2b5b581621126574f3d1f75e78d3eebe8d05aedb59ad0cfdf9aa42cb0634d726; cpuset 2-3,6-7 from its creation; SQL Server counts 4 CPU(s) and runs 4 visible scheduler(s), affinity AUTO)",
+ "duckdb": "DuckDB 1.5.6 + vss b833341 (HNSW, embedded, in process)"
+}

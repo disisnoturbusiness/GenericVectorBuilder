@@ -166,17 +166,20 @@ public static class BenchFolderNames
    }
 
    /// <summary>
-   /// The banner text a folder of this kind carries at the top of its page, or null when it carries none.
+   /// The banner text a folder of this kind carries at the top of its page, or null when it carries none. A folder named "published-" whose file is a
+   /// record only (an older shape, or unreadable) carries a banner too: the page draws no result from it, and a name must not say more than the page does.
    /// </summary>
    /// <param name="kind">The kind.</param>
+   /// <param name="recordOnly">True when the folder's file is a record and not a current result (see the endpoint's check).</param>
    /// <returns>One of the fixed legends, or null.</returns>
-   public static string? Banner( BenchFolderKind kind )
+   public static string? Banner( BenchFolderKind kind, bool recordOnly = false )
    {
       return kind switch
       {
          BenchFolderKind.Candidate => BenchLegends.BANNER_CANDIDATE,
          BenchFolderKind.Withdrawn => BenchLegends.BANNER_WITHDRAWN,
          BenchFolderKind.Blocked => BenchLegends.BANNER_BLOCKED,
+         BenchFolderKind.Published when recordOnly => BenchLegends.BANNER_PUBLISHED_RECORD,
          _ => null,
       };
    }

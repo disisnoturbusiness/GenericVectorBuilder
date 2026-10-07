@@ -7,7 +7,7 @@ using T = GenericVectorBuilder.Bench.Stats.ConsolidateText;
 namespace GenericVectorBuilder.Bench.Stats;
 
 /// <summary>
-/// The caveat on a search fact that says an engine walked an HNSW graph although the engine reported the segment sizes and every
+/// The caveat on a search fact that is the engine's own report (class read-back) that says an engine walked an HNSW graph although the engine reported the segment sizes and every
 /// segment is smaller than the size at which another engine in the same runs recorded that a segment gets a graph.
 /// Why: MongoDB's search fact rests on mongot's own report (executionType Approximate, "searched through the HNSW graph"). Its
 /// segments held 2, 2, 251 and 269 vectors in one run, all under the 1,043 vectors at which Elasticsearch's recorded text says a
@@ -45,7 +45,7 @@ public static class ConsolidateTextGraph
       foreach( WhyRow row in w.Report.Why.Where( r => r.Target != point.Value.Source ) )
       {
          WhyFact? search = row.Facts.FirstOrDefault( f => f.Kind == "search" );
-         if( search == null || search.Mode != "approximate" || search.Confidence != "measured" || !search.Source.Contains( "load.indexNote", StringComparison.Ordinal ) )
+         if( search == null || search.Mode != "approximate" || search.Class != TextClass.READ_BACK || !search.Source.Contains( "load.indexNote", StringComparison.Ordinal ) )
          {
             continue;
          }

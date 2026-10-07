@@ -351,7 +351,7 @@ public sealed class EngineFactsTests : IDisposable
 
             Assert.DoesNotContain( '\u2014', text );
             Assert.DoesNotContain( '\u2013', text );
-            Assert.Contains( row.GetProperty( "confidence" ).GetString(), new[] { "recorded", "measured", "documented", "set-by-code", "checked" } );
+            Assert.Contains( row.GetProperty( "confidence" ).GetString(), new[] { "recorded", "measured", "documented", "set-by-code", "checked", "recorded (engine's own report)" } );
             Assert.Contains( "#", row.GetProperty( "source" ).GetString() );
          }
       } );
@@ -799,18 +799,21 @@ public sealed class EngineFactsTests : IDisposable
       return ReportSourcesHarness.Timed( () =>
       {
          string folder = Path.Combine( ReportSourcesHarness.RepoRoot(), "design", "engine-docs" );
-         string[] files = Directory.GetFiles( folder, "*.html" );
+         string[] files = SavedPages( folder );
          Assert.NotEmpty( files );
          string sources = File.ReadAllText( Path.Combine( folder, "SOURCES.txt" ) );
          foreach( string file in files )
          {
             Assert.Contains( Path.GetFileName( file ) + "  https://", sources );
-            Assert.Matches( @"^[a-z0-9]+(-[a-z0-9]+)*-2026-10-07\.html$", Path.GetFileName( file ) );
+            Assert.Matches( @"^[a-z0-9]+(-[a-z0-9]+)*-2026-10-07\.(html|mdx|md)$", Path.GetFileName( file ) );
             string text = File.ReadAllText( file );
             Assert.DoesNotContain( '\u2014', text );
             Assert.DoesNotContain( '\u2013', text );
             Assert.DoesNotMatch( FORBIDDEN_NAMES, text );
-            Assert.Contains( "<html", text );
+            if( file.EndsWith( ".html", StringComparison.Ordinal ) )
+            {
+               Assert.Contains( "<html", text );
+            }
          }
       } );
    }
@@ -1135,7 +1138,7 @@ public sealed class EngineFactsTests : IDisposable
          string verdicts = Path.Combine( root, "design", "verdicts" );
          Dictionary<string, string> listed = File.ReadAllLines( Path.Combine( verdicts, "SHA256SUMS" ) ).Where( l => l.Length > 0 )
             .ToDictionary( l => l[66..].Trim(), l => l[..64] );
-         string[] docs = Directory.GetFiles( Path.Combine( root, "design", "engine-docs" ), "*.html" ).Select( f => "../engine-docs/" + Path.GetFileName( f ) ).ToArray();
+         string[] docs = SavedPages( Path.Combine( root, "design", "engine-docs" ) ).Select( f => "../engine-docs/" + Path.GetFileName( f ) ).ToArray();
          string[] expectedNames = new[] { "v5-verdict.txt", "v6-verdict.md", "v7-verdict.md", "../bench-inputs/questions_golden.json" }.Concat( docs ).OrderBy( k => k, StringComparer.Ordinal ).ToArray();
          Assert.Equal( expectedNames, listed.Keys.OrderBy( k => k, StringComparer.Ordinal ).ToArray() );
          foreach( KeyValuePair<string, string> entry in listed )
@@ -1178,6 +1181,10 @@ public sealed class EngineFactsTests : IDisposable
             "src/GenericVectorBuilder.Bench/Report/EngineFacts.cs", "src/GenericVectorBuilder.Bench/Report/Sentence.cs",
             "src/GenericVectorBuilder.Bench/Report/SentenceAudit.cs", "src/GenericVectorBuilder.Bench/Report/BannedWords.cs",
             "tests/GenericVectorBuilder.Engines.Tests/Bench/EngineFactsTests.cs", "tests/GenericVectorBuilder.Engines.Tests/Bench/SentenceAuditTests.cs",
+            "deploy/bench/recorded-text-classes.json", "src/GenericVectorBuilder.Bench/Report/RecordedTextClasses.cs", "src/GenericVectorBuilder.Bench/Stats/ConsolidateClasses.cs",
+            "src/GenericVectorBuilder.Bench/Stats/ConsolidateTextClauses.cs", "src/GenericVectorBuilder.Bench/Stats/ConsolidateTextEvidence.cs", "tests/GenericVectorBuilder.Engines.Tests/Bench/ConsolidateSweepTests.cs",
+            "design/engine-docs/SOURCES.txt", "design/bench-inputs/SOURCES.txt", "design/bench-inputs/tie-check-eshoponweb.py", "design/bench-inputs/tie-check-eshoponweb-2026-10-07.json",
+            "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt", "design/bench-inputs/mariadb-effort-2026-10-07/run.log", "design/bench-inputs/mariadb-effort-2026-10-07/run-effort-tests.sh",
          };
          foreach( string file in files )
          {
@@ -1349,6 +1356,16 @@ public sealed class EngineFactsTests : IDisposable
          new { target = SYNTH, kind = "storage", text = "not recorded", source = $"absent:results:targets[{SYNTH}]#in memory|in-memory", confidence = "checked" },
          new { target = SYNTH, kind = "protocol", text = "Synth.Client", source = "src/GenericVectorBuilder.Engines/Sinks/SynthSink.cs#using Synth.Client;", confidence = "set-by-code" },
       };
+   }
+
+   /// <summary>
+   /// The saved documentation pages of a folder: rendered pages (html) and the source files of pages (mdx and md); not the sources list, the durability logs or any other file.
+   /// </summary>
+   /// <param name="folder">The folder.</param>
+   /// <returns>The paths.</returns>
+   private static string[] SavedPages( string folder )
+   {
+      return Directory.GetFiles( folder ).Where( f => f.EndsWith( ".html", StringComparison.Ordinal ) || f.EndsWith( ".mdx", StringComparison.Ordinal ) || f.EndsWith( ".md", StringComparison.Ordinal ) ).ToArray();
    }
 
    /// <summary>

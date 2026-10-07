@@ -24,45 +24,50 @@ public static class ConsolidateObserver
    /// <summary>Largest summary read.</summary>
    public const long MAX_BYTES = 64L * 1024 * 1024;
 
+   /// <summary>Where the newest session's summary is copied beside the report; an older session's goes to observer/summary-NAME.json.</summary>
+   public const string NEWEST_COPY = "observer/summary.json";
+
    #endregion Data Members
 
    #region Public Methods
 
    /// <summary>
-   /// Reads the summary for the runs of the newest claim session.
+   /// Reads the summaries given: one must cover every run of the newest claim session, and one may cover every run of an older session (the observer that ran
+   /// beside v7 shows its clock and its outside load too).
    /// </summary>
-   /// <param name="path">The summary.json, or null when none was given.</param>
-   /// <param name="newest">The newest claim session.</param>
-   /// <returns>The block, or null when no path was given.</returns>
-   /// <exception cref="ConsolidateRefusal">The file is missing, too large, not JSON, of another schema, or does not cover a run.</exception>
-   public static ObserverInfo? Read( string? path, ClaimSession newest )
+   /// <param name="paths">The summary.json files, or none.</param>
+   /// <param name="sessions">The claim sessions, oldest first.</param>
+   /// <returns>The block of the newest session (null when no path was given) and the blocks of the older sessions a summary covers.</returns>
+   /// <exception cref="ConsolidateRefusal">A file is missing, too large, not JSON or of another schema; the newest session is not fully covered by one file; or an older session is covered in part.</exception>
+   public static (ObserverInfo? Newest, List<ObserverInfo> Others) Read( IReadOnlyList<string> paths, IReadOnlyList<ClaimSession> sessions )
    {
-      if( path == null )
+      if( paths.Count == 0 )
       {
-         return null;
+         return ( null, new List<ObserverInfo>() );
       }
 
-      using JsonDocument doc = Load( path );
-      JsonElement root = doc.RootElement;
-      string? schema = ResultJson.Text( root, "schema" );
-      if( schema != SCHEMA )
+      var docs = new List<JsonDocument>();
+      try
       {
-         throw new ConsolidateRefusal( $"{path} has schema '{schema ?? ConsolidateIdentity.NOT_RECORDED}', not '{SCHEMA}'" );
-      }
+         foreach( string path in paths )
+         {
+            docs.Add( Load( path ) );
+            string? schema = ResultJson.Text( docs[^1].RootElement, "schema" );
+            if( schema != SCHEMA )
+            {
+               throw new ConsolidateRefusal( $"{path} has schema '{schema ?? ConsolidateIdentity.NOT_RECORDED}', not '{SCHEMA}'" );
+            }
+         }
 
-      var info = new ObserverInfo { Path = path, Sha256 = EngineFactSheet.FileSha256( path ), Schema = schema, TimersCovered = true };
-      foreach( RunResult run in newest.Runs )
+         ObserverInfo newest = ReadSession( paths, docs, sessions[^1], required: true )!;
+         List<ObserverInfo> others = sessions.Take( sessions.Count - 1 ).Select( s => ReadSession( paths, docs, s, required: false ) ).OfType<ObserverInfo>().ToList();
+         string? unused = paths.FirstOrDefault( p => newest.Path != p && others.All( o => o.Path != p ) );
+         return unused == null ? ( newest, others ) : throw new ConsolidateRefusal( $"{unused} covers no run of any claim session" );
+      }
+      finally
       {
-         JsonElement entry = RunEntry( root, run.Name ) ?? throw new ConsolidateRefusal( $"{path} does not cover run {run.Name} of session {newest.Name}" );
-         info.Runs.Add( ReadRun( run.Name, entry ) );
+         docs.ForEach( d => d.Dispose() );
       }
-
-      info.CpuMax = info.Runs.Select( r => r.ObserverCpuMax ).Max();
-      info.AperfWorstDeviationBp = info.Runs.Select( r => r.AperfWorstDeviationBp ).Max();
-      info.Msr620ValuesSeen = info.Runs.SelectMany( r => r.Msr620ValuesSeen ).Distinct( StringComparer.Ordinal ).OrderBy( v => v, StringComparer.Ordinal ).ToList();
-      info.TimersCovered = info.Runs.All( r => r.TimersCovered == true );
-      info.PassesWithTimerFired = info.Runs.Sum( r => r.PassesWithTimerFired ?? 0 );
-      return info;
    }
 
    #endregion Public Methods
@@ -158,6 +163,44 @@ public static class ConsolidateObserver
    {
       string digits = text.StartsWith( "0x", StringComparison.OrdinalIgnoreCase ) ? text[2..] : text;
       return long.TryParse( digits, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long value ) ? "0x" + value.ToString( "x", CultureInfo.InvariantCulture ) : text;
+   }
+
+   /// <summary>
+   /// The block of one session from the one file that covers its runs.
+   /// </summary>
+   /// <param name="paths">The files.</param>
+   /// <param name="docs">The files, parsed.</param>
+   /// <param name="session">The claim session.</param>
+   /// <param name="required">True when the session must be covered.</param>
+   /// <returns>The block, or null when the session is not required and no file covers any of its runs.</returns>
+   /// <exception cref="ConsolidateRefusal">The session is required and not covered, covered by more than one file, or covered in part.</exception>
+   private static ObserverInfo? ReadSession( IReadOnlyList<string> paths, IReadOnlyList<JsonDocument> docs, ClaimSession session, bool required )
+   {
+      List<int> holders = Enumerable.Range( 0, docs.Count ).Where( d => session.Runs.Any( r => RunEntry( docs[d].RootElement, r.Name ) != null ) ).ToList();
+      if( holders.Count == 0 )
+      {
+         return required ? throw new ConsolidateRefusal( $"{string.Join( ", ", paths )} does not cover run {session.Runs[0].Name} of session {session.Name}" ) : null;
+      }
+
+      if( holders.Count > 1 )
+      {
+         throw new ConsolidateRefusal( $"the runs of session {session.Name} are covered by more than one observer summary ({string.Join( ", ", holders.Select( h => paths[h] ) )}); one file must cover them all" );
+      }
+
+      string path = paths[holders[0]];
+      var info = new ObserverInfo { Session = session.Name, Path = path, Copy = required ? NEWEST_COPY : $"observer/summary-{session.Name}.json", Sha256 = EngineFactSheet.FileSha256( path ), Schema = SCHEMA, TimersCovered = true };
+      foreach( RunResult run in session.Runs )
+      {
+         JsonElement entry = RunEntry( docs[holders[0]].RootElement, run.Name ) ?? throw new ConsolidateRefusal( $"{path} does not cover run {run.Name} of session {session.Name}" );
+         info.Runs.Add( ReadRun( run.Name, entry ) );
+      }
+
+      info.CpuMax = info.Runs.Select( r => r.ObserverCpuMax ).Max();
+      info.AperfWorstDeviationBp = info.Runs.Select( r => r.AperfWorstDeviationBp ).Max();
+      info.Msr620ValuesSeen = info.Runs.SelectMany( r => r.Msr620ValuesSeen ).Distinct( StringComparer.Ordinal ).OrderBy( v => v, StringComparer.Ordinal ).ToList();
+      info.TimersCovered = info.Runs.All( r => r.TimersCovered == true );
+      info.PassesWithTimerFired = info.Runs.Sum( r => r.PassesWithTimerFired ?? 0 );
+      return info;
    }
 
    #endregion Private Methods

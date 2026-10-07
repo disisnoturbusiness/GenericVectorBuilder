@@ -1,0 +1,14 @@
+Saved re-run of MariaDbEffortTests.Recall_AtTheDefaultEffort_IsMeasured (524 and 2,000 random 1024-dimension vectors, 50 queries), made 2026-10-07 against the
+benchmark's own container gvbbench-mariadb, 10 repeats. It replaces the clause of MariaDB's recorded index text that cites "measured 2026-10-04: 0.99 at 524,
+0.89 to 0.92 at 2,000; an earlier run gave about 0.09 at 100,000", for which no log was saved; the report does not print that clause and gives the figures of this re-run.
+The 100,000-row figure was not re-measured the same way, so the report drops it.
+
+How it was run (run-effort-tests.sh, the unit gvbbench-v8fix-maria5, a systemd unit capped at 3000 s):
+  - gvbbench-mariadb was started from deploy/engines/mariadb-bench.compose.yaml with GVB_ENGINE_CPUS=2-3,6-7 (the compose file's own cpuset), image mariadb:11.8.9, and checked
+    healthy and held to CPUs 2-3,6-7 (run.log, "bench container"). The test client ran under taskset on the client CPUs 0-1,4-5.
+  - The test is the repository's MariaDbEffortTests with one change, MariaDbEffortTests.port.diff: it connects to the benchmark container's published port 13306 (from the
+    environment variable GVB_BENCH_MARIADB_PORT) and not to the daily gvb-mariadb on 3306, which is never touched (run.log compares its id, start time, restart count and cpuset
+    before and after). Its tables are named gvb_gvbbench_mdbef* and are dropped by the test (run.log: no leftover tables).
+  - test-repeat-N.txt is the raw test output of repeat N; run.log holds the environment, the settings read from the running server (lines "SETTING name = value", read with SHOW GLOBAL VARIABLES), the RECALL lines of every repeat and the cleanup (the container is removed by docker compose down; its data folder is kept).
+What the lines show: recall@10 at ef 100 on 524 vectors and on 2,000 vectors in each repeat; the server's own mhnsw_ef_search is 20 (MariaDB's own default); the compose settings
+innodb_flush_log_at_trx_commit 2, mhnsw_max_cache_size 4G, innodb_doublewrite ON and log_bin OFF read back from the running container.

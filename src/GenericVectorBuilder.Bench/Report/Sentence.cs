@@ -881,6 +881,16 @@ public sealed class SourceResolver : ISourceResolver
    }
 
    /// <summary>
+   /// The visible text nodes of an HTML page, in order, as a quote of a saved page is matched against them.
+   /// </summary>
+   /// <param name="html">The page.</param>
+   /// <returns>The non-empty text nodes.</returns>
+   public static IReadOnlyList<string> PageNodes( string html )
+   {
+      return TextNodes( html );
+   }
+
+   /// <summary>
    /// The visible text nodes of an HTML page: scripts, styles and comments removed, tags
    /// removed, entities decoded, white space collapsed.
    /// </summary>

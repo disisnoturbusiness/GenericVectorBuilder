@@ -57,9 +57,10 @@ public static class Consolidator
       ConsolidatedReport report = Figures( input, sessions );
       using var raw = RawRuns.Load( sessions, input );
       IReadOnlyList<ResolvedFact> facts = ConsolidateAudit.ValidateFacts( input, raw.Claim, report.Targets );
-      report.Why = ConsolidateWhy.Build( sessions, report, facts );
+      report.Audit = new AuditInfo { FactsSha256 = input.FactsSha256, ExclusionsSha256 = input.ExclusionsSha256, ObserverSha256 = report.Observer?.Sha256, ObserverSha256Others = report.ObserverOthers.ToDictionary( o => o.Session, o => o.Sha256, StringComparer.Ordinal ), ClassesSha256 = input.ClassesSha256, FactsChecked = facts.Count };
+      ConsolidateClasses.Validate( input, sessions, raw.Claim, report );
+      report.Why = ConsolidateWhy.Build( sessions, report, facts, input );
       ConsolidateWhy.MarkSearchModes( report );
-      report.Audit = new AuditInfo { FactsSha256 = input.FactsSha256, ExclusionsSha256 = input.ExclusionsSha256, ObserverSha256 = report.Observer?.Sha256, FactsChecked = facts.Count };
       List<Sentence> sentences = ConsolidateText.Write( report, sessions, input );
       ConsolidateAudit.CheckSentences( report, sentences, raw, input.RepoRoot );
       return report;
@@ -97,7 +98,7 @@ public static class Consolidator
       report.Images = Images( sessions, targets );
       report.EngineSettings = Settings( sessions, targets );
       report.SearchSettings = ConsolidateSettings.Build( sessions, targets );
-      report.Observer = ConsolidateObserver.Read( input.ObserverPath, sessions[^1] );
+      ( report.Observer, report.ObserverOthers ) = ConsolidateObserver.Read( input.ObserverPaths, sessions );
       report.Queries = Queries( claimRuns, input.RepoRoot );
       Counts( report, sessions );
       Status( report );

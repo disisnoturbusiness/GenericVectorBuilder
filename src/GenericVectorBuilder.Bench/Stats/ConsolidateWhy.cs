@@ -35,23 +35,16 @@ public static class ConsolidateWhy
    /// <param name="sessions">Claim sessions.</param>
    /// <param name="report">The report, tables filled.</param>
    /// <param name="facts">The fact rows that resolved, from the validation.</param>
+   /// <param name="input">The input, whose classes list says how each recorded clause a fact rests on is backed.</param>
    /// <returns>One row per target, in p50 table order.</returns>
    /// <exception cref="ConsolidateRefusal">A target has no search fact, or its search fact contradicts the recorded index state.</exception>
-   public static List<WhyRow> Build( IReadOnlyList<ClaimSession> sessions, ConsolidatedReport report, IReadOnlyList<ResolvedFact> facts )
+   public static List<WhyRow> Build( IReadOnlyList<ClaimSession> sessions, ConsolidatedReport report, IReadOnlyList<ResolvedFact> facts, ConsolidateInput input )
    {
       List<string> order = report.Metrics.First( m => m.Metric == ClaimMetrics.P50 ).Rows.Select( r => r.Target ).ToList();
       var rows = new List<WhyRow>();
       foreach( string target in order )
       {
-         List<WhyFact> mine = facts.Where( f => f.Row.Target == target ).Select( f => new WhyFact
-         {
-            Kind = f.Row.Kind,
-            Text = f.Row.Text,
-            Source = f.Row.Source,
-            Confidence = f.Row.Confidence,
-            Mode = f.Row.Mode,
-            Where = f.Where,
-         } ).ToList();
+         List<WhyFact> mine = facts.Where( f => f.Row.Target == target ).Select( f => Fact( f, input, sessions[^1].Runs[0] ) ).ToList();
          CheckSearchMode( target, mine, sessions );
          rows.Add( new WhyRow { Target = target, Facts = mine, Costs = Costs( target, sessions[^1] ) } );
       }
@@ -70,7 +63,9 @@ public static class ConsolidateWhy
       {
          foreach( MetricRow row in table.Rows )
          {
-            row.SearchMode = report.Why.FirstOrDefault( w => w.Target == row.Target )?.Facts.FirstOrDefault( f => f.Kind == "search" )?.Mode;
+            WhyFact? search = report.Why.FirstOrDefault( w => w.Target == row.Target )?.Facts.FirstOrDefault( f => f.Kind == "search" );
+            row.SearchMode = search?.Mode;
+            row.SearchConfidence = search?.Confidence;
          }
       }
    }
@@ -78,6 +73,19 @@ public static class ConsolidateWhy
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// One fact of the why table with its class and the label that says how it is backed.
+   /// </summary>
+   /// <param name="f">The resolved fact row.</param>
+   /// <param name="input">The input.</param>
+   /// <param name="run">A claim run, whose recorded texts hold the fact's token.</param>
+   /// <returns>The fact.</returns>
+   private static WhyFact Fact( ResolvedFact f, ConsolidateInput input, RunResult run )
+   {
+      ( string cls, string label ) = ConsolidateClasses.Classify( input.Classes, f.Row.Confidence, f.Row.Source, run );
+      return new WhyFact { Kind = f.Row.Kind, Text = f.Row.Text, Source = f.Row.Source, Confidence = label, Class = cls, Mode = f.Row.Mode, Where = f.Where };
+   }
 
    /// <summary>
    /// Refuses a search fact that says approximate for a target whose recorded index held nothing.

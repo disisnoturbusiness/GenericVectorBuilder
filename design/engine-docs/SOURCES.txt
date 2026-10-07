@@ -6,3 +6,14 @@ The folder durability-logs-2026-10-04 holds saved strace logs, not pages: it lis
 
 redis-faq-2026-10-07.html  https://redis.io/docs/latest/develop/get-started/faq/  HTTP 200, 132767 bytes
   quoted by engine-facts.json (redis, storage): "Redis is an in-memory but persistent on disk database"
+
+weaviate-vector-index-reference-2026-10-07.mdx  https://raw.githubusercontent.com/weaviate/docs/611f2e3999e6d1ce637bd873bd1166154e716597/docs/weaviate/config-refs/indexing/vector-index.mdx  HTTP 200, 35120 bytes
+weaviate-vector-index-concepts-2026-10-07.md  https://raw.githubusercontent.com/weaviate/docs/611f2e3999e6d1ce637bd873bd1166154e716597/docs/weaviate/concepts/indexing/vector-index.md  HTTP 200, 29490 bytes
+  These two are the source files, in Weaviate's documentation repository (github.com/weaviate/docs), of the pages docs.weaviate.io/weaviate/config-refs/indexing/vector-index and
+  docs.weaviate.io/weaviate/concepts/indexing/vector-index, at commit 611f2e3999e6 of 2026-09-19 ("Core docs: ... corrected against v1.39"), the last commit of the reference page before the
+  v1.40 bump of 2026-10-07; the benchmark ran Weaviate 1.39.8. They are saved as source files and not as the rendered pages because the rendered page carries a site banner with an
+  em dash, which the house rule keeps out of this repository, and the files are what the pages are built from. Fetched with the same curl command as the pages above.
+  The reference page's table rows: dynamicEfMin 100 ("Lower bound for dynamic ef"), dynamicEfMax 500 ("Upper bound for dynamic ef"), dynamicEfFactor 8 ("Multiplier for dynamic ef").
+  The concepts page: "The dynamic list size will be set as the query limit multiplied by `dynamicEfFactor`, modified by a minimum of `dynamicEfMin` and a maximum of `dynamicEfMax`."
+  recorded-text-classes.json (deploy/bench) classes the clause "(dynamic: limit x 8 clamped 100..500)" of Weaviate's recorded index text as documented here and not read back from the
+  engine: the sink sends only ef = -1 (WeaviateSink.cs) and no run read vectorIndexConfig back. Loading the list checks each of the three rows against the reference file.

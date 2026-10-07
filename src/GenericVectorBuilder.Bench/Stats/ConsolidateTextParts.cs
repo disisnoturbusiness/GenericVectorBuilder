@@ -193,6 +193,7 @@ public static class ConsolidateTextParts
    /// <param name="w">The writer.</param>
    public static void Clock( Writer w )
    {
+      var stated = new HashSet<string>( StringComparer.Ordinal );
       foreach( (string name, SessionClock c) in w.Report.Clock.PerSession )
       {
          string at = $"clock.perSession.{name}";
@@ -207,6 +208,7 @@ public static class ConsolidateTextParts
             w.Add( $"disclosure.clock.held.{name}", T.Fill( T.CLOCK_NOT_HELD, name ) );
          }
 
+         ClockRule( w, name, c, stated );
          w.Add( $"disclosure.clock.checked.{name}", T.Fill( T.CLOCK_CHECKED, name, S.Whole( c.ClockOffPasses ), S.Whole( c.PassesEvaluated ), S.Whole( c.ClockUnreadPasses ) ),
             S.Consolidated( at + ".clockOffPasses", S.Whole( c.ClockOffPasses ) ), S.Consolidated( at + ".passesEvaluated", S.Whole( c.PassesEvaluated ) ),
             S.Consolidated( at + ".clockUnreadPasses", S.Whole( c.ClockUnreadPasses ) ) );
@@ -226,11 +228,12 @@ public static class ConsolidateTextParts
    {
       RunResult first = w.Newest.Runs[0];
       w.Add( "method.intro", T.Fill( T.METHOD, first.Name ), w.RunSource( first.Name ) );
+      var clauses = new ClauseWriter( w, "method" );
       for( int i = 0; i < first.Notes.Count; i++ )
       {
          if( !first.Notes[i].StartsWith( "WARNING", StringComparison.Ordinal ) )
          {
-            w.Add( $"method.{i}", first.Notes[i], S.Quote( first.Name, $"notes[{i}]", first.Notes[i] ) );
+            clauses.Add( first.Name, $"notes[{i}]", w.Input.Classes.Split( string.Empty, RecordedTextClasses.NOTES_FIELD, first.Notes[i] ) );
          }
       }
 
@@ -599,6 +602,30 @@ public static class ConsolidateTextParts
       w.Add( slot, T.Fill( template, low, values[0].Target, high, values[^1].Target ),
          S.Consolidated( $"why[target={values[0].Target}].costs.{field}.1", low ), S.Consolidated( $"why[target={values[^1].Target}].costs.{field}.1", high ) );
       return true;
+   }
+
+   /// <summary>
+   /// The sentence that defines the median rule, written the first time a session's clock check uses it and again only when a later session's tolerance, pinned clock or CPU grouping differs.
+   /// Why here: "by the median rule" in the next sentence is meaningless to a reader unless the rule is stated first, with the tolerance and the clock it is held against.
+   /// </summary>
+   /// <param name="w">The writer.</param>
+   /// <param name="name">The session.</param>
+   /// <param name="c">Its clock.</param>
+   /// <param name="stated">The rules already stated, by their key.</param>
+   private static void ClockRule( Writer w, string name, SessionClock c, HashSet<string> stated )
+   {
+      RunConditions conditions = w.Sessions.First( s => s.Name == name ).Runs[0].Conditions;
+      bool split = CpuSet.TryParse( conditions.EngineCpus ) != null && CpuSet.TryParse( conditions.ClientCpus ) != null;
+      if( c.ToleranceBp == null || c.PinnedMhz == null || !stated.Add( $"{c.ToleranceBp}|{c.PinnedMhz}|{split}" ) )
+      {
+         return;
+      }
+
+      string at = $"clock.perSession.{name}";
+      string tolerance = S.Percent( c.ToleranceBp.Value );
+      string pinned = S.Whole( c.PinnedMhz.Value );
+      w.Add( $"disclosure.clock.rule.{name}", T.Fill( split ? T.CLOCK_RULE : T.CLOCK_RULE_ALL, tolerance, pinned ),
+         S.Consolidated( at + ".toleranceBp", tolerance, "bp-pct" ), S.Consolidated( at + ".pinnedMhz", pinned ) );
    }
 
    /// <summary>

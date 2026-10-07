@@ -1,0 +1,1927 @@
+{
+ "startedUtc": "2026-10-06T13:06:19Z",
+ "command": "run-all",
+ "commandLine": "/home/dan/gvb-work/lanes/v7-final/src/GenericVectorBuilder.Bench/bin/Release/net10.0/GenericVectorBuilder.Bench.dll run-all --pipeline eshoponweb --queries golden --seed 701 --out /home/dan/ForClaude/GenericVectorBuilder/bench-results",
+ "machine": {
+  "host": "linus7795",
+  "cpu": "Intel(R) Xeon(R) CPU E5-1620 v3 @ 3.50GHz",
+  "logicalCpus": 8,
+  "ramGiB": 62.7,
+  "gpu": "NVIDIA GeForce RTX 3060, 12288 MiB",
+  "os": "Ubuntu 24.04.5 LTS, kernel 6.8.0-142-generic",
+  "dotNet": ".NET 10.0.12",
+  "loadAverage": "0.81 0.48 0.28"
+ },
+ "pipeline": "eshoponweb",
+ "collection": "gvbbench_eshoponweb",
+ "rows": 524,
+ "dimension": 1024,
+ "source": "Read READ-ONLY from GenericVectorBuilder.dbo.gvb_eshoponweb in ChunkId order, vectors as native SqlVector<float>, 0.2 s.",
+ "queries": "golden: 20 labelled questions from /home/dan/ForClaude/evalkit/questions_golden.json, embedded with qwen3-emb-0.6b (cached in /home/dan/gvb-data/bench-cache/golden-eshoponweb-68df42ca69efa079.json, no embedding calls)",
+ "queryCount": 20,
+ "top": 10,
+ "concurrency": [
+  1,
+  8
+ ],
+ "secondsPerLevel": 20,
+ "truthSeconds": 0.0239995,
+ "truthNdcg": 0.5181699774768911,
+ "runSeed": 701,
+ "targetOrder": [
+  "elasticsearch",
+  "redis",
+  "mongodb"
+ ],
+ "notes": [
+  "Order: targets ran one at a time in a random order from seed 701 (runSeed; --seed 701 repeats it, targetOrder lists it). Inside each target the timed passes also ran in a random order from the same seed and the target's name (passOrder): default@1 is one searcher for 20 s (every search's latency gives p50/p95/p99, the completed searches give QPS@1, its first answer to each query gives recall and nDCG), default@N is N searchers for 20 s (QPS@N), exact is the engine's exact mode, one searcher for 60 s cycling the queries.",
+  "Preparation, untimed, before any timed pass: a rehearsal of every pass type at its own concurrency for 30 s each, through the same code the passes use.",
+  "Warm-up and settle check, untimed, right before every timed pass: the pass's own search at the pass's own number of searchers for at least 15 s and at least 20 searches (at most 120 s), read in windows of at least 2 s and 100 searches; then a 3 s trial of the same pass. The trial's figure (p50 with one searcher, QPS with several) must lie within 10% of the warm-up's settled figure (the median of its last 3 windows, which must agree within 5%); if not, the warm-up is extended once (at least 30 s, until its windows agree, at most 120 s), where an extension's windows agree when its level test passes: the older and the newer half of its latest windows, 5 to 10 windows a half, each half read as the pass reads it (the p50 of all its searches with one searcher, its searches per second with several), agree within 5%, judged on the windows that stopped it (an extension whose cap runs out with fewer than 10 windows is judged by its last 3 instead); then a second trial is taken, which must lie inside the range of the newer half's windows or within 10% of the newer half's figure, and the warm-up runs again before the pass. After the pass its own figure is held against the settled figure, within 10%. In the level test, the second trial and the hold, two one-searcher p50s no more than 0.1 ms apart agree whatever their percentage (below what this box resolves at one searcher). Each target's notes give every check, and a pass that still disagrees, or whose own figure did not hold, flags its target as unsettled. With machine control on, the check for a quiet box is made when the warm-up is announced, before it starts (a wait between the warm-up and the timed pass let the engine go cold), so by the time the clock opens that check is as old as the warm-up and the trial (about 18 s, more after an extension); each pass's conditions record that lead (quietCheckLeadSeconds). Failed untimed searches are counted per target (warmupErrors) and are not in the timed error counts.",
+  "Load rows/s counts only time inside each target's upsert calls: one writer, batches of 1000, rows already in memory, the collection dropped and created fresh first. Engines that build or finish their index after the writes do it in a separate timed index step (the load's index seconds), and the run waits for it before searching.",
+  "Index proof: each engine's own report of its index (indexState) is read after the load and again after the last pass. A target whose index was not ready after the load was still measured and carries a WARNING; an engine that reports nothing counts as not ready.",
+  "Search settings: each searched target records the settings its own index description states (searchSettings: the build parameters and the effort per query, such as m, ef_construction and ef_search), read after the load; consolidating never averages runs whose settings differ.",
+  "Durability: each target's crash-safety setting as configured here (durability). Engines that do not force writes to disk on every commit load faster for that reason.",
+  "Latency is client-side wall time around each search (network and driver included), every search of the default@1 window, one searcher, the queries cycled; a window with fewer than 200 searches, a p50 above 1.25 x its mean, or a mean above its p99 is flagged.",
+  "QPS: N searchers back to back for 20 s per level; completed searches divided by the window's elapsed time.",
+  "Recall@10: share of the exact top 10 (brute force in memory) that the engine returned. A hit whose exact similarity ties the 10th best (within 1e-5) also counts, because duplicate rows embed to identical vectors.",
+  "Routes: a container engine (the benchmark's own SQL Server and Qdrant containers included) is reached at its container's own address on its Docker network, never through the published 127.0.0.1 port (docker-proxy); the native comparison targets (sql-native, qdrant-native) are native services reached directly over loopback. Each target's addresses and the connections the client held open after its passes are in its notes and in conditions.connections.",
+  "RAM of compose engines, the benchmark's own SQL Server and Qdrant containers (sql, sql-diskann, qdrant, qdrant-hnsw) included, is docker stats of the engine's containers; for the native comparison targets (sql-native, qdrant-native) it is the whole native process, including every other database or collection it serves. Disk is the table's reserved pages (SQL), the collection folder (Qdrant), or for other engines what the load added to the engine's data folder (engines that keep data in memory until a snapshot show almost nothing).",
+  "Engines: run-all starts an engine that is down and stops it afterwards only if it was not running when the run began; an engine that was already running is left running.",
+  "WARNING: the engine did not report a ready index after the load for: elasticsearch. They were measured anyway; their numbers may come from a scan or a half-built index (see each target's index state).",
+  "Machine control on: governor performance on every CPU during the run (before: schedutil; at the end: performance; after putting it back: schedutil). CPU clock pinned for the run: turbo off (intel_pstate/no_turbo 0 -> 1), so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs; the uncore (L3 and memory) clock is held at 3000 MHz (min 3000 MHz, max 3000 MHz (MSR 0x620 = 0x1e1e); was min 1200 MHz, max 3000 MHz (MSR 0x620 = 0xc1e)) (before: turbo on (intel_pstate/no_turbo 0), ceiling 3600 MHz on CPUs 0-7, floor 1200 MHz on CPUs 0-7; while pinned: turbo off (intel_pstate/no_turbo 1), ceiling 3500 MHz on CPUs 0-7, floor 1200 MHz on CPUs 0-7; at the end: turbo off (intel_pstate/no_turbo 1), ceiling 3500 MHz on CPUs 0-7, floor 1200 MHz on CPUs 0-7; after putting it back: turbo on (intel_pstate/no_turbo 0), ceiling 3600 MHz on CPUs 0-7, floor 1200 MHz on CPUs 0-7). Uncore limit at the end: min 3000 MHz, max 3000 MHz (MSR 0x620 = 0x1e1e); after putting it back: min 1200 MHz, max 3000 MHz (MSR 0x620 = 0xc1e). Each target's clock note gives every pass's average MHz on the engine CPUs and on the client CPUs; a pass whose average on either is more than 1% off the pinned 3500 MHz is flagged. Figures from runs made with turbo on are not comparable with these in absolute terms. engine CPUs 2-3,6-7 (cores 2,6 and 3,7), client CPUs 0-1,4-5 (cores 0,4 and 1,5); the client process was pinned; each engine was pinned to the engine CPUs for its turn and put back after (conditions.engines); an engine run-all started (and stopped) was asked to be created on them, and its notes say whether the host did so or it was moved there after the start. Busy box: right before each pass's warm-up the run waits, up to 10 min, while processes outside the benchmark (everything but this client and the engine under test's cgroups) use more than 0.3 CPUs on average over the last 60 s or the last 5 s, neither window reaching back past the start of the target or of its engine (so the engine's own start-up is not outside work); if the box does not clear the pass runs anyway, flagged 'busy box', as is a pass whose own outside load is above the limit. Outside load counts busy = user + nice + system + irq + softirq + steal (guest time is already in user); CONFIG_IRQ_TIME_ACCOUNTING is not set, so task and cgroup run time include the interrupt and softirq time that hit them and it is added; CONFIG_PARAVIRT_TIME_ACCOUNTING is not set, so steal is added (/boot/config-6.8.0-142-generic) (conditions.cpuAccounting); each pass also records this client's own CPU time per search (conditions.passes[].clientCpuMsPerSearch). CPU clocks were sampled every 250 ms; each pass's min/median/max per CPU is in conditions.passes. CPU idle states, recorded and left as found: driver intel_idle, governor menu, intel_idle max_cstate 9; POLL on, C1 on, C1E on, C3 OFF on CPUs 0-7 (default disabled), C6 on (conditions.cpuIdle). How each target was reached: conditions.connections. Client build Release, .NET 10.0.12.",
+  "sqlitevec is embedded: it ran inside the client process on the client CPUs 0-1,4-5, sharing them with the client.",
+  "duckdb is embedded: it ran inside the client process on the client CPUs 0-1,4-5, sharing them with the client.",
+  "WARNING: busy box during mongodb exact: processes outside the benchmark used 0.31 CPUs on average during the pass, above the limit of 0.3.",
+  "WARNING: clock off its pinned value during oracle default@8: the engine CPUs averaged 3121 MHz, -10.8% against the pinned 3500 MHz; the client CPUs averaged 3141 MHz, -10.3% against the pinned 3500 MHz (limit 1%); this pass is not comparable with passes at the pinned clock."
+ ],
+ "targets": [
+  {
+   "name": "elasticsearch",
+   "engine": "Elasticsearch 9.5.3 (dense_vector)",
+   "index": "HNSW float32, no quantization, m=16, ef_construction=128, cosine; search k=top, num_candidates=100; 1 shard, 0 replicas; force-merged to one segment after the load (at 1,024 dimensions a segment under 1,043 vectors gets no graph)",
+   "hosting": "compose",
+   "searchSettings": {
+    "ef_construction": "128",
+    "k": "top",
+    "m": "16",
+    "num_candidates": "100"
+   },
+   "load": {
+    "rows": 524,
+    "batch": 1000,
+    "upsertSeconds": 1.1601699,
+    "rowsPerSecond": 451.6579856105558,
+    "countMatchSeconds": 0.1161943,
+    "indexSeconds": 0.3904655,
+    "indexNote": "FAILED after 0.4 s: NO HNSW GRAPH, searches scan all 524 vectors: 1 segment(s), 524 vectors, total_vex_size_bytes 0 (_stats dense_vector), index_options hnsw m=16 ef_construction=128; Lucene builds no graph for a segment this small (measured at 1,024 dimensions: 1,042 vectors none, 1,043 vectors a graph), so default search equals exact search"
+   },
+   "search": {
+    "countInTarget": 524,
+    "latencySamples": 14790,
+    "p50Ms": 1.3287,
+    "p95Ms": 1.5088549999999998,
+    "p99Ms": 1.775022,
+    "qps": {
+     "8": 2671.293756146442,
+     "1": 739.4510557346209
+    },
+    "recall": 1,
+    "ndcg": 0.5181699774768911,
+    "errors": 0,
+    "exactQueries": 46096,
+    "exactP50Ms": 1.2776,
+    "exactP95Ms": 1.479825,
+    "exactRecall": 1,
+    "clientCpuMsPerSearch": {
+     "8": 0.4968,
+     "1": 0.4632
+    }
+   },
+   "ram": {
+    "bytes": 2878701830,
+    "text": "2.68 GiB (docker stats)"
+   },
+   "disk": {
+    "bytes": 2502299,
+    "text": "2.39 MiB added by this load (2.56 MiB (whole engine data folder), 172.81 KiB before)"
+   },
+   "passOrder": [
+    "exact",
+    "default@8",
+    "default@1"
+   ],
+   "warmupErrors": 0,
+   "indexState": {
+    "afterLoad": {
+     "ready": false,
+     "indexedVectors": 0,
+     "totalVectors": 524,
+     "detail": "NO HNSW GRAPH, searches scan all 524 vectors: 1 segment(s), 524 vectors, total_vex_size_bytes 0 (_stats dense_vector), index_options hnsw m=16 ef_construction=128; Lucene builds no graph for a segment this small (measured at 1,024 dimensions: 1,042 vectors none, 1,043 vectors a graph), so default search equals exact search"
+    },
+    "afterSearch": {
+     "ready": false,
+     "indexedVectors": 0,
+     "totalVectors": 524,
+     "detail": "NO HNSW GRAPH, searches scan all 524 vectors: 1 segment(s), 524 vectors, total_vex_size_bytes 0 (_stats dense_vector), index_options hnsw m=16 ef_construction=128; Lucene builds no graph for a segment this small (measured at 1,024 dimensions: 1,042 vectors none, 1,043 vectors a graph), so default search equals exact search"
+    }
+   },
+   "durability": "Every acknowledged bulk request is fsynced to the translog before the answer: index.translog.durability=request, the Elasticsearch default, which neither this sink nor elasticsearch.compose.yaml overrides (ElasticsearchReadinessTests reads it back from the live index). By that setting a process crash or power loss loses no acknowledged write; this is read from the setting, not shown by pulling power. One node and no replicas, so a lost disk loses the data.",
+   "notes": [
+    "Started by run-all for this measurement with every container created on CPUs 2-3,6-7 (started elasticsearch.compose.yaml with every container created on CPUs 2-3,6-7: gvb-elasticsearch cpuset 2-3,6-7 (read back from docker inspect)); stopped afterwards.",
+    "Engine files (SHA-256, first 12 hex digits): [elasticsearch.compose.yaml 582b9a97b8de]. This run created the engine from these files.",
+    "WARNING: the index step after the load FAILED (NO HNSW GRAPH, searches scan all 524 vectors: 1 segment(s), 524 vectors, total_vex_size_bytes 0 (_stats dense_vector), index_options hnsw m=16 ef_construction=128; Lucene builds no graph for a segment this small (measured at 1,024 dimensions: 1,042 vectors none, 1,043 vectors a graph), so default search equals exact search). Searched anyway; see the index state.",
+    "WARNING: index not ready after the load: NOT ready, 0 of 524 indexed (NO HNSW GRAPH, searches scan all 524 vectors: 1 segment(s), 524 vectors, total_vex_size_bytes 0 (_stats dense_vector), index_options hnsw m=16 ef_construction=128; Lucene builds no graph for a segment this small (measured at 1,024 dimensions: 1,042 vectors none, 1,043 vectors a graph), so default search equals exact search). Measured anyway, so its search numbers may come from a scan or a half-built index. Durability: Every acknowledged bulk request is fsynced to the translog before the answer: index.translog.durability=request, the Elasticsearch default, which neither this sink nor elasticsearch.compose.yaml overrides (ElasticsearchReadinessTests reads it back from the live index). By that setting a process crash or power loss loses no acknowledged write; this is read from the setting, not shown by pulling power. One node and no replicas, so a lost disk loses the data..",
+    "Outside load when searching began: 0.19 CPUs on average over the last 2 s and 0.19 over the last few seconds (limit 0.3), a quiet box. The load average 2.32 4.36 3.61 (1/5/15 min; it also counts this benchmark's own client and engines, so it is recorded, not judged).",
+    "Rehearsal before any timed pass, untimed, every pass type at its own concurrency for at least 30 s through the same code the timed passes use: exact 14,440 searches in 30.0 s, default@8 63,152 searches in 30.0 s, default@1 22,164 searches in 30.0 s.",
+    "Settle: settled before every timed pass, each by its own warm-up at its own concurrency and a trial of the same pass within 10% of the warm-up's settled figure, and the timed pass itself within 10% of it. exact: warm-up 15.0 s and 11,249 searches (0 failed) at 1 searcher; p50 of the last windows 1.281, 1.282, 1.277 ms (windows of at least 2 s and 100 searches); trial of 2,298 searches in 3.0 s at 1 searcher: p50 1.281 ms against the settled p50 1.281 ms, 0% apart (limit 10%); the timed pass p50 1.278 ms, 0% from the settled p50 1.281 ms (limit 10% or 0.1 ms; 0.003 ms); default@8: warm-up 15.0 s and 39,834 searches (0 failed) at 8 searchers; QPS of the last windows 2,676, 2,636, 2,696 (windows of at least 2 s and 100 searches); trial of 7,942 searches in 3.0 s at 8 searchers: 2,646 QPS against the settled 2,676 QPS, 1% apart (limit 10%); the timed pass 2,671 QPS, 0% from the settled 2,676 QPS (limit 10%); default@1: warm-up 15.0 s and 11,065 searches (0 failed) at 1 searcher; p50 of the last windows 1.326, 1.329, 1.330 ms (windows of at least 2 s and 100 searches); trial of 2,200 searches in 3.0 s at 1 searcher: p50 1.335 ms against the settled p50 1.329 ms, 0% apart (limit 10%); the timed pass p50 1.329 ms, 0% from the settled p50 1.329 ms (limit 10% or 0.1 ms; 0.001 ms).",
+    "Pass exact after rehearsal: 2026-10-06T13:25:15.144Z to 2026-10-06T13:26:15.144Z (60.0 s), 46,096 searches, 0 failed, p50 1.278 ms, mean 1.300 ms, p99 1.715 ms, 768.3 QPS (1000/QPS 1.302 ms).",
+    "Pass default@8 after exact: 2026-10-06T13:26:33.198Z to 2026-10-06T13:26:53.200Z (20.0 s), 53,431 searches, 0 failed, p50 2.865 ms, mean 2.992 ms, p99 5.422 ms, 2671.3 QPS (1000/QPS 0.374 ms).",
+    "Pass default@1 after default@8: 2026-10-06T13:27:11.230Z to 2026-10-06T13:27:31.232Z (20.0 s), 14,790 searches, 0 failed, p50 1.329 ms, mean 1.350 ms, p99 1.775 ms, 739.5 QPS (1000/QPS 1.352 ms).",
+    "Passes in the order run: exact, default@8, default@1; each after its own warm-up. Untimed searches (rehearsals, per-pass warm-ups, settle checks and extensions): 174,344 sent, 0 failed (warmupErrors). Index after the searches: NOT ready, 0 of 524 indexed (NO HNSW GRAPH, searches scan all 524 vectors: 1 segment(s), 524 vectors, total_vex_size_bytes 0 (_stats dense_vector), index_options hnsw m=16 ef_construction=128; Lucene builds no graph for a segment this small (measured at 1,024 dimensions: 1,042 vectors none, 1,043 vectors a graph), so default search equals exact search).",
+    "Benchmark copy gvbbench_eshoponweb dropped afterwards.",
+    "Connection: container address on its Docker network, not the published port (no docker-proxy): container gvb-elasticsearch (f2716e40a93c) on network engines_default at 172.20.0.2:9200, not through docker-proxy 127.0.0.1:9200. Open after the passes: 172.20.0.2:9200 x8 (this target).",
+    "CPU pinning: cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which), CPUs 2-3,6-7. Changed: container gvb-elasticsearch: already on CPUs 2-3,6-7 (its cpuset since creation), not changed. Read back: container gvb-elasticsearch: 75 thread(s) on CPUs 2-3,6-7 (every thread of the container).",
+    "Clock per pass (median MHz of engine CPUs / client CPUs, their average MHz, governor, CPUs busy outside the benchmark, client CPU per search; the clock was pinned at 3500 MHz (turbo off), and a pass whose average on either group is more than 1% off it is flagged): exact 3492/3492 MHz, average 3491.9/3491.6, performance, outside load 0.22 before the warm-up, 0.22 during, client CPU 0.461 ms per search; default@8 3492/3492 MHz, average 3492.0/3492.1, performance, outside load 0.22 before the warm-up, 0.24 during, client CPU 0.497 ms per search; default@1 3492/3492 MHz, average 3492.0/3492.3, performance, outside load 0.24 before the warm-up, 0.21 during, client CPU 0.463 ms per search."
+   ]
+  },
+  {
+   "name": "redis",
+   "engine": "Redis 8.10.2 (query engine, HASH + vector index)",
+   "index": "HNSW TYPE FLOAT32 M=16 EF_CONSTRUCTION=128, EF_RUNTIME=100 per query, cosine; exact mode = FLAT index built on first exact query",
+   "hosting": "compose",
+   "searchSettings": {
+    "EF_CONSTRUCTION": "128",
+    "EF_RUNTIME": "100",
+    "M": "16"
+   },
+   "load": {
+    "rows": 524,
+    "batch": 1000,
+    "upsertSeconds": 0.0422411,
+    "rowsPerSecond": 12404.979983949283,
+    "countMatchSeconds": 1.021156,
+    "indexSeconds": 0.0240399,
+    "indexNote": "HNSW index finished after 0.0 s of waiting: FT.INFO indexing 0, percent_indexed 1, hash_indexing_failures 0, flat_buffer_size 0, num_docs 524, hashes counted with SCAN under gvb_gvbbench_eshoponweb: 524"
+   },
+   "search": {
+    "countInTarget": 524,
+    "latencySamples": 50539,
+    "p50Ms": 0.3978,
+    "p95Ms": 0.48900999999999983,
+    "p99Ms": 0.7173620000000003,
+    "qps": {
+     "8": 5120.058543295747,
+     "1": 2526.9181229278793
+    },
+    "recall": 1,
+    "ndcg": 0.5181699774768911,
+    "errors": 0,
+    "exactQueries": 159894,
+    "exactP50Ms": 0.3781,
+    "exactP95Ms": 0.469,
+    "exactRecall": 1,
+    "clientCpuMsPerSearch": {
+     "8": 0.364,
+     "1": 0.5687
+    }
+   },
+   "ram": {
+    "bytes": 266548019,
+    "text": "254.2 MiB (docker stats)"
+   },
+   "disk": {
+    "bytes": 0,
+    "text": "0 B added by this load (94.22 MiB (whole engine data folder), 94.22 MiB before)"
+   },
+   "passOrder": [
+    "default@8",
+    "default@1",
+    "exact"
+   ],
+   "warmupErrors": 0,
+   "indexState": {
+    "afterLoad": {
+     "ready": true,
+     "indexedVectors": 524,
+     "totalVectors": 524,
+     "detail": "FT.INFO indexing 0, percent_indexed 1, hash_indexing_failures 0, flat_buffer_size 0, num_docs 524, hashes counted with SCAN under gvb_gvbbench_eshoponweb: 524"
+    },
+    "afterSearch": {
+     "ready": true,
+     "indexedVectors": 524,
+     "totalVectors": 524,
+     "detail": "FT.INFO indexing 0, percent_indexed 1, hash_indexing_failures 0, flat_buffer_size 0, num_docs 524, hashes counted with SCAN under gvb_gvbbench_eshoponweb: 524"
+    }
+   },
+   "durability": "save \"300 1\" and appendonly no (redis.compose.yaml): an RDB snapshot is written every 5 minutes if at least one key changed, and on a clean stop; there is no append-only log, so a crash loses every write since the last snapshot (up to 5 minutes plus the time a snapshot takes; measured with docker kill, which is SIGKILL, right after a 2,000-vector load: none of the 2,000 hashes were there after the restart, and the restart loaded an older snapshot that still held keys of a collection that had been dropped since)",
+   "notes": [
+    "Started by run-all for this measurement with every container created on CPUs 2-3,6-7 (started redis.compose.yaml with every container created on CPUs 2-3,6-7: gvb-redis cpuset 2-3,6-7 (read back from docker inspect)); stopped afterwards.",
+    "Engine files (SHA-256, first 12 hex digits): [redis.compose.yaml 7448634e0d92]. This run created the engine from these files.",
+    "Index after the load: ready, 524 of 524 indexed (FT.INFO indexing 0, percent_indexed 1, hash_indexing_failures 0, flat_buffer_size 0, num_docs 524, hashes counted with SCAN under gvb_gvbbench_eshoponweb: 524). Durability: save \"300 1\" and appendonly no (redis.compose.yaml): an RDB snapshot is written every 5 minutes if at least one key changed, and on a clean stop; there is no append-only log, so a crash loses every write since the last snapshot (up to 5 minutes plus the time a snapshot takes; measured with docker kill, which is SIGKILL, right after a 2,000-vector load: none of the 2,000 hashes were there after the restart, and the restart loaded an older snapshot that still held keys of a collection that had been dropped since).",
+    "Outside load when searching began: 0.21 CPUs on average over the last 1 s and 0.21 over the last few seconds (limit 0.3), a quiet box. The load average 3.63 3.65 3.70 (1/5/15 min; it also counts this benchmark's own client and engines, so it is recorded, not judged).",
+    "Rehearsal before any timed pass, untimed, every pass type at its own concurrency for at least 30 s through the same code the timed passes use: default@8 151,068 searches in 30.0 s, default@1 76,411 searches in 30.0 s, exact 77,196 searches in 30.0 s.",
+    "Settle: settled before every timed pass, each by its own warm-up at its own concurrency and a trial of the same pass within 10% of the warm-up's settled figure, and the timed pass itself within 10% of it. default@8: warm-up 15.0 s and 76,663 searches (0 failed) at 8 searchers; QPS of the last windows 5,015, 5,094, 5,132 (windows of at least 2 s and 100 searches); trial of 15,140 searches in 3.0 s at 8 searchers: 5,045 QPS against the settled 5,094 QPS, 1% apart (limit 10%); the timed pass 5,120 QPS, 0% from the settled 5,094 QPS (limit 10%); default@1: warm-up 15.0 s and 37,630 searches (0 failed) at 1 searcher; p50 of the last windows 0.393, 0.407, 0.389 ms (windows of at least 2 s and 100 searches); trial of 7,433 searches in 3.0 s at 1 searcher: p50 0.409 ms against the settled p50 0.393 ms, 4% apart (limit 10%); the timed pass p50 0.398 ms, 1% from the settled p50 0.393 ms (limit 10% or 0.1 ms; 0.005 ms); exact: warm-up 15.0 s and 40,226 searches (0 failed) at 1 searcher; p50 of the last windows 0.372, 0.373, 0.374 ms (windows of at least 2 s and 100 searches); trial of 8,019 searches in 3.0 s at 1 searcher: p50 0.375 ms against the settled p50 0.373 ms, 1% apart (limit 10%); the timed pass p50 0.378 ms, 1% from the settled p50 0.373 ms (limit 10% or 0.1 ms; 0.005 ms).",
+    "Pass default@8 after rehearsal: 2026-10-06T13:51:46.664Z to 2026-10-06T13:52:06.665Z (20.0 s), 102,408 searches, 0 failed, p50 1.564 ms, mean 1.561 ms, p99 2.227 ms, 5120.1 QPS (1000/QPS 0.195 ms).",
+    "Pass default@1 after default@8: 2026-10-06T13:52:24.709Z to 2026-10-06T13:52:44.709Z (20.0 s), 50,539 searches, 0 failed, p50 0.398 ms, mean 0.394 ms, p99 0.717 ms, 2526.9 QPS (1000/QPS 0.396 ms).",
+    "Pass exact after default@1: 2026-10-06T13:53:02.775Z to 2026-10-06T13:54:02.775Z (60.0 s), 159,894 searches, 0 failed, p50 0.378 ms, mean 0.374 ms, p99 0.675 ms, 2664.9 QPS (1000/QPS 0.375 ms).",
+    "Passes in the order run: default@8, default@1, exact; each after its own warm-up. Untimed searches (rehearsals, per-pass warm-ups, settle checks and extensions): 489,786 sent, 0 failed (warmupErrors). Index after the searches: ready, 524 of 524 indexed (FT.INFO indexing 0, percent_indexed 1, hash_indexing_failures 0, flat_buffer_size 0, num_docs 524, hashes counted with SCAN under gvb_gvbbench_eshoponweb: 524).",
+    "Benchmark copy gvbbench_eshoponweb dropped afterwards.",
+    "Connection: container address on its Docker network, not the published port (no docker-proxy): container gvb-redis (26d9ff0dafd6) on network gvb-redis_default at 172.20.0.2:6379, not through docker-proxy 127.0.0.1:6379. Open after the passes: 172.20.0.2:6379 x1 (this target).",
+    "CPU pinning: cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which), CPUs 2-3,6-7. Changed: container gvb-redis: already on CPUs 2-3,6-7 (its cpuset since creation), not changed. Read back: container gvb-redis: 16 thread(s) on CPUs 2-3,6-7 (every thread of the container).",
+    "Clock per pass (median MHz of engine CPUs / client CPUs, their average MHz, governor, CPUs busy outside the benchmark, client CPU per search; the clock was pinned at 3500 MHz (turbo off), and a pass whose average on either group is more than 1% off it is flagged): default@8 3492/3492 MHz, average 3492.0/3492.0, performance, outside load 0.19 before the warm-up after waiting 3 s, 0.20 during, client CPU 0.364 ms per search; default@1 3492/3492 MHz, average 3492.1/3492.0, performance, outside load 0.20 before the warm-up, 0.20 during, client CPU 0.569 ms per search; exact 3492/3492 MHz, average 3492.1/3492.0, performance, outside load 0.21 before the warm-up, 0.20 during, client CPU 0.565 ms per search."
+   ]
+  },
+  {
+   "name": "mongodb",
+   "engine": "MongoDB 8.0.32 Atlas Local (mongod + mongot Vector Search)",
+   "index": "vectorSearch index, HNSW maxEdges=16 numEdgeCandidates=128, float32 binData, cosine, numCandidates=20x hits (min 100); exact mode = $vectorSearch exact:true",
+   "hosting": "compose",
+   "searchSettings": {
+    "maxEdges": "16",
+    "numCandidates": "20x",
+    "numEdgeCandidates": "128"
+   },
+   "load": {
+    "rows": 524,
+    "batch": 1000,
+    "upsertSeconds": 0.1478191,
+    "rowsPerSecond": 3544.8734297529886,
+    "countMatchSeconds": 1.7360735,
+    "indexSeconds": 10.2544566,
+    "indexNote": "index status READY, queryable True; mongot holds 524 of 524 documents in 4 segment(s) (269 + 251 + 2 + 2 documents), 4 searched through the HNSW graph (Approximate); segment layout unchanged for 10.2 s over 11 readings; wait took 10.3 s"
+   },
+   "search": {
+    "countInTarget": 524,
+    "latencySamples": 13821,
+    "p50Ms": 1.4136,
+    "p95Ms": 1.6564,
+    "p99Ms": 1.9464599999999992,
+    "qps": {
+     "1": 691.0434489081044,
+     "8": 2066.043956908663
+    },
+    "recall": 1,
+    "ndcg": 0.5181699774768911,
+    "errors": 0,
+    "exactQueries": 47151,
+    "exactP50Ms": 1.2423,
+    "exactP95Ms": 1.45965,
+    "exactRecall": 1,
+    "clientCpuMsPerSearch": {
+     "1": 0.3118,
+     "8": 0.2875
+    }
+   },
+   "ram": {
+    "bytes": 925368320,
+    "text": "882.5 MiB (docker stats)"
+   },
+   "disk": {
+    "bytes": 175496,
+    "text": "171.38 KiB added by this load (1.37 GiB (whole engine data folder), 1.37 GiB before)"
+   },
+   "passOrder": [
+    "default@1",
+    "exact",
+    "default@8"
+   ],
+   "warmupErrors": 0,
+   "indexState": {
+    "afterLoad": {
+     "ready": true,
+     "indexedVectors": 524,
+     "totalVectors": 524,
+     "detail": "index status READY, queryable True; mongot holds 524 of 524 documents in 4 segment(s) (269 + 251 + 2 + 2 documents), 4 searched through the HNSW graph (Approximate)"
+    },
+    "afterSearch": {
+     "ready": true,
+     "indexedVectors": 524,
+     "totalVectors": 524,
+     "detail": "index status READY, queryable True; mongot holds 524 of 524 documents in 4 segment(s) (269 + 251 + 2 + 2 documents), 4 searched through the HNSW graph (Approximate)"
+    }
+   },
+   "durability": "Acknowledged writes are journaled before the acknowledgement. The sink sets no write concern, so the server default applies: getDefaultRWConcern gives w majority and the one-member replica set (--replSet gvbmongo in the image) has writeConcernMajorityJournalDefault true, with WiredTiger journaling on (journalCommitInterval 100 ms is only the interval for unacknowledged work). Measured 2026-10-04: 30 acknowledged single-document inserts raised WiredTiger 'log sync operations' by 30 and strace showed fdatasync on /data/db/journal/WiredTigerLog files. A crash loses no acknowledged write. mongot's search index is not part of that promise: it follows the collection asynchronously and is rebuilt from it.",
+   "notes": [
+    "Started by run-all for this measurement with every container created on CPUs 2-3,6-7 (started mongodb.compose.yaml with every container created on CPUs 2-3,6-7: gvb-mongodb cpuset 2-3,6-7 (read back from docker inspect)); stopped afterwards.",
+    "Engine files (SHA-256, first 12 hex digits): [mongodb.compose.yaml 4ee6f6411f1f]. This run created the engine from these files.",
+    "Index after the load: ready, 524 of 524 indexed (index status READY, queryable True; mongot holds 524 of 524 documents in 4 segment(s) (269 + 251 + 2 + 2 documents), 4 searched through the HNSW graph (Approximate)). Durability: Acknowledged writes are journaled before the acknowledgement. The sink sets no write concern, so the server default applies: getDefaultRWConcern gives w majority and the one-member replica set (--replSet gvbmongo in the image) has writeConcernMajorityJournalDefault true, with WiredTiger journaling on (journalCommitInterval 100 ms is only the interval for unacknowledged work). Measured 2026-10-04: 30 acknowledged single-document inserts raised WiredTiger 'log sync operations' by 30 and strace showed fdatasync on /data/db/journal/WiredTigerLog files. A crash loses no acknowledged write. mongot's search index is not part of that promise: it follows the collection asynchronously and is rebuilt from it..",
+    "Outside load when searching began: 0.23 CPUs on average over the last 14 s and 0.24 over the last few seconds (limit 0.3), a quiet box. The load average 2.48 2.68 3.05 (1/5/15 min; it also counts this benchmark's own client and engines, so it is recorded, not judged).",
+    "Rehearsal before any timed pass, untimed, every pass type at its own concurrency for at least 30 s through the same code the timed passes use: default@1 17,315 searches in 30.0 s, exact 22,690 searches in 30.0 s, default@8 60,007 searches in 30.0 s.",
+    "Settle: settled before every timed pass, each by its own warm-up at its own concurrency and a trial of the same pass within 10% of the warm-up's settled figure, and the timed pass itself within 10% of it. default@1: warm-up 15.0 s and 10,336 searches (0 failed) at 1 searcher; p50 of the last windows 1.408, 1.414, 1.428 ms (windows of at least 2 s and 100 searches); trial of 2,054 searches in 3.0 s at 1 searcher: p50 1.421 ms against the settled p50 1.414 ms, 0% apart (limit 10%); the timed pass p50 1.414 ms, 0% from the settled p50 1.414 ms (limit 10% or 0.1 ms; 0.000 ms); exact: warm-up 15.0 s and 11,731 searches (0 failed) at 1 searcher; p50 of the last windows 1.257, 1.243, 1.241 ms (windows of at least 2 s and 100 searches); trial of 2,356 searches in 3.0 s at 1 searcher: p50 1.248 ms against the settled p50 1.243 ms, 0% apart (limit 10%); the timed pass p50 1.242 ms, 0% from the settled p50 1.243 ms (limit 10% or 0.1 ms; 0.001 ms); default@8: warm-up 15.0 s and 30,502 searches (0 failed) at 8 searchers; QPS of the last windows 2,085, 2,092, 1,842 (windows of at least 2 s and 100 searches) (its last 3 windows differed by more than 5%); trial of 6,110 searches in 3.0 s at 8 searchers: 2,034 QPS against the settled 2,085 QPS, 2% apart (limit 10%), so the warm-up was EXTENDED once (30.0 s and 61,828 searches (0 failed) at 8 searchers; QPS of its older 6 windows 2,058 (windows 2,062, 2,048, 2,054, 2,056, 2,060, 2,070) and of its newer 6 2,055 (windows 2,068, 2,054, 2,052, 2,059, 2,036, 2,064), 0.1% apart (limit 5%) (windows of at least 2 s and 100 searches)); second trial of 6,209 searches in 3.0 s at 8 searchers: 2,068 QPS against the settled 2,055 QPS, 1% apart (limit 10%), outside its newer windows' range 2,036 to 2,068 QPS; settled after the extension; the timed pass 2,066 QPS, 1% from the settled 2,055 QPS (limit 10%).",
+    "Pass default@1 after rehearsal: 2026-10-06T14:08:01.467Z to 2026-10-06T14:08:21.468Z (20.0 s), 13,821 searches, 0 failed, p50 1.414 ms, mean 1.445 ms, p99 1.946 ms, 691.0 QPS (1000/QPS 1.447 ms).",
+    "Pass exact after default@1: 2026-10-06T14:08:40.485Z to 2026-10-06T14:09:40.485Z (60.0 s), 47,151 searches, 0 failed, p50 1.242 ms, mean 1.270 ms, p99 1.791 ms, 785.8 QPS (1000/QPS 1.273 ms).",
+    "Pass default@8 after exact: 2026-10-06T14:10:51.547Z to 2026-10-06T14:11:11.550Z (20.0 s), 41,327 searches, 0 failed, p50 3.746 ms, mean 3.869 ms, p99 6.907 ms, 2066.0 QPS (1000/QPS 0.484 ms).",
+    "Passes in the order run: default@1, exact, default@8; each after its own warm-up. Untimed searches (rehearsals, per-pass warm-ups, settle checks and extensions): 262,254 sent, 0 failed (warmupErrors). Index after the searches: ready, 524 of 524 indexed (index status READY, queryable True; mongot holds 524 of 524 documents in 4 segment(s) (269 + 251 + 2 + 2 documents), 4 searched through the HNSW graph (Approximate)).",
+    "Benchmark copy gvbbench_eshoponweb dropped afterwards.",
+    "Connection: container address on its Docker network, not the published port (no docker-proxy): container gvb-mongodb (441920b747a8) on network gvb-mongodb_default at 172.20.0.2:27017, not through docker-proxy 127.0.0.1:27017. Open after the passes: 172.20.0.2:27017 x10 (this target).",
+    "CPU pinning: cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which), CPUs 2-3,6-7. Changed: container gvb-mongodb: already on CPUs 2-3,6-7 (its cpuset since creation), not changed. Read back: container gvb-mongodb: 211 thread(s) on CPUs 2-3,6-7 (every thread of the container).",
+    "Clock per pass (median MHz of engine CPUs / client CPUs, their average MHz, governor, CPUs busy outside the benchmark, client CPU per search; the clock was pinned at 3500 MHz (turbo off), and a pass whose average on either group is more than 1% off it is flagged): default@1 3492/3492 MHz, average 3492.2/3492.2, performance, outside load 0.26 before the warm-up, 0.29 during, client CPU 0.312 ms per search; exact 3492/3492 MHz, average 3492.2/3491.2, performance, outside load 0.27 before the warm-up after waiting 1 s, 0.31 during, BUSY BOX, client CPU 0.304 ms per search; default@8 3492/3492 MHz, average 3492.0/3492.1, performance, outside load 0.29 before the warm-up after waiting 5 s, 0.23 during, client CPU 0.288 ms per search.",
+    "WARNING: busy box during exact: processes outside the benchmark used 0.31 CPUs on average during the pass, above the limit of 0.3."
+   ]
+  }
+ ],
+ "conditions": {
+  "buildConfiguration": "Release",
+  "jitOptimizerDisabled": false,
+  "dotNet": ".NET 10.0.12",
+  "runtimeVersion": "10.0.12",
+  "serverGc": false,
+  "machineControl": "on",
+  "governor": "performance",
+  "governorBefore": "schedutil",
+  "governorAtEnd": "performance",
+  "governorAfterRestore": "schedutil",
+  "logicalCpus": 8,
+  "threadSiblings": [
+   "0,4",
+   "1,5",
+   "2,6",
+   "3,7"
+  ],
+  "clientCpus": "0-1,4-5",
+  "engineCpus": "2-3,6-7",
+  "clientPinning": "client pid 146444: 23 thread(s) on CPUs 0-1,4-5",
+  "warmupSearches": 20,
+  "exactSeconds": 60,
+  "search": {
+   "top": 10,
+   "queries": "golden",
+   "concurrency": [
+    1,
+    8
+   ],
+   "secondsPerLevel": 20,
+   "warmupSearches": 20,
+   "exactSeconds": 60,
+   "searchTimeoutSeconds": 120,
+   "batch": 1000,
+   "seed": 701
+  },
+  "busyRule": "right before each pass's warm-up the run waits, up to 10 min, while processes outside the benchmark (everything but this client and the engine under test's cgroups) use more than 0.3 CPUs on average over the last 60 s or the last 5 s, neither window reaching back past the start of the target or of its engine (so the engine's own start-up is not outside work); if the box does not clear the pass runs anyway, flagged 'busy box', as is a pass whose own outside load is above the limit",
+  "engines": [
+   {
+    "target": "clickhouse",
+    "hosting": "compose",
+    "method": "cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which)",
+    "cpus": "2-3,6-7",
+    "changes": [
+     "container gvb-clickhouse: already on CPUs 2-3,6-7 (its cpuset since creation), not changed"
+    ],
+    "verified": [
+     "container gvb-clickhouse: 680 thread(s) on CPUs 2-3,6-7 (every thread of the container)"
+    ],
+    "problems": [],
+    "restored": [
+     "no container of clickhouse.compose.yaml is left on CPUs 2-3,6-7; nothing to put back"
+    ]
+   },
+   {
+    "target": "vespa",
+    "hosting": "compose",
+    "method": "cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which)",
+    "cpus": "2-3,6-7",
+    "changes": [
+     "container gvb-vespa: already on CPUs 2-3,6-7 (its cpuset since creation), not changed"
+    ],
+    "verified": [
+     "container gvb-vespa: 215 thread(s) on CPUs 2-3,6-7 (every thread of the container)"
+    ],
+    "problems": [],
+    "restored": [
+     "no container of vespa.compose.yaml is left on CPUs 2-3,6-7; nothing to put back"
+    ]
+   },
+   {
+    "target": "oracle",
+    "hosting": "compose",
+    "method": "cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which)",
+    "cpus": "2-3,6-7",
+    "changes": [
+     "container gvb-oracle: already on CPUs 2-3,6-7 (its cpuset since creation), not changed"
+    ],
+    "verified": [
+     "container gvb-oracle: 92 thread(s) on CPUs 2-3,6-7 (every thread of the container)"
+    ],
+    "problems": [],
+    "restored": [
+     "no container of oracle.compose.yaml is left on CPUs 2-3,6-7; nothing to put back"
+    ]
+   },
+   {
+    "target": "elasticsearch",
+    "hosting": "compose",
+    "method": "cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which)",
+    "cpus": "2-3,6-7",
+    "changes": [
+     "container gvb-elasticsearch: already on CPUs 2-3,6-7 (its cpuset since creation), not changed"
+    ],
+    "verified": [
+     "container gvb-elasticsearch: 75 thread(s) on CPUs 2-3,6-7 (every thread of the container)"
+    ],
+    "problems": [],
+    "restored": [
+     "no container of elasticsearch.compose.yaml is left on CPUs 2-3,6-7; nothing to put back"
+    ]
+   },
+   {
+    "target": "sql",
+    "hosting": "compose",
+    "method": "cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which)",
+    "cpus": "2-3,6-7",
+    "changes": [
+     "container gvb-mssql: already on CPUs 2-3,6-7 (its cpuset since creation), not changed"
+    ],
+    "verified": [
+     "container gvb-mssql: 86 thread(s) on CPUs 2-3,6-7 (every thread of the container)"
+    ],
+    "problems": [],
+    "restored": [
+     "no container of mssql.compose.yaml is left on CPUs 2-3,6-7; nothing to put back"
+    ]
+   },
+   {
+    "target": "pgvector",
+    "hosting": "compose",
+    "method": "cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which)",
+    "cpus": "2-3,6-7",
+    "changes": [
+     "container gvb-pgvector: already on CPUs 2-3,6-7 (its cpuset since creation), not changed"
+    ],
+    "verified": [
+     "container gvb-pgvector: 6 thread(s) on CPUs 2-3,6-7 (every thread of the container)"
+    ],
+    "problems": [],
+    "restored": [
+     "no container of pgvector.compose.yaml is left on CPUs 2-3,6-7; nothing to put back"
+    ]
+   },
+   {
+    "target": "sqlitevec",
+    "hosting": "embedded",
+    "method": "none: an embedded engine runs inside the benchmark client process, so it shares the client CPUs",
+    "cpus": "0-1,4-5",
+    "changes": [],
+    "verified": [],
+    "problems": [],
+    "restored": []
+   },
+   {
+    "target": "qdrant",
+    "hosting": "compose",
+    "method": "cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which)",
+    "cpus": "2-3,6-7",
+    "changes": [
+     "container gvb-qdrant: already on CPUs 2-3,6-7 (its cpuset since creation), not changed"
+    ],
+    "verified": [
+     "container gvb-qdrant: 24 thread(s) on CPUs 2-3,6-7 (every thread of the container)"
+    ],
+    "problems": [],
+    "restored": [
+     "no container of qdrant.compose.yaml is left on CPUs 2-3,6-7; nothing to put back"
+    ]
+   },
+   {
+    "target": "opensearch",
+    "hosting": "compose",
+    "method": "cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which)",
+    "cpus": "2-3,6-7",
+    "changes": [
+     "container gvb-opensearch: already on CPUs 2-3,6-7 (its cpuset since creation), not changed"
+    ],
+    "verified": [
+     "container gvb-opensearch: 55 thread(s) on CPUs 2-3,6-7 (every thread of the container)"
+    ],
+    "problems": [],
+    "restored": [
+     "no container of opensearch.compose.yaml is left on CPUs 2-3,6-7; nothing to put back"
+    ]
+   },
+   {
+    "target": "qdrant-hnsw",
+    "hosting": "compose",
+    "method": "cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which)",
+    "cpus": "2-3,6-7",
+    "changes": [
+     "container gvb-qdrant: already on CPUs 2-3,6-7 (its cpuset since creation), not changed"
+    ],
+    "verified": [
+     "container gvb-qdrant: 24 thread(s) on CPUs 2-3,6-7 (every thread of the container)"
+    ],
+    "problems": [],
+    "restored": [
+     "no container of qdrant.compose.yaml is left on CPUs 2-3,6-7; nothing to put back"
+    ]
+   },
+   {
+    "target": "redis",
+    "hosting": "compose",
+    "method": "cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which)",
+    "cpus": "2-3,6-7",
+    "changes": [
+     "container gvb-redis: already on CPUs 2-3,6-7 (its cpuset since creation), not changed"
+    ],
+    "verified": [
+     "container gvb-redis: 16 thread(s) on CPUs 2-3,6-7 (every thread of the container)"
+    ],
+    "problems": [],
+    "restored": [
+     "no container of redis.compose.yaml is left on CPUs 2-3,6-7; nothing to put back"
+    ]
+   },
+   {
+    "target": "milvus",
+    "hosting": "compose",
+    "method": "cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which)",
+    "cpus": "2-3,6-7",
+    "changes": [
+     "container gvb-milvus: already on CPUs 2-3,6-7 (its cpuset since creation), not changed"
+    ],
+    "verified": [
+     "container gvb-milvus: 24 thread(s) on CPUs 2-3,6-7 (every thread of the container)"
+    ],
+    "problems": [],
+    "restored": [
+     "no container of milvus.compose.yaml is left on CPUs 2-3,6-7; nothing to put back"
+    ]
+   },
+   {
+    "target": "mariadb",
+    "hosting": "compose",
+    "method": "cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which)",
+    "cpus": "2-3,6-7",
+    "changes": [
+     "container gvbbench-mariadb: already on CPUs 2-3,6-7 (its cpuset since creation), not changed"
+    ],
+    "verified": [
+     "container gvbbench-mariadb: 13 thread(s) on CPUs 2-3,6-7 (every thread of the container)"
+    ],
+    "problems": [],
+    "restored": [
+     "no container of mariadb-bench.compose.yaml is left on CPUs 2-3,6-7; nothing to put back"
+    ]
+   },
+   {
+    "target": "weaviate",
+    "hosting": "compose",
+    "method": "cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which)",
+    "cpus": "2-3,6-7",
+    "changes": [
+     "container gvb-weaviate: already on CPUs 2-3,6-7 (its cpuset since creation), not changed"
+    ],
+    "verified": [
+     "container gvb-weaviate: 9 thread(s) on CPUs 2-3,6-7 (every thread of the container)"
+    ],
+    "problems": [],
+    "restored": [
+     "no container of weaviate.compose.yaml is left on CPUs 2-3,6-7; nothing to put back"
+    ]
+   },
+   {
+    "target": "mongodb",
+    "hosting": "compose",
+    "method": "cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which)",
+    "cpus": "2-3,6-7",
+    "changes": [
+     "container gvb-mongodb: already on CPUs 2-3,6-7 (its cpuset since creation), not changed"
+    ],
+    "verified": [
+     "container gvb-mongodb: 211 thread(s) on CPUs 2-3,6-7 (every thread of the container)"
+    ],
+    "problems": [],
+    "restored": [
+     "no container of mongodb.compose.yaml is left on CPUs 2-3,6-7; nothing to put back"
+    ]
+   },
+   {
+    "target": "chroma",
+    "hosting": "compose",
+    "method": "cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which)",
+    "cpus": "2-3,6-7",
+    "changes": [
+     "container gvb-chroma: already on CPUs 2-3,6-7 (its cpuset since creation), not changed"
+    ],
+    "verified": [
+     "container gvb-chroma: 9 thread(s) on CPUs 2-3,6-7 (every thread of the container)"
+    ],
+    "problems": [],
+    "restored": [
+     "no container of chroma.compose.yaml is left on CPUs 2-3,6-7; nothing to put back"
+    ]
+   },
+   {
+    "target": "typesense",
+    "hosting": "compose",
+    "method": "cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which)",
+    "cpus": "2-3,6-7",
+    "changes": [
+     "container gvb-typesense: already on CPUs 2-3,6-7 (its cpuset since creation), not changed"
+    ],
+    "verified": [
+     "container gvb-typesense: 303 thread(s) on CPUs 2-3,6-7 (every thread of the container)"
+    ],
+    "problems": [],
+    "restored": [
+     "no container of typesense.compose.yaml is left on CPUs 2-3,6-7; nothing to put back"
+    ]
+   },
+   {
+    "target": "sql-diskann",
+    "hosting": "compose",
+    "method": "cpuset from the container's creation when run-all started it on the engine CPUs, else docker update --cpuset-cpus (each container's change line says which)",
+    "cpus": "2-3,6-7",
+    "changes": [
+     "container gvb-mssql: already on CPUs 2-3,6-7 (its cpuset since creation), not changed"
+    ],
+    "verified": [
+     "container gvb-mssql: 85 thread(s) on CPUs 2-3,6-7 (every thread of the container)"
+    ],
+    "problems": [],
+    "restored": [
+     "no container of mssql.compose.yaml is left on CPUs 2-3,6-7; nothing to put back"
+    ]
+   },
+   {
+    "target": "duckdb",
+    "hosting": "embedded",
+    "method": "none: an embedded engine runs inside the benchmark client process, so it shares the client CPUs",
+    "cpus": "0-1,4-5",
+    "changes": [],
+    "verified": [],
+    "problems": [],
+    "restored": []
+   }
+  ],
+  "passes": [
+   {
+    "target": "elasticsearch",
+    "pass": "exact",
+    "startUtc": "2026-10-06T13:25:15.144Z",
+    "endUtc": "2026-10-06T13:26:15.193Z",
+    "seconds": 60.049,
+    "endedBy": "result line",
+    "governor": "performance",
+    "frequencySamples": 240,
+    "nearestSample": false,
+    "engineMhzMedian": 3492,
+    "clientMhzMedian": 3492,
+    "cpuMhz": [
+     {
+      "cpu": 0,
+      "min": 2823,
+      "median": 3492,
+      "max": 3496
+     },
+     {
+      "cpu": 1,
+      "min": 3457,
+      "median": 3492,
+      "max": 3501
+     },
+     {
+      "cpu": 2,
+      "min": 3489,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 3,
+      "min": 3487,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 4,
+      "min": 3491,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 5,
+      "min": 3490,
+      "median": 3492,
+      "max": 3555
+     },
+     {
+      "cpu": 6,
+      "min": 3438,
+      "median": 3492,
+      "max": 3499
+     },
+     {
+      "cpu": 7,
+      "min": 3393,
+      "median": 3492,
+      "max": 3500
+     }
+    ],
+    "quietCheckBefore": "warm-up",
+    "quietCheckUtc": "2026-10-06T13:24:57.140Z",
+    "quietCheckLeadSeconds": 18.003,
+    "outsideWindowFromUtc": "2026-10-06T13:23:57.140Z",
+    "outsideLoadAtStart": 0.219,
+    "outsideLoadRecentAtStart": 0.209,
+    "outsideLoadDuring": 0.215,
+    "accountingMismatch": false,
+    "searches": 46096,
+    "clientCpuSeconds": 21.2528,
+    "clientCpuMsPerSearch": 0.4611,
+    "clientCpuBasis": "user + system CPU time of this process's threads (not its finished children; includes the 4 Hz sampler thread and the kernel network time spent on this process's behalf) from 2026-10-06T13:25:15.144Z to 2026-10-06T13:26:15.144Z, 240 samples, divided by the pass's 46096 completed searches",
+    "waitedSeconds": 0,
+    "busyBox": false
+   },
+   {
+    "target": "elasticsearch",
+    "pass": "default@8",
+    "startUtc": "2026-10-06T13:26:33.198Z",
+    "endUtc": "2026-10-06T13:26:53.227Z",
+    "seconds": 20.029,
+    "endedBy": "result line",
+    "governor": "performance",
+    "frequencySamples": 80,
+    "nearestSample": false,
+    "engineMhzMedian": 3492,
+    "clientMhzMedian": 3492,
+    "cpuMhz": [
+     {
+      "cpu": 0,
+      "min": 3491,
+      "median": 3492,
+      "max": 3495
+     },
+     {
+      "cpu": 1,
+      "min": 3491,
+      "median": 3492,
+      "max": 3501
+     },
+     {
+      "cpu": 2,
+      "min": 3492,
+      "median": 3492,
+      "max": 3492
+     },
+     {
+      "cpu": 3,
+      "min": 3492,
+      "median": 3492,
+      "max": 3492
+     },
+     {
+      "cpu": 4,
+      "min": 3490,
+      "median": 3492,
+      "max": 3498
+     },
+     {
+      "cpu": 5,
+      "min": 3491,
+      "median": 3492,
+      "max": 3496
+     },
+     {
+      "cpu": 6,
+      "min": 3492,
+      "median": 3492,
+      "max": 3492
+     },
+     {
+      "cpu": 7,
+      "min": 3492,
+      "median": 3492,
+      "max": 3492
+     }
+    ],
+    "quietCheckBefore": "warm-up",
+    "quietCheckUtc": "2026-10-06T13:26:15.194Z",
+    "quietCheckLeadSeconds": 18.004,
+    "outsideWindowFromUtc": "2026-10-06T13:25:15.194Z",
+    "outsideLoadAtStart": 0.215,
+    "outsideLoadRecentAtStart": 0.217,
+    "outsideLoadDuring": 0.236,
+    "accountingMismatch": false,
+    "searches": 53431,
+    "clientCpuSeconds": 26.5454,
+    "clientCpuMsPerSearch": 0.4968,
+    "clientCpuBasis": "user + system CPU time of this process's threads (not its finished children; includes the 4 Hz sampler thread and the kernel network time spent on this process's behalf) from 2026-10-06T13:26:33.198Z to 2026-10-06T13:26:53.200Z, 80 samples, divided by the pass's 53431 completed searches",
+    "waitedSeconds": 0,
+    "busyBox": false
+   },
+   {
+    "target": "elasticsearch",
+    "pass": "default@1",
+    "startUtc": "2026-10-06T13:27:11.230Z",
+    "endUtc": "2026-10-06T13:27:31.248Z",
+    "seconds": 20.018,
+    "endedBy": "result line",
+    "governor": "performance",
+    "frequencySamples": 81,
+    "nearestSample": false,
+    "engineMhzMedian": 3492,
+    "clientMhzMedian": 3492,
+    "cpuMhz": [
+     {
+      "cpu": 0,
+      "min": 3490,
+      "median": 3492,
+      "max": 3494
+     },
+     {
+      "cpu": 1,
+      "min": 3491,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 2,
+      "min": 3475,
+      "median": 3492,
+      "max": 3494
+     },
+     {
+      "cpu": 3,
+      "min": 3491,
+      "median": 3492,
+      "max": 3492
+     },
+     {
+      "cpu": 4,
+      "min": 3492,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 5,
+      "min": 3472,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 6,
+      "min": 3491,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 7,
+      "min": 3491,
+      "median": 3492,
+      "max": 3492
+     }
+    ],
+    "quietCheckBefore": "warm-up",
+    "quietCheckUtc": "2026-10-06T13:26:53.228Z",
+    "quietCheckLeadSeconds": 18.003,
+    "outsideWindowFromUtc": "2026-10-06T13:25:53.228Z",
+    "outsideLoadAtStart": 0.241,
+    "outsideLoadRecentAtStart": 0.234,
+    "outsideLoadDuring": 0.21,
+    "accountingMismatch": false,
+    "searches": 14790,
+    "clientCpuSeconds": 6.8504,
+    "clientCpuMsPerSearch": 0.4632,
+    "clientCpuBasis": "user + system CPU time of this process's threads (not its finished children; includes the 4 Hz sampler thread and the kernel network time spent on this process's behalf) from 2026-10-06T13:27:11.230Z to 2026-10-06T13:27:31.232Z, 80 samples, divided by the pass's 14790 completed searches",
+    "waitedSeconds": 0,
+    "busyBox": false
+   },
+   {
+    "target": "redis",
+    "pass": "default@8",
+    "startUtc": "2026-10-06T13:51:46.664Z",
+    "endUtc": "2026-10-06T13:52:06.702Z",
+    "seconds": 20.038,
+    "endedBy": "result line",
+    "governor": "performance",
+    "frequencySamples": 80,
+    "nearestSample": false,
+    "engineMhzMedian": 3492,
+    "clientMhzMedian": 3492,
+    "cpuMhz": [
+     {
+      "cpu": 0,
+      "min": 3487,
+      "median": 3492,
+      "max": 3493
+     },
+     {
+      "cpu": 1,
+      "min": 3487,
+      "median": 3492,
+      "max": 3497
+     },
+     {
+      "cpu": 2,
+      "min": 3490,
+      "median": 3492,
+      "max": 3496
+     },
+     {
+      "cpu": 3,
+      "min": 3489,
+      "median": 3492,
+      "max": 3496
+     },
+     {
+      "cpu": 4,
+      "min": 3490,
+      "median": 3492,
+      "max": 3493
+     },
+     {
+      "cpu": 5,
+      "min": 3491,
+      "median": 3492,
+      "max": 3493
+     },
+     {
+      "cpu": 6,
+      "min": 3489,
+      "median": 3492,
+      "max": 3495
+     },
+     {
+      "cpu": 7,
+      "min": 3488,
+      "median": 3492,
+      "max": 3494
+     }
+    ],
+    "quietCheckBefore": "warm-up",
+    "quietCheckUtc": "2026-10-06T13:51:28.660Z",
+    "quietCheckLeadSeconds": 18.004,
+    "outsideWindowFromUtc": "2026-10-06T13:50:28.660Z",
+    "outsideLoadAtStart": 0.191,
+    "outsideLoadRecentAtStart": 0.256,
+    "outsideLoadDuring": 0.196,
+    "accountingMismatch": false,
+    "searches": 102408,
+    "clientCpuSeconds": 37.2788,
+    "clientCpuMsPerSearch": 0.364,
+    "clientCpuBasis": "user + system CPU time of this process's threads (not its finished children; includes the 4 Hz sampler thread and the kernel network time spent on this process's behalf) from 2026-10-06T13:51:46.664Z to 2026-10-06T13:52:06.665Z, 80 samples, divided by the pass's 102408 completed searches",
+    "waitedSeconds": 3,
+    "busyBox": false
+   },
+   {
+    "target": "redis",
+    "pass": "default@1",
+    "startUtc": "2026-10-06T13:52:24.709Z",
+    "endUtc": "2026-10-06T13:52:44.768Z",
+    "seconds": 20.059,
+    "endedBy": "result line",
+    "governor": "performance",
+    "frequencySamples": 81,
+    "nearestSample": false,
+    "engineMhzMedian": 3492,
+    "clientMhzMedian": 3492,
+    "cpuMhz": [
+     {
+      "cpu": 0,
+      "min": 3488,
+      "median": 3492,
+      "max": 3493
+     },
+     {
+      "cpu": 1,
+      "min": 3491,
+      "median": 3492,
+      "max": 3496
+     },
+     {
+      "cpu": 2,
+      "min": 3489,
+      "median": 3492,
+      "max": 3494
+     },
+     {
+      "cpu": 3,
+      "min": 3490,
+      "median": 3492,
+      "max": 3496
+     },
+     {
+      "cpu": 4,
+      "min": 3491,
+      "median": 3492,
+      "max": 3496
+     },
+     {
+      "cpu": 5,
+      "min": 3491,
+      "median": 3492,
+      "max": 3493
+     },
+     {
+      "cpu": 6,
+      "min": 3491,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 7,
+      "min": 3489,
+      "median": 3492,
+      "max": 3501
+     }
+    ],
+    "quietCheckBefore": "warm-up",
+    "quietCheckUtc": "2026-10-06T13:52:06.703Z",
+    "quietCheckLeadSeconds": 18.006,
+    "outsideWindowFromUtc": "2026-10-06T13:51:06.703Z",
+    "outsideLoadAtStart": 0.197,
+    "outsideLoadRecentAtStart": 0.23,
+    "outsideLoadDuring": 0.196,
+    "accountingMismatch": false,
+    "searches": 50539,
+    "clientCpuSeconds": 28.7421,
+    "clientCpuMsPerSearch": 0.5687,
+    "clientCpuBasis": "user + system CPU time of this process's threads (not its finished children; includes the 4 Hz sampler thread and the kernel network time spent on this process's behalf) from 2026-10-06T13:52:24.709Z to 2026-10-06T13:52:44.709Z, 80 samples, divided by the pass's 50539 completed searches",
+    "waitedSeconds": 0,
+    "busyBox": false
+   },
+   {
+    "target": "redis",
+    "pass": "exact",
+    "startUtc": "2026-10-06T13:53:02.775Z",
+    "endUtc": "2026-10-06T13:54:02.960Z",
+    "seconds": 60.185,
+    "endedBy": "result line",
+    "governor": "performance",
+    "frequencySamples": 240,
+    "nearestSample": false,
+    "engineMhzMedian": 3492,
+    "clientMhzMedian": 3492,
+    "cpuMhz": [
+     {
+      "cpu": 0,
+      "min": 3490,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 1,
+      "min": 3490,
+      "median": 3492,
+      "max": 3495
+     },
+     {
+      "cpu": 2,
+      "min": 3489,
+      "median": 3492,
+      "max": 3501
+     },
+     {
+      "cpu": 3,
+      "min": 3490,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 4,
+      "min": 3490,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 5,
+      "min": 3486,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 6,
+      "min": 3488,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 7,
+      "min": 3482,
+      "median": 3492,
+      "max": 3505
+     }
+    ],
+    "quietCheckBefore": "warm-up",
+    "quietCheckUtc": "2026-10-06T13:52:44.769Z",
+    "quietCheckLeadSeconds": 18.006,
+    "outsideWindowFromUtc": "2026-10-06T13:51:44.769Z",
+    "outsideLoadAtStart": 0.209,
+    "outsideLoadRecentAtStart": 0.215,
+    "outsideLoadDuring": 0.199,
+    "accountingMismatch": false,
+    "searches": 159894,
+    "clientCpuSeconds": 90.2533,
+    "clientCpuMsPerSearch": 0.5645,
+    "clientCpuBasis": "user + system CPU time of this process's threads (not its finished children; includes the 4 Hz sampler thread and the kernel network time spent on this process's behalf) from 2026-10-06T13:53:02.775Z to 2026-10-06T13:54:02.775Z, 240 samples, divided by the pass's 159894 completed searches",
+    "waitedSeconds": 0,
+    "busyBox": false
+   },
+   {
+    "target": "mongodb",
+    "pass": "default@1",
+    "startUtc": "2026-10-06T14:08:01.467Z",
+    "endUtc": "2026-10-06T14:08:21.481Z",
+    "seconds": 20.014,
+    "endedBy": "result line",
+    "governor": "performance",
+    "frequencySamples": 80,
+    "nearestSample": false,
+    "engineMhzMedian": 3492,
+    "clientMhzMedian": 3492,
+    "cpuMhz": [
+     {
+      "cpu": 0,
+      "min": 3488,
+      "median": 3492,
+      "max": 3495
+     },
+     {
+      "cpu": 1,
+      "min": 3458,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 2,
+      "min": 3490,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 3,
+      "min": 3491,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 4,
+      "min": 3490,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 5,
+      "min": 3491,
+      "median": 3492,
+      "max": 3497
+     },
+     {
+      "cpu": 6,
+      "min": 3474,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 7,
+      "min": 3491,
+      "median": 3492,
+      "max": 3500
+     }
+    ],
+    "quietCheckBefore": "warm-up",
+    "quietCheckUtc": "2026-10-06T14:07:43.465Z",
+    "quietCheckLeadSeconds": 18.003,
+    "outsideWindowFromUtc": "2026-10-06T14:06:43.465Z",
+    "outsideLoadAtStart": 0.264,
+    "outsideLoadRecentAtStart": 0.257,
+    "outsideLoadDuring": 0.293,
+    "accountingMismatch": false,
+    "searches": 13821,
+    "clientCpuSeconds": 4.3101,
+    "clientCpuMsPerSearch": 0.3118,
+    "clientCpuBasis": "user + system CPU time of this process's threads (not its finished children; includes the 4 Hz sampler thread and the kernel network time spent on this process's behalf) from 2026-10-06T14:08:01.467Z to 2026-10-06T14:08:21.468Z, 80 samples, divided by the pass's 13821 completed searches",
+    "waitedSeconds": 0,
+    "busyBox": false
+   },
+   {
+    "target": "mongodb",
+    "pass": "exact",
+    "startUtc": "2026-10-06T14:08:40.485Z",
+    "endUtc": "2026-10-06T14:09:40.530Z",
+    "seconds": 60.046,
+    "endedBy": "result line",
+    "governor": "performance",
+    "frequencySamples": 240,
+    "nearestSample": false,
+    "engineMhzMedian": 3492,
+    "clientMhzMedian": 3492,
+    "cpuMhz": [
+     {
+      "cpu": 0,
+      "min": 3488,
+      "median": 3492,
+      "max": 3496
+     },
+     {
+      "cpu": 1,
+      "min": 3490,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 2,
+      "min": 3491,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 3,
+      "min": 3489,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 4,
+      "min": 3490,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 5,
+      "min": 2546,
+      "median": 3492,
+      "max": 3500
+     },
+     {
+      "cpu": 6,
+      "min": 3490,
+      "median": 3492,
+      "max": 3504
+     },
+     {
+      "cpu": 7,
+      "min": 3463,
+      "median": 3492,
+      "max": 3500
+     }
+    ],
+    "quietCheckBefore": "warm-up",
+    "quietCheckUtc": "2026-10-06T14:08:22.482Z",
+    "quietCheckLeadSeconds": 18.002,
+    "outsideWindowFromUtc": "2026-10-06T14:07:22.482Z",
+    "outsideLoadAtStart": 0.272,
+    "outsideLoadRecentAtStart": 0.259,
+    "outsideLoadDuring": 0.307,
+    "accountingMismatch": false,
+    "searches": 47151,
+    "clientCpuSeconds": 14.322,
+    "clientCpuMsPerSearch": 0.3037,
+    "clientCpuBasis": "user + system CPU time of this process's threads (not its finished children; includes the 4 Hz sampler thread and the kernel network time spent on this process's behalf) from 2026-10-06T14:08:40.485Z to 2026-10-06T14:09:40.485Z, 240 samples, divided by the pass's 47151 completed searches",
+    "waitedSeconds": 1,
+    "busyBox": true,
+    "busyReason": "processes outside the benchmark used 0.31 CPUs on average during the pass, above the limit of 0.3"
+   },
+   {
+    "target": "mongodb",
+    "pass": "default@8",
+    "startUtc": "2026-10-06T14:10:51.547Z",
+    "endUtc": "2026-10-06T14:11:11.563Z",
+    "seconds": 20.016,
+    "endedBy": "result line",
+    "governor": "performance",
+    "frequencySamples": 77,
+    "nearestSample": false,
+    "engineMhzMedian": 3492,
+    "clientMhzMedian": 3492,
+    "cpuMhz": [
+     {
+      "cpu": 0,
+      "min": 3491,
+      "median": 3492,
+      "max": 3495
+     },
+     {
+      "cpu": 1,
+      "min": 3491,
+      "median": 3492,
+      "max": 3495
+     },
+     {
+      "cpu": 2,
+      "min": 3492,
+      "median": 3492,
+      "max": 3492
+     },
+     {
+      "cpu": 3,
+      "min": 3492,
+      "median": 3492,
+      "max": 3492
+     },
+     {
+      "cpu": 4,
+      "min": 3492,
+      "median": 3492,
+      "max": 3495
+     },
+     {
+      "cpu": 5,
+      "min": 3490,
+      "median": 3492,
+      "max": 3503
+     },
+     {
+      "cpu": 6,
+      "min": 3492,
+      "median": 3492,
+      "max": 3492
+     },
+     {
+      "cpu": 7,
+      "min": 3492,
+      "median": 3492,
+      "max": 3492
+     }
+    ],
+    "quietCheckBefore": "warm-up",
+    "quietCheckUtc": "2026-10-06T14:10:36.545Z",
+    "quietCheckLeadSeconds": 15.002,
+    "outsideWindowFromUtc": "2026-10-06T14:09:36.545Z",
+    "outsideLoadAtStart": 0.29,
+    "outsideLoadRecentAtStart": 0.21,
+    "outsideLoadDuring": 0.228,
+    "accountingMismatch": false,
+    "searches": 41327,
+    "clientCpuSeconds": 11.8796,
+    "clientCpuMsPerSearch": 0.2875,
+    "clientCpuBasis": "user + system CPU time of this process's threads (not its finished children; includes the 4 Hz sampler thread and the kernel network time spent on this process's behalf) from 2026-10-06T14:10:51.547Z to 2026-10-06T14:11:11.550Z, 77 samples, divided by the pass's 41327 completed searches",
+    "waitedSeconds": 5,
+    "busyBox": false
+   }
+  ],
+  "cpuIdle": {
+   "driver": "intel_idle",
+   "governor": "menu",
+   "intelIdleMaxCstate": "9",
+   "states": [
+    {
+     "index": 0,
+     "name": "POLL",
+     "latencyUs": 0,
+     "residencyUs": 0,
+     "disabledOn": "",
+     "defaultStatus": "enabled"
+    },
+    {
+     "index": 1,
+     "name": "C1",
+     "latencyUs": 2,
+     "residencyUs": 2,
+     "disabledOn": "",
+     "defaultStatus": "enabled"
+    },
+    {
+     "index": 2,
+     "name": "C1E",
+     "latencyUs": 10,
+     "residencyUs": 20,
+     "disabledOn": "",
+     "defaultStatus": "enabled"
+    },
+    {
+     "index": 3,
+     "name": "C3",
+     "latencyUs": 33,
+     "residencyUs": 100,
+     "disabledOn": "0-7",
+     "defaultStatus": "disabled"
+    },
+    {
+     "index": 4,
+     "name": "C6",
+     "latencyUs": 133,
+     "residencyUs": 400,
+     "disabledOn": "",
+     "defaultStatus": "enabled"
+    }
+   ]
+  },
+  "cpuIdleAtEnd": {
+   "driver": "intel_idle",
+   "governor": "menu",
+   "intelIdleMaxCstate": "9",
+   "states": [
+    {
+     "index": 0,
+     "name": "POLL",
+     "latencyUs": 0,
+     "residencyUs": 0,
+     "disabledOn": "",
+     "defaultStatus": "enabled"
+    },
+    {
+     "index": 1,
+     "name": "C1",
+     "latencyUs": 2,
+     "residencyUs": 2,
+     "disabledOn": "",
+     "defaultStatus": "enabled"
+    },
+    {
+     "index": 2,
+     "name": "C1E",
+     "latencyUs": 10,
+     "residencyUs": 20,
+     "disabledOn": "",
+     "defaultStatus": "enabled"
+    },
+    {
+     "index": 3,
+     "name": "C3",
+     "latencyUs": 33,
+     "residencyUs": 100,
+     "disabledOn": "0-7",
+     "defaultStatus": "disabled"
+    },
+    {
+     "index": 4,
+     "name": "C6",
+     "latencyUs": 133,
+     "residencyUs": 400,
+     "disabledOn": "",
+     "defaultStatus": "enabled"
+    }
+   ]
+  },
+  "connections": [
+   {
+    "target": "clickhouse",
+    "hosting": "compose",
+    "route": "container address on its Docker network, not the published port (no docker-proxy)",
+    "endpoints": [
+     {
+      "what": "container gvb-clickhouse",
+      "address": "172.20.0.2",
+      "port": 8123,
+      "containerId": "32cf2c26b272",
+      "network": "gvb-clickhouse_default",
+      "notUsed": "127.0.0.1:8123"
+     }
+    ],
+    "observed": [
+     {
+      "address": "127.0.0.1",
+      "port": 1433,
+      "sockets": 2,
+      "kind": "not this target"
+     },
+     {
+      "address": "172.20.0.2",
+      "port": 8123,
+      "sockets": 1,
+      "kind": "this target"
+     }
+    ],
+    "observedUtc": "2026-10-06T13:11:31.977Z"
+   },
+   {
+    "target": "vespa",
+    "hosting": "compose",
+    "route": "container address on its Docker network, not the published port (no docker-proxy)",
+    "endpoints": [
+     {
+      "what": "container gvb-vespa",
+      "address": "172.20.0.2",
+      "port": 8080,
+      "containerId": "d4d665486ac3",
+      "network": "engines_default",
+      "notUsed": "127.0.0.1:8090"
+     },
+     {
+      "what": "container gvb-vespa",
+      "address": "172.20.0.2",
+      "port": 19071,
+      "containerId": "d4d665486ac3",
+      "network": "engines_default",
+      "notUsed": "127.0.0.1:19071"
+     }
+    ],
+    "observed": [
+     {
+      "address": "172.20.0.2",
+      "port": 8080,
+      "sockets": 1,
+      "kind": "this target"
+     }
+    ],
+    "observedUtc": "2026-10-06T13:17:28.263Z"
+   },
+   {
+    "target": "oracle",
+    "hosting": "compose",
+    "route": "container address on its Docker network, not the published port (no docker-proxy)",
+    "endpoints": [
+     {
+      "what": "container gvb-oracle",
+      "address": "172.20.0.2",
+      "port": 1521,
+      "containerId": "0da3dc27bd31",
+      "network": "gvb-oracle_default",
+      "notUsed": "127.0.0.1:1521"
+     }
+    ],
+    "observed": [
+     {
+      "address": "172.20.0.2",
+      "port": 1521,
+      "sockets": 13,
+      "kind": "this target"
+     }
+    ],
+    "observedUtc": "2026-10-06T13:22:48.733Z"
+   },
+   {
+    "target": "elasticsearch",
+    "hosting": "compose",
+    "route": "container address on its Docker network, not the published port (no docker-proxy)",
+    "endpoints": [
+     {
+      "what": "container gvb-elasticsearch",
+      "address": "172.20.0.2",
+      "port": 9200,
+      "containerId": "f2716e40a93c",
+      "network": "engines_default",
+      "notUsed": "127.0.0.1:9200"
+     }
+    ],
+    "observed": [
+     {
+      "address": "172.20.0.2",
+      "port": 9200,
+      "sockets": 8,
+      "kind": "this target"
+     }
+    ],
+    "observedUtc": "2026-10-06T13:27:31.248Z"
+   },
+   {
+    "target": "sql",
+    "hosting": "compose",
+    "route": "container address on its Docker network, not the published port (no docker-proxy)",
+    "endpoints": [
+     {
+      "what": "container gvb-mssql",
+      "address": "172.20.0.2",
+      "port": 1433,
+      "containerId": "5e402e3af1a6",
+      "network": "gvb-mssql_default",
+      "notUsed": "127.0.0.1:14330"
+     }
+    ],
+    "observed": [
+     {
+      "address": "172.20.0.2",
+      "port": 1433,
+      "sockets": 9,
+      "kind": "this target"
+     }
+    ],
+    "observedUtc": "2026-10-06T13:30:02.922Z"
+   },
+   {
+    "target": "pgvector",
+    "hosting": "compose",
+    "route": "container address on its Docker network, not the published port (no docker-proxy)",
+    "endpoints": [
+     {
+      "what": "container gvb-pgvector",
+      "address": "172.20.0.2",
+      "port": 5432,
+      "containerId": "6d6073de90e0",
+      "network": "gvb-pgvector_default",
+      "notUsed": "127.0.0.1:5432"
+     }
+    ],
+    "observed": [
+     {
+      "address": "172.20.0.2",
+      "port": 5432,
+      "sockets": 8,
+      "kind": "this target"
+     }
+    ],
+    "observedUtc": "2026-10-06T13:34:16.527Z"
+   },
+   {
+    "target": "sqlitevec",
+    "hosting": "embedded",
+    "route": "in this process (embedded), no network",
+    "endpoints": [],
+    "observed": [],
+    "observedUtc": "2026-10-06T13:38:22.364Z",
+    "problem": "no open TCP connection was found"
+   },
+   {
+    "target": "qdrant",
+    "hosting": "compose",
+    "route": "container address on its Docker network, not the published port (no docker-proxy)",
+    "endpoints": [
+     {
+      "what": "container gvb-qdrant",
+      "address": "172.20.0.2",
+      "port": 6334,
+      "containerId": "880915fef269",
+      "network": "gvb-qdrant_default",
+      "notUsed": "127.0.0.1:16334"
+     },
+     {
+      "what": "container gvb-qdrant",
+      "address": "172.20.0.2",
+      "port": 6333,
+      "containerId": "880915fef269",
+      "network": "gvb-qdrant_default",
+      "notUsed": "127.0.0.1:16333"
+     }
+    ],
+    "observed": [
+     {
+      "address": "172.20.0.2",
+      "port": 6334,
+      "sockets": 1,
+      "kind": "this target"
+     }
+    ],
+    "observedUtc": "2026-10-06T13:40:46.214Z"
+   },
+   {
+    "target": "opensearch",
+    "hosting": "compose",
+    "route": "container address on its Docker network, not the published port (no docker-proxy)",
+    "endpoints": [
+     {
+      "what": "container gvb-opensearch",
+      "address": "172.20.0.2",
+      "port": 9200,
+      "containerId": "53b5350e8b2f",
+      "network": "engines_default",
+      "notUsed": "127.0.0.1:9201"
+     }
+    ],
+    "observed": [
+     {
+      "address": "172.20.0.2",
+      "port": 9200,
+      "sockets": 8,
+      "kind": "this target"
+     }
+    ],
+    "observedUtc": "2026-10-06T13:45:21.896Z"
+   },
+   {
+    "target": "qdrant-hnsw",
+    "hosting": "compose",
+    "route": "container address on its Docker network, not the published port (no docker-proxy)",
+    "endpoints": [
+     {
+      "what": "container gvb-qdrant",
+      "address": "172.20.0.2",
+      "port": 6334,
+      "containerId": "69832df26c6f",
+      "network": "gvb-qdrant_default",
+      "notUsed": "127.0.0.1:16334"
+     },
+     {
+      "what": "container gvb-qdrant",
+      "address": "172.20.0.2",
+      "port": 6333,
+      "containerId": "69832df26c6f",
+      "network": "gvb-qdrant_default",
+      "notUsed": "127.0.0.1:16333"
+     }
+    ],
+    "observed": [
+     {
+      "address": "172.20.0.2",
+      "port": 6334,
+      "sockets": 1,
+      "kind": "this target"
+     }
+    ],
+    "observedUtc": "2026-10-06T13:49:36.453Z"
+   },
+   {
+    "target": "redis",
+    "hosting": "compose",
+    "route": "container address on its Docker network, not the published port (no docker-proxy)",
+    "endpoints": [
+     {
+      "what": "container gvb-redis",
+      "address": "172.20.0.2",
+      "port": 6379,
+      "containerId": "26d9ff0dafd6",
+      "network": "gvb-redis_default",
+      "notUsed": "127.0.0.1:6379"
+     }
+    ],
+    "observed": [
+     {
+      "address": "172.20.0.2",
+      "port": 6379,
+      "sockets": 1,
+      "kind": "this target"
+     }
+    ],
+    "observedUtc": "2026-10-06T13:54:02.960Z"
+   },
+   {
+    "target": "milvus",
+    "hosting": "compose",
+    "route": "container address on its Docker network, not the published port (no docker-proxy)",
+    "endpoints": [
+     {
+      "what": "container gvb-milvus",
+      "address": "172.20.0.2",
+      "port": 19530,
+      "containerId": "b9f11218b6aa",
+      "network": "gvb-milvus_default",
+      "notUsed": "127.0.0.1:19530"
+     },
+     {
+      "what": "container gvb-milvus",
+      "address": "172.20.0.2",
+      "port": 9091,
+      "containerId": "b9f11218b6aa",
+      "network": "gvb-milvus_default",
+      "notUsed": "127.0.0.1:9091"
+     }
+    ],
+    "observed": [
+     {
+      "address": "172.20.0.2",
+      "port": 19530,
+      "sockets": 8,
+      "kind": "this target"
+     }
+    ],
+    "observedUtc": "2026-10-06T13:58:49.785Z"
+   },
+   {
+    "target": "mariadb",
+    "hosting": "compose",
+    "route": "container address on its Docker network, not the published port (no docker-proxy)",
+    "endpoints": [
+     {
+      "what": "container gvbbench-mariadb",
+      "address": "172.20.0.2",
+      "port": 3306,
+      "containerId": "52cb67e69c35",
+      "network": "gvbbench-mariadb_default",
+      "notUsed": "127.0.0.1:13306"
+     }
+    ],
+    "observed": [
+     {
+      "address": "172.20.0.2",
+      "port": 3306,
+      "sockets": 8,
+      "kind": "this target"
+     }
+    ],
+    "observedUtc": "2026-10-06T14:03:09.906Z"
+   },
+   {
+    "target": "weaviate",
+    "hosting": "compose",
+    "route": "container address on its Docker network, not the published port (no docker-proxy)",
+    "endpoints": [
+     {
+      "what": "container gvb-weaviate",
+      "address": "172.20.0.2",
+      "port": 8080,
+      "containerId": "41c8b7799a14",
+      "network": "gvb-weaviate_default",
+      "notUsed": "127.0.0.1:8085"
+     }
+    ],
+    "observed": [
+     {
+      "address": "172.20.0.2",
+      "port": 8080,
+      "sockets": 8,
+      "kind": "this target"
+     }
+    ],
+    "observedUtc": "2026-10-06T14:05:49.970Z"
+   },
+   {
+    "target": "mongodb",
+    "hosting": "compose",
+    "route": "container address on its Docker network, not the published port (no docker-proxy)",
+    "endpoints": [
+     {
+      "what": "container gvb-mongodb",
+      "address": "172.20.0.2",
+      "port": 27017,
+      "containerId": "441920b747a8",
+      "network": "gvb-mongodb_default",
+      "notUsed": "127.0.0.1:27017"
+     }
+    ],
+    "observed": [
+     {
+      "address": "172.20.0.2",
+      "port": 27017,
+      "sockets": 10,
+      "kind": "this target"
+     }
+    ],
+    "observedUtc": "2026-10-06T14:11:11.563Z"
+   },
+   {
+    "target": "chroma",
+    "hosting": "compose",
+    "route": "container address on its Docker network, not the published port (no docker-proxy)",
+    "endpoints": [
+     {
+      "what": "container gvb-chroma",
+      "address": "172.20.0.2",
+      "port": 8000,
+      "containerId": "94961ec20450",
+      "network": "gvb-chroma_default",
+      "notUsed": "127.0.0.1:8000"
+     }
+    ],
+    "observed": [
+     {
+      "address": "172.20.0.2",
+      "port": 8000,
+      "sockets": 8,
+      "kind": "this target"
+     }
+    ],
+    "observedUtc": "2026-10-06T14:14:36.397Z"
+   },
+   {
+    "target": "typesense",
+    "hosting": "compose",
+    "route": "container address on its Docker network, not the published port (no docker-proxy)",
+    "endpoints": [
+     {
+      "what": "container gvb-typesense",
+      "address": "172.20.0.2",
+      "port": 8108,
+      "containerId": "77eb2dcbee94",
+      "network": "engines_default",
+      "notUsed": "127.0.0.1:8108"
+     }
+    ],
+    "observed": [
+     {
+      "address": "172.20.0.2",
+      "port": 8108,
+      "sockets": 1,
+      "kind": "this target"
+     }
+    ],
+    "observedUtc": "2026-10-06T14:18:53.780Z"
+   },
+   {
+    "target": "sql-diskann",
+    "hosting": "compose",
+    "route": "container address on its Docker network, not the published port (no docker-proxy)",
+    "endpoints": [
+     {
+      "what": "container gvb-mssql",
+      "address": "172.20.0.2",
+      "port": 1433,
+      "containerId": "39d172c6c285",
+      "network": "gvb-mssql_default",
+      "notUsed": "127.0.0.1:14330"
+     }
+    ],
+    "observed": [
+     {
+      "address": "172.20.0.2",
+      "port": 1433,
+      "sockets": 9,
+      "kind": "this target"
+     }
+    ],
+    "observedUtc": "2026-10-06T14:23:13.749Z"
+   },
+   {
+    "target": "duckdb",
+    "hosting": "embedded",
+    "route": "in this process (embedded), no network",
+    "endpoints": [],
+    "observed": [],
+    "observedUtc": "2026-10-06T14:27:20.172Z",
+    "problem": "no open TCP connection was found"
+   }
+  ],
+  "cpuAccounting": "busy = user + nice + system + irq + softirq + steal (guest time is already in user); CONFIG_IRQ_TIME_ACCOUNTING is not set, so task and cgroup run time include the interrupt and softirq time that hit them and it is added; CONFIG_PARAVIRT_TIME_ACCOUNTING is not set, so steal is added (/boot/config-6.8.0-142-generic)",
+  "loadAverageEnd": "3.50 3.94 3.51",
+  "stateFile": "/home/dan/gvb-work/bench-machine-state.json",
+  "restored": [
+   "client affinity back to 0-7",
+   "governor back to schedutil on CPUs 0-7",
+   "CPU clock back: turbo on (/sys/devices/system/cpu/intel_pstate/no_turbo 0); every CPU's ceiling and floor read as before the run; uncore limit back to min 1200 MHz, max 3000 MHz (MSR 0x620 = 0xc1e)"
+  ],
+  "restoreProblems": [],
+  "flags": [
+   "sqlitevec is embedded: it ran inside the client process on the client CPUs 0-1,4-5, sharing them with the client.",
+   "duckdb is embedded: it ran inside the client process on the client CPUs 0-1,4-5, sharing them with the client.",
+   "WARNING: busy box during mongodb exact: processes outside the benchmark used 0.31 CPUs on average during the pass, above the limit of 0.3.",
+   "WARNING: clock off its pinned value during oracle default@8: the engine CPUs averaged 3121 MHz, -10.8% against the pinned 3500 MHz; the client CPUs averaged 3141 MHz, -10.3% against the pinned 3500 MHz (limit 1%); this pass is not comparable with passes at the pinned clock."
+  ]
+ }
+}
