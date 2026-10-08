@@ -192,12 +192,18 @@ public static class BenchResultsEndpoints
          body.Append( $"<p class=\"errors bench-banner\">{Enc( banner )}</p>" );
       }
 
+      if( BenchFolderNames.KindOf( run ) == BenchFolderKind.Blocked )
+      {
+         body.Append( $"<p class=\"muted\" data-notice=\"blocked-corrections\">{Enc( BenchLegends.BLOCKED_CORRECTIONS )} <a href=\"/bench-results\">{Enc( BenchLegends.L_BLOCKED_CORRECTIONS_LINK )}</a></p>" );
+      }
+
       string text = BenchReportStrip.Apply( rest, out int stripped );
       IReadOnlyList<BenchFolderFacts> facts = isSet ? Array.Empty<BenchFolderFacts>() : BenchRunUse.Scan( root );
       string? listError = null;
       IReadOnlyList<BenchRunNote> notes = isSet ? Array.Empty<BenchRunNote>() : BenchRunUse.RunNotesFor( facts, run, BenchRunNotes.ReadFile( notesFile, out listError ) );
       text = BenchRunNotes.Apply( text, notes, out IReadOnlyList<int> found );
-      body.Append( isSet ? SetBlock( folder ) : RunBlock( folder, run, facts, BenchRunNotes.Block( notes, found, listError ) ) );
+      int[] places = found.ToArray();
+      body.Append( isSet ? SetBlock( folder ) : RunBlock( folder, run, facts, notes, places, listError ) );
       string heading = recordOnly ? BenchLegends.H_REPORT_RECORD : BenchLegends.H_REPORT_TEXT;
       body.Append( reportError != null ? $"<p class=\"errors\">The report could not be read: {Enc( reportError )}</p>" : ReportHtml( md, text, stripped, isSet, heading ) );
       body.Append( RawFiles( folder, run, md == null ? null : Path.GetFileName( md ), stripped, notes.Count > 0 ) );
@@ -413,35 +419,41 @@ public static class BenchResultsEndpoints
    /// <summary>
    /// The block for one run folder: the run's table, then which consolidated folders use it, the note on why they
    /// reuse it and the clock warnings they dropped.
+   /// Why the corrections block is built here and after the table: the conditions lines of the table (warm-up, clock) are drawn from the run's notes and are marked as they are drawn, so the count of
+   /// places each correction carries is complete only once the table is built; the block is then put ahead of the table, where the page has always had it.
    /// </summary>
    /// <param name="folder">Folder path (already resolved).</param>
    /// <param name="run">Folder name.</param>
    /// <param name="facts">Every consolidated folder's facts.</param>
-   /// <param name="notesHtml">The block of corrections to this run's recorded statements (see <see cref="BenchRunNotes.Block"/>); empty for none.</param>
+   /// <param name="notes">The corrections to this run's recorded statements, in the order the markers number them.</param>
+   /// <param name="places">For each correction, how many lines of the report text carry its marker; raised by the lines of the table that are marked.</param>
+   /// <param name="listError">Why the list file could not be read, or null.</param>
    /// <returns>HTML fragment.</returns>
-   private static string RunBlock( string folder, string run, IReadOnlyList<BenchFolderFacts> facts, string notesHtml )
+   private static string RunBlock( string folder, string run, IReadOnlyList<BenchFolderFacts> facts, IReadOnlyList<BenchRunNote> notes, int[] places, string? listError )
    {
       string results = Path.Combine( folder, RESULTS_JSON );
       if( !File.Exists( results ) )
       {
-         return notesHtml;
+         return BenchRunNotes.Block( notes, places, listError );
       }
 
-      var html = new StringBuilder();
+      var head = new StringBuilder();
+      string table = string.Empty;
+      string? failure = null;
       try
       {
          BenchRunInfo info = BenchRunList.Describe( new DirectoryInfo( folder ) );
-         html.Append( $"<p class=\"bench-data muted\">Run started {Enc( info.When )} UTC. Data: {Enc( info.Data )}. Queries: {Enc( info.Queries )}.</p>" );
-         html.Append( UsedBy( facts, run ) );
-         html.Append( notesHtml );
-         html.Append( BenchRunTable.Block( BenchRunTable.Read( BenchRunList.ReadCapped( results ) ), BenchRunUse.NotesFor( facts, run ) ) );
+         head.Append( $"<p class=\"bench-data muted\">Run started {Enc( info.When )} UTC. Data: {Enc( info.Data )}. Queries: {Enc( info.Queries )}.</p>" );
+         head.Append( UsedBy( facts, run ) );
+         table = BenchRunTable.Block( BenchRunTable.Read( BenchRunList.ReadCapped( results ) ), BenchRunUse.NotesFor( facts, run ), line => BenchRunNotes.MarkLine( line, notes, places ) );
       }
       catch( Exception ex ) when( IsReadError( ex ) )
       {
-         html.Append( $"<p class=\"errors\">{Enc( BenchLegends.UNREADABLE )}: {Enc( ex.Message )}</p>" );
+         failure = ex.Message;
       }
 
-      return html.ToString();
+      string error = failure == null ? string.Empty : $"<p class=\"errors\">{Enc( BenchLegends.UNREADABLE )}: {Enc( failure )}</p>";
+      return head + BenchRunNotes.Block( notes, places, listError ) + table + error;
    }
 
    /// <summary>

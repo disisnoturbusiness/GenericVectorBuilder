@@ -21,6 +21,11 @@ What it lists (the same rules for every run it is given):
   any run      "an earlier run gave about 0.09 at 100,000" (a clause of the MariaDB index text): unbacked, no log was saved for it, the summary drops it, and a saved re-run (design/bench-inputs/
                mariadb-effort-2026-10-07) gives the range of recall@10 at ef 100 at 524 and at 2,000 vectors, computed here from its run.log.
 
+  any run      "so every CPU's clock is held at its ceiling of N MHz whatever the engine runs" (a clause of the machine control note, which the run page prints in the report text and, for a run with no
+               clock block, again on its clock line): for a v8 run (seed 800 or more) false, the saved observer analysis (analysis-80N.txt, line X02) reads a pass under the pin, quoted with its CPU,
+               its MHz and its basis points; for a v7 run (seed 700 to 799) unbacked, no saved reading of that run backs "whatever the engine runs", the summary drops the clause. Any other run that
+               holds the clause stops the script, because no rule says what to call it.
+
 Every external action is a local file read; there is no network and no subprocess. Run it from anywhere:
   make-run-page-notes.py --repo REPO --results REPO/bench-results --observer REPO/design/bench-inputs/observer-v8 --out REPO/deploy/bench/run-page-notes.json RUN...
 The observer files (analysis-801.txt to analysis-803.txt) are byte copies of the run operator's analysis, kept in the repository so the sources of the
@@ -39,6 +44,11 @@ GIB = 1024 * MIB
 WEAVIATE_STATEMENT = "weaviate.compose.yaml sets no persistence variable"
 FRAMING_STATEMENT = "Measured end to end through each engine's .NET client"
 MARIADB_STATEMENT = "an earlier run gave about 0.09 at 100,000"
+CLOCK_STATEMENT = re.compile(r"so every CPU's clock is held at its ceiling of (\d+) MHz whatever the engine runs")
+WORST_READING = re.compile(r"X02: .*?worst deviation ([\d.]+) bp \(([\w-]+)/(\S+) cpu(\d+) ([\d.]+) MHz\)(?:, limit (\d+) bp)?")
+V7_FIRST_SEED = 700
+V8_FIRST_SEED = 800
+BP_TOLERANCE = 0.1
 FACTS_FILE = "src/GenericVectorBuilder.Bench/Report/engine-facts.json"
 CLASSES_FILE = "deploy/bench/recorded-text-classes.json"
 MARIADB_DIR = "design/bench-inputs/mariadb-effort-2026-10-07"
@@ -278,6 +288,65 @@ def mariadb_notes(run, md, repo):
     return [note(run, "", "index", MARIADB_STATEMENT, "unbacked", text, sources)]
 
 
+def observer_worst(observer, ref, seed, run):
+    """The observer's worst per-CPU clock reading of one v8 run (line X02 of its saved analysis) and the repository path to cite; stops when the file or the line is missing."""
+    name = f"analysis-{seed}.txt"
+    path = os.path.join(observer, name)
+    if not os.path.exists(path):
+        raise Stop(f"{run}: the observer analysis {path} is not there, so the clock clause cannot be called false")
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            m = WORST_READING.search(line)
+            if m:
+                return m, line, f"{ref}/{name}"
+    raise Stop(f"{path}: no line X02 with a worst reading")
+
+
+def clock_notes(run, results, md, repo, observer, observer_ref):
+    """The clock clause of the machine control note: false for a v8 run (the saved observer reading puts a pass under the pin), unbacked for a v7 run (no saved reading of it)."""
+    found = sorted({m.group(0) for m in CLOCK_STATEMENT.finditer(md)})
+    if not found:
+        return []
+    if len(found) != 1:
+        raise Stop(f"{run}: the report holds {len(found)} different forms of the clock clause: {found}")
+    statement = found[0]
+    ceiling = int(CLOCK_STATEMENT.search(statement).group(1))
+    seed = results.get("runSeed")
+    if not isinstance(seed, int):
+        raise Stop(f"{run}: the report holds the clock clause and results.json has no runSeed, so the rule for v7 and v8 cannot be applied")
+    index = next((i for i, n in enumerate(results.get("notes") or []) if statement in n), None)
+    if index is None:
+        raise Stop(f"{run}: the clock clause is in results.md and in no entry of results.json notes")
+    drop = '"drop": "clock-held"'
+    file_line_with(repo, CLASSES_FILE, drop)
+    sources = [{"kind": "results", "ref": f"results@{run}:notes[{index}]#{statement}", "value": statement}]
+    if seed >= V8_FIRST_SEED:
+        m, _, cite = observer_worst(observer, observer_ref, seed, run)
+        bp, target, label, cpu, mhz = float(m.group(1)), m.group(2), m.group(3), m.group(4), float(m.group(5))
+        if mhz >= ceiling or abs((ceiling - mhz) * 10000.0 / ceiling - bp) > BP_TOLERANCE:
+            raise Stop(f"{run}: the observer's worst reading ({mhz} MHz, {bp} bp) is not {bp} bp under the pin of {ceiling} MHz")
+        token = f"worst deviation {m.group(1)} bp ({target}/{label} cpu{cpu} {m.group(5)} MHz)"
+        file_line_with(repo, f"{cite}", token)
+        limit = f" That is inside the observer's own limit of {m.group(6)} basis points: the pin held to within that, and it did not hold at the ceiling." if m.group(6) else ""
+        pass_name = f"{label} pass (eight searchers at once)" if label.endswith("@8") else f"{label} pass"
+        text = (f"The observer's APERF and MPERF readings of this run put {target}'s {pass_name} under the pin: CPU {cpu} read {m.group(5)} MHz against {ceiling} MHz, "
+                f"{m.group(1)} basis points under it ({bp / 100.0:.3f} percent).{limit} The clause says every CPU's clock is held at its ceiling whatever the engine runs; "
+                f"for that pass it was not. The summary does not print the clause.")
+        sources.append({"kind": "file", "ref": f"{cite}#{token}", "value": token})
+        kind = "false"
+    elif seed >= V7_FIRST_SEED:
+        words = "Byte copies of the run operator's analysis of the three v8 runs (seeds 801, 802, 803)"
+        file_line_with(repo, f"{observer_ref}/SOURCES.txt", words)
+        text = (f"No saved reading backs the clause for this run. The APERF and MPERF analyses kept in {observer_ref} are of the three v8 runs, not of this one, and the summary does not print the clause. "
+                f"In the v8 runs, made under the same pin, the observer read a pass under it (see the correction to the clause on those pages).")
+        sources.append({"kind": "file", "ref": f"{observer_ref}/SOURCES.txt#{words}", "value": words})
+        kind = "unbacked"
+    else:
+        raise Stop(f"{run}: the report holds the clock clause and its seed {seed} is neither a v7 run (700 to 799) nor a v8 run (800 or more)")
+    sources.append({"kind": "file", "ref": f"{CLASSES_FILE}#{drop}", "value": drop})
+    return [note(run, "", "notes", statement, kind, text, sources)]
+
+
 def main(argv):
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", required=True)
@@ -304,6 +373,7 @@ def main(argv):
             notes += witness_notes(run, results, secs, x12, x12_path)
         notes += framing_notes(run, results, md, a.repo)
         notes += mariadb_notes(run, md, a.repo)
+        notes += clock_notes(run, results, md, a.repo, a.observer, a.observer_ref)
     doc = {"format": "run-page-notes-1", "generatedBy": "deploy/bench/make-run-page-notes.py", "runs": a.runs, "notes": notes}
     out_dir = os.path.dirname(os.path.abspath(a.out))
     fd, tmp = tempfile.mkstemp(dir=out_dir, prefix=".run-page-notes.", suffix=".tmp")

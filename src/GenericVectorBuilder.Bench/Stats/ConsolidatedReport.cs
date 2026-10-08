@@ -121,6 +121,13 @@ public sealed class ConsolidatedReport
    /// </summary>
    public List<RecordedTextRecord> RecordedTexts { get; set; } = new();
 
+   /// <summary>
+   /// The recorded statements the repository's run-page notes list marks as false, misleading or unbacked, each with its correction and sources, in list order.
+   /// Why in the result: the summary page draws the table of all corrections from this field and the run pages of the set's runs print the same entries, so what a set says about its runs' records
+   /// travels with the set.
+   /// </summary>
+   public List<RunPageNoteRecord> RunPageNotes { get; set; } = new();
+
    /// <summary>Every sentence consolidated.md or the page prints, in reading order, each with its sources.</summary>
    public List<SentenceRecord> Sentences { get; set; } = new();
 
@@ -1855,6 +1862,52 @@ public sealed class ReuseNote
 
    /// <summary>The session's runs (folder names), so a page can say it on the run pages of exactly these runs.</summary>
    public List<string> Runs { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>One correction to a recorded statement, as the run-page notes list holds it.</summary>
+public sealed class RunPageNoteRecord
+{
+   #region Public Methods
+
+   /// <summary>The run folders whose report holds the statement.</summary>
+   public List<string> Runs { get; set; } = new();
+
+   /// <summary>The engine whose section of the report holds the statement; empty when it belongs to no engine.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>The recorded field the statement comes from; empty when the list gives none.</summary>
+   public string Field { get; set; } = string.Empty;
+
+   /// <summary>The statement, exactly as the run's report holds it.</summary>
+   public string Statement { get; set; } = string.Empty;
+
+   /// <summary>false, misleading or unbacked.</summary>
+   public string Kind { get; set; } = string.Empty;
+
+   /// <summary>The correction.</summary>
+   public string Note { get; set; } = string.Empty;
+
+   /// <summary>What the correction is bound to; at least one.</summary>
+   public List<RunPageNoteSourceRecord> Sources { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>One source of a correction.</summary>
+public sealed class RunPageNoteSourceRecord
+{
+   #region Public Methods
+
+   /// <summary>file or results.</summary>
+   public string Kind { get; set; } = string.Empty;
+
+   /// <summary>Where the source is, in the grammar of the list.</summary>
+   public string Ref { get; set; } = string.Empty;
+
+   /// <summary>The words or figure the source holds.</summary>
+   public string Value { get; set; } = string.Empty;
 
    #endregion Public Methods
 }

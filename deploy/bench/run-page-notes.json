@@ -1060,6 +1060,33 @@
   },
   {
    "runs": [
+    "20261006-130619-eshoponweb"
+   ],
+   "target": "",
+   "field": "notes",
+   "statement": "so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs",
+   "kind": "unbacked",
+   "note": "No saved reading backs the clause for this run. The APERF and MPERF analyses kept in design/bench-inputs/observer-v8 are of the three v8 runs, not of this one, and the summary does not print the clause. In the v8 runs, made under the same pin, the observer read a pass under it (see the correction to the clause on those pages).",
+   "sources": [
+    {
+     "kind": "results",
+     "ref": "results@20261006-130619-eshoponweb:notes[14]#so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs",
+     "value": "so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/SOURCES.txt#Byte copies of the run operator's analysis of the three v8 runs (seeds 801, 802, 803)",
+     "value": "Byte copies of the run operator's analysis of the three v8 runs (seeds 801, 802, 803)"
+    },
+    {
+     "kind": "file",
+     "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"clock-held\"",
+     "value": "\"drop\": \"clock-held\""
+    }
+   ]
+  },
+  {
+   "runs": [
     "20261006-142724-eshoponweb"
    ],
    "target": "weaviate",
@@ -1208,6 +1235,33 @@
   },
   {
    "runs": [
+    "20261006-142724-eshoponweb"
+   ],
+   "target": "",
+   "field": "notes",
+   "statement": "so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs",
+   "kind": "unbacked",
+   "note": "No saved reading backs the clause for this run. The APERF and MPERF analyses kept in design/bench-inputs/observer-v8 are of the three v8 runs, not of this one, and the summary does not print the clause. In the v8 runs, made under the same pin, the observer read a pass under it (see the correction to the clause on those pages).",
+   "sources": [
+    {
+     "kind": "results",
+     "ref": "results@20261006-142724-eshoponweb:notes[14]#so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs",
+     "value": "so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/SOURCES.txt#Byte copies of the run operator's analysis of the three v8 runs (seeds 801, 802, 803)",
+     "value": "Byte copies of the run operator's analysis of the three v8 runs (seeds 801, 802, 803)"
+    },
+    {
+     "kind": "file",
+     "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"clock-held\"",
+     "value": "\"drop\": \"clock-held\""
+    }
+   ]
+  },
+  {
+   "runs": [
     "20261006-154837-eshoponweb"
    ],
    "target": "weaviate",
@@ -1351,6 +1405,33 @@
      "kind": "file",
      "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"mariadb-recall\"",
      "value": "\"drop\": \"mariadb-recall\""
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261006-154837-eshoponweb"
+   ],
+   "target": "",
+   "field": "notes",
+   "statement": "so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs",
+   "kind": "unbacked",
+   "note": "No saved reading backs the clause for this run. The APERF and MPERF analyses kept in design/bench-inputs/observer-v8 are of the three v8 runs, not of this one, and the summary does not print the clause. In the v8 runs, made under the same pin, the observer read a pass under it (see the correction to the clause on those pages).",
+   "sources": [
+    {
+     "kind": "results",
+     "ref": "results@20261006-154837-eshoponweb:notes[14]#so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs",
+     "value": "so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/SOURCES.txt#Byte copies of the run operator's analysis of the three v8 runs (seeds 801, 802, 803)",
+     "value": "Byte copies of the run operator's analysis of the three v8 runs (seeds 801, 802, 803)"
+    },
+    {
+     "kind": "file",
+     "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"clock-held\"",
+     "value": "\"drop\": \"clock-held\""
     }
    ]
   },
@@ -1641,6 +1722,33 @@
   },
   {
    "runs": [
+    "20261007-205106-eshoponweb"
+   ],
+   "target": "",
+   "field": "notes",
+   "statement": "so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs",
+   "kind": "false",
+   "note": "The observer's APERF and MPERF readings of this run put oracle's default@8 pass (eight searchers at once) under the pin: CPU 7 read 3476.97 MHz against 3500 MHz, 65.8 basis points under it (0.658 percent). That is inside the observer's own limit of 100 basis points: the pin held to within that, and it did not hold at the ceiling. The clause says every CPU's clock is held at its ceiling whatever the engine runs; for that pass it was not. The summary does not print the clause.",
+   "sources": [
+    {
+     "kind": "results",
+     "ref": "results@20261007-205106-eshoponweb:notes[16]#so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs",
+     "value": "so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-801.txt#worst deviation 65.8 bp (oracle/default@8 cpu7 3476.97 MHz)",
+     "value": "worst deviation 65.8 bp (oracle/default@8 cpu7 3476.97 MHz)"
+    },
+    {
+     "kind": "file",
+     "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"clock-held\"",
+     "value": "\"drop\": \"clock-held\""
+    }
+   ]
+  },
+  {
+   "runs": [
     "20261007-221429-eshoponweb"
    ],
    "target": "weaviate",
@@ -1921,6 +2029,33 @@
      "kind": "file",
      "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"mariadb-recall\"",
      "value": "\"drop\": \"mariadb-recall\""
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-221429-eshoponweb"
+   ],
+   "target": "",
+   "field": "notes",
+   "statement": "so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs",
+   "kind": "false",
+   "note": "The observer's APERF and MPERF readings of this run put oracle's default@8 pass (eight searchers at once) under the pin: CPU 7 read 3483.59 MHz against 3500 MHz, 46.9 basis points under it (0.469 percent). That is inside the observer's own limit of 100 basis points: the pin held to within that, and it did not hold at the ceiling. The clause says every CPU's clock is held at its ceiling whatever the engine runs; for that pass it was not. The summary does not print the clause.",
+   "sources": [
+    {
+     "kind": "results",
+     "ref": "results@20261007-221429-eshoponweb:notes[16]#so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs",
+     "value": "so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-802.txt#worst deviation 46.9 bp (oracle/default@8 cpu7 3483.59 MHz)",
+     "value": "worst deviation 46.9 bp (oracle/default@8 cpu7 3483.59 MHz)"
+    },
+    {
+     "kind": "file",
+     "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"clock-held\"",
+     "value": "\"drop\": \"clock-held\""
     }
    ]
   },
@@ -2255,6 +2390,33 @@
      "kind": "file",
      "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"mariadb-recall\"",
      "value": "\"drop\": \"mariadb-recall\""
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-233551-eshoponweb"
+   ],
+   "target": "",
+   "field": "notes",
+   "statement": "so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs",
+   "kind": "false",
+   "note": "The observer's APERF and MPERF readings of this run put oracle's default@8 pass (eight searchers at once) under the pin: CPU 7 read 3482.66 MHz against 3500 MHz, 49.5 basis points under it (0.495 percent). That is inside the observer's own limit of 100 basis points: the pin held to within that, and it did not hold at the ceiling. The clause says every CPU's clock is held at its ceiling whatever the engine runs; for that pass it was not. The summary does not print the clause.",
+   "sources": [
+    {
+     "kind": "results",
+     "ref": "results@20261007-233551-eshoponweb:notes[16]#so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs",
+     "value": "so every CPU's clock is held at its ceiling of 3500 MHz whatever the engine runs"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-803.txt#worst deviation 49.5 bp (oracle/default@8 cpu7 3482.66 MHz)",
+     "value": "worst deviation 49.5 bp (oracle/default@8 cpu7 3482.66 MHz)"
+    },
+    {
+     "kind": "file",
+     "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"clock-held\"",
+     "value": "\"drop\": \"clock-held\""
     }
    ]
   }

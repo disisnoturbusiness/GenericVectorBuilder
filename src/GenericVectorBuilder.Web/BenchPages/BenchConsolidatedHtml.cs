@@ -1220,7 +1220,7 @@ public static class BenchConsolidatedHtml
    /// <summary>
    /// The "not separated from" cell: the display names of the ranked engines the row is not separated from (an engine
    /// that is not ranked, because its pass was not held, is never named), "one session" for a row that is not
-   /// ranked, the not held text for a row whose pass was not held, or a dash when the row is separated from every engine.
+   /// ranked, the not held text for a row whose pass was not held, or "none" when the row is separated from every engine (a dash means "no figure" on this page, and the Markdown report says "none").
    /// </summary>
    /// <param name="row">The row.</param>
    /// <param name="names">Display names by target.</param>
@@ -1238,7 +1238,7 @@ public static class BenchConsolidatedHtml
       }
 
       List<string> listed = row.NotSeparatedFrom.Where( names.ContainsKey ).Select( t => names[t] ).ToList();
-      return listed.Count == 0 ? "-" : BenchFormat.Enc( string.Join( ", ", listed ) );
+      return listed.Count == 0 ? BenchFormat.Enc( BenchLegends.L_NONE ) : BenchFormat.Enc( string.Join( ", ", listed ) );
    }
 
    /// <summary>

@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace GenericVectorBuilder.Web.BenchPages;
 
@@ -54,6 +55,8 @@ public static class BenchRunNotes
 
    /// <summary>The word after the marker's opening bracket in the report text; the correction's number follows it.</summary>
    public const string MARKER_WORD = "Correction";
+
+   private static readonly Regex MARKER = new( @" \*\*\[" + MARKER_WORD + @" (\d+)\]\*\*", RegexOptions.CultureInvariant, TimeSpan.FromSeconds( 2 ) );
 
    #endregion Data Members
 
@@ -154,6 +157,34 @@ public static class BenchRunNotes
 
       found = counts;
       return string.Join( '\n', lines );
+   }
+
+   /// <summary>
+   /// A line the page draws from a run's recorded notes and not from the report text (the warm-up line and the clock line of the conditions), as HTML with the marker put after each whole occurrence of a
+   /// statement of the list, the same marker the report text carries. Why: a statement that the report text holds is printed a second time on these lines, and a correction that marks one place
+   /// and not the other tells a reader the unmarked place is fine. Only a note with no engine marks such a line, because the line belongs to no engine's section.
+   /// </summary>
+   /// <param name="line">The recorded text.</param>
+   /// <param name="notes">The notes of this run, in the order the page lists them.</param>
+   /// <param name="places">For each note, how many places carry its marker so far; raised by the lines this call marks.</param>
+   /// <returns>HTML fragment: the text encoded, with a marker element after each marked statement.</returns>
+   public static string MarkLine( string line, IReadOnlyList<BenchRunNote> notes, int[] places )
+   {
+      string marked = Apply( line, notes, out IReadOnlyList<int> found );
+      for( int n = 0; n < notes.Count && n < places.Length; n++ )
+      {
+         places[n] += found[n];
+      }
+
+      var html = new StringBuilder();
+      int from = 0;
+      foreach( Match m in MARKER.Matches( marked ) )
+      {
+         html.Append( BenchFormat.Enc( marked[from..m.Index] ) ).Append( $" <strong>[{MARKER_WORD} {m.Groups[1].Value}]</strong>" );
+         from = m.Index + m.Length;
+      }
+
+      return html.Append( BenchFormat.Enc( marked[from..] ) ).ToString();
    }
 
    /// <summary>

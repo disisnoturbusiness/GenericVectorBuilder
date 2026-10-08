@@ -178,6 +178,15 @@ public static class BenchLegends
    /// <summary>Banner of a blocked folder.</summary>
    public const string BANNER_BLOCKED = "This set is marked blocked by its folder name. It is kept as evidence. The summary page does not use it and its numbers are not the published ones.";
 
+   /// <summary>The cell of a ranked row that is separated from every other engine; the Markdown report says the same word.</summary>
+   public const string L_NONE = "none";
+
+   /// <summary>The text of the link at the end of the blocked set's pointer line.</summary>
+   public const string L_BLOCKED_CORRECTIONS_LINK = "Summary and all runs";
+
+   /// <summary>The line on the page of a blocked set that points to the corrections: its report is kept as written, with the statements the run pages correct left unmarked.</summary>
+   public const string BLOCKED_CORRECTIONS = "This report is kept as written. Statements the run pages mark as false, misleading or unbacked are printed here unmarked; the corrections are on those run pages and in the summary's list.";
+
    /// <summary>Notice for a consolidated file in a shape this page no longer shows as a result.</summary>
    public const string OLDER_FORMAT = "This file is in an older format. The page draws no headline and no table from it.";
 

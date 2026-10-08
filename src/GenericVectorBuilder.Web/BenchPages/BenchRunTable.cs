@@ -103,11 +103,12 @@ public static class BenchRunTable
    /// </summary>
    /// <param name="summary">The run's figures.</param>
    /// <param name="notes">Notes to print under an engine's name, with their sources, by target (taken from the sets that use the run), or null for none.</param>
+   /// <param name="mark">Turns a recorded text of the conditions (the warm-up and clock lines) into HTML with the run's correction markers; null prints the text encoded, unmarked.</param>
    /// <returns>HTML fragment.</returns>
-   public static string Block( BenchRunSummary summary, IReadOnlyDictionary<string, BenchRowNote>? notes = null )
+   public static string Block( BenchRunSummary summary, IReadOnlyDictionary<string, BenchRowNote>? notes = null, Func<string, string>? mark = null )
    {
       var html = new StringBuilder( "<section class=\"bench-summary\">" );
-      html.Append( Conditions( summary.Conditions ) );
+      html.Append( Conditions( summary.Conditions, mark ) );
       html.Append( "<div class=\"preview\"><table class=\"bench-table\"><thead><tr><th>Engine</th><th class=\"n\">p50 (ms)</th><th class=\"n\">Searches per second, one searcher</th><th class=\"n\">Searches per second, eight searchers at once</th>" );
       html.Append( $"<th class=\"n\">Exact mode p50 (ms)</th><th class=\"n\">{BenchFormat.Enc( BenchLegends.H_CLIENT_CPU_1 )}</th><th>Recall in hits</th><th>Flags</th></tr></thead><tbody>" );
       foreach( BenchRunRow row in summary.Rows )
@@ -132,8 +133,9 @@ public static class BenchRunTable
    /// The conditions of a run as label and value pairs in one paragraph, or the plain statement that none were recorded.
    /// </summary>
    /// <param name="conditions">The conditions.</param>
+   /// <param name="mark">Turns a recorded text into HTML with the correction markers; null prints it encoded, unmarked.</param>
    /// <returns>HTML fragment.</returns>
-   public static string Conditions( BenchConditions conditions )
+   public static string Conditions( BenchConditions conditions, Func<string, string>? mark = null )
    {
       var pairs = new List<string>();
       pairs.AddRange( conditions.Machine.Select( p => $"{BenchFormat.Enc( p.Key )} {BenchFormat.Enc( p.Value )}" ) );
@@ -151,7 +153,7 @@ public static class BenchRunTable
       }
 
       var html = new StringBuilder( $"<p class=\"bench-conditions muted\">Machine: {string.Join( "; ", pairs )}.</p>" );
-      html.Append( Warmup( conditions ) ).Append( ClockLines( conditions ) );
+      html.Append( Warmup( conditions, mark ) ).Append( ClockLines( conditions, mark ) );
       return html.ToString();
    }
 
@@ -165,12 +167,13 @@ public static class BenchRunTable
    /// printed as "searches" states a method the run did not use.
    /// </summary>
    /// <param name="conditions">The conditions.</param>
+   /// <param name="mark">Marks a recorded text, or null.</param>
    /// <returns>HTML fragment; empty when the run recorded neither.</returns>
-   private static string Warmup( BenchConditions conditions )
+   private static string Warmup( BenchConditions conditions, Func<string, string>? mark )
    {
       if( conditions.WarmupMethod != null )
       {
-         return $"<p class=\"bench-conditions muted\" data-line=\"warmup\">{BenchFormat.Enc( BenchLegends.L_WARMUP_RECORDED )} {BenchFormat.Enc( conditions.WarmupMethod )}</p>";
+         return $"<p class=\"bench-conditions muted\" data-line=\"warmup\">{BenchFormat.Enc( BenchLegends.L_WARMUP_RECORDED )} {Marked( conditions.WarmupMethod, mark )}</p>";
       }
 
       return conditions.WarmupField == null ? string.Empty
@@ -182,8 +185,9 @@ public static class BenchRunTable
    /// pin, or the statement that none is recorded when machine control was on.
    /// </summary>
    /// <param name="conditions">The conditions.</param>
+   /// <param name="mark">Marks a recorded text, or null.</param>
    /// <returns>HTML fragment; empty when the run says nothing about its clock.</returns>
-   private static string ClockLines( BenchConditions conditions )
+   private static string ClockLines( BenchConditions conditions, Func<string, string>? mark )
    {
       if( conditions.Clock.Count > 0 )
       {
@@ -192,10 +196,21 @@ public static class BenchRunTable
 
       if( conditions.ClockNote != null )
       {
-         return $"<p class=\"bench-conditions muted\" data-line=\"clock\">{BenchFormat.Enc( BenchLegends.L_CLOCK_RECORDED )} {BenchFormat.Enc( conditions.ClockNote )}</p>";
+         return $"<p class=\"bench-conditions muted\" data-line=\"clock\">{BenchFormat.Enc( BenchLegends.L_CLOCK_RECORDED )} {Marked( conditions.ClockNote, mark )}</p>";
       }
 
       return conditions.NoClockPinRecorded ? $"<p class=\"bench-conditions muted\" data-line=\"clock\">{BenchFormat.Enc( BenchLegends.L_NO_CLOCK_PIN )}</p>" : string.Empty;
+   }
+
+   /// <summary>
+   /// A recorded text as HTML: marked by the caller's function when it gave one, encoded as it stands otherwise.
+   /// </summary>
+   /// <param name="text">The recorded text.</param>
+   /// <param name="mark">The caller's marking function, or null.</param>
+   /// <returns>HTML fragment.</returns>
+   private static string Marked( string text, Func<string, string>? mark )
+   {
+      return mark == null ? BenchFormat.Enc( text ) : mark( text );
    }
 
    /// <summary>

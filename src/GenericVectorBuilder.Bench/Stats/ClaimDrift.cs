@@ -59,6 +59,8 @@ public static class ClaimDrift
    /// <summary>
    /// The drift section: per target and metric the move of the median from the first session to the
    /// second, the median and largest absolute move, unconfirmed orders and pairs close to the line.
+   /// Why the median is taken over the exact moves: each listed move is rounded to a basis point, and a median of those rounded moves, rounded again, can sit half a basis point or more from the
+   /// median of the moves themselves (143.5 bp against 143.3 bp for v7 to v8). The median is computed once, over the unrounded moves, and rounded once; the largest move is a single move rounded once.
    /// </summary>
    /// <param name="outcomes">Per-metric results (tables and pairs).</param>
    /// <param name="sessions">The two claim sessions.</param>
@@ -67,13 +69,16 @@ public static class ClaimDrift
    public static DriftInfo Drift( IReadOnlyList<MetricOutcome> outcomes, IReadOnlyList<ClaimSession> sessions, int tBp )
    {
       var drift = new DriftInfo { From = sessions[0].Name, To = sessions[1].Name };
+      var exactMoves = new List<double>();
       foreach( MetricOutcome outcome in outcomes )
       {
          foreach( MetricRow row in outcome.Table.Rows.Where( r => r.Status == ClaimRule.RANKED ) )
          {
             double from = ClaimRule.Median( row.PerSession[drift.From].Runs );
             double to = ClaimRule.Median( row.PerSession[drift.To].Runs );
-            drift.PerTarget.Add( new DriftMove { Target = row.Target, Metric = outcome.Metric, MoveBp = (int)Math.Round( ( to / from - 1 ) * 10000, MidpointRounding.AwayFromZero ) } );
+            double exactBp = ( to / from - 1 ) * 10000;
+            exactMoves.Add( Math.Abs( exactBp ) );
+            drift.PerTarget.Add( new DriftMove { Target = row.Target, Metric = outcome.Metric, MoveBp = (int)Math.Round( exactBp, MidpointRounding.AwayFromZero ) } );
          }
 
          foreach( MetricRow row in outcome.Table.Rows.Where( r => r.Status == ClaimRule.NOT_HELD && r.PerSession.ContainsKey( drift.From ) && r.PerSession.ContainsKey( drift.To ) ) )
@@ -91,7 +96,7 @@ public static class ClaimDrift
 
       if( drift.PerTarget.Count > 0 )
       {
-         drift.MedianAbsMoveBp = (int)Math.Round( ClaimRule.Median( drift.PerTarget.Select( d => (double)Math.Abs( d.MoveBp ) ).ToList() ), MidpointRounding.AwayFromZero );
+         drift.MedianAbsMoveBp = (int)Math.Round( ClaimRule.Median( exactMoves ), MidpointRounding.AwayFromZero );
          drift.Largest = drift.PerTarget.OrderByDescending( d => Math.Abs( d.MoveBp ) ).ThenBy( d => d.Metric, StringComparer.Ordinal ).ThenBy( d => d.Target, StringComparer.Ordinal ).First();
       }
 

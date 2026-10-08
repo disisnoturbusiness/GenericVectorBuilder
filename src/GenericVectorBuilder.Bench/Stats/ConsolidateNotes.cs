@@ -11,7 +11,17 @@ namespace GenericVectorBuilder.Bench.Stats;
 /// <param name="Statement">The statement as the run's report holds it.</param>
 /// <param name="Kind">One of <see cref="RunPageNoteList.KINDS"/>.</param>
 /// <param name="Text">The correction.</param>
-public sealed record RunPageNote( IReadOnlyList<string> Runs, string Target, string Statement, string Kind, string Text );
+/// <param name="Field">The recorded field the statement comes from (for example "disk.text" or "notes"); empty when the list gives none.</param>
+/// <param name="Sources">What the correction is bound to: a recorded field of a run, a repository file; at least one for a note read from a list.</param>
+public sealed record RunPageNote( IReadOnlyList<string> Runs, string Target, string Statement, string Kind, string Text, string Field = "", IReadOnlyList<RunPageNoteSource>? Sources = null );
+
+/// <summary>
+/// One source of a correction in the run-page notes list.
+/// </summary>
+/// <param name="Kind">What the source is ("file" or "results").</param>
+/// <param name="Ref">Where it is, in the grammar of the list.</param>
+/// <param name="Value">The words or figure the source holds.</param>
+public sealed record RunPageNoteSource( string Kind, string Ref, string Value );
 
 /// <summary>
 /// The list of recorded statements the repository marks as false, misleading or unbacked (deploy/bench/run-page-notes.json), as the consolidation reads it.
@@ -112,6 +122,34 @@ public sealed class RunPageNoteList
    }
 
    /// <summary>
+   /// The notes as the consolidated file carries them ("runPageNotes"), in list order, each with only the runs the set uses.
+   /// Why in the file: the summary page draws a table of all corrections from the file, and the page of each run reads the entries of the folders that use it, so the corrections a set states about
+   /// its runs travel with the set and a later change of the repository's list does not change what a published set said.
+   /// Why only the runs the set uses: the page refuses a file whose correction names a run the set does not link to (the correction would be printed on no page a reader reaches from the set), and the
+   /// repository's list also covers older runs the set leaves out; a note that names none of the set's runs is left out, and the run pages of the older runs keep reading the repository's list.
+   /// </summary>
+   /// <param name="usedRuns">The run folders of the set's sessions and basis.</param>
+   /// <returns>One record per note that names at least one of the set's runs.</returns>
+   public List<RunPageNoteRecord> ToRecords( IReadOnlyCollection<string> usedRuns )
+   {
+      var records = new List<RunPageNoteRecord>();
+      foreach( RunPageNote n in Notes )
+      {
+         List<string> runs = n.Runs.Where( r => usedRuns.Contains( r, StringComparer.Ordinal ) ).ToList();
+         if( runs.Count > 0 )
+         {
+            records.Add( new RunPageNoteRecord
+            {
+               Runs = runs, Target = n.Target, Field = n.Field, Statement = n.Statement, Kind = n.Kind, Note = n.Text,
+               Sources = ( n.Sources ?? Array.Empty<RunPageNoteSource>() ).Select( s => new RunPageNoteSourceRecord { Kind = s.Kind, Ref = s.Ref, Value = s.Value } ).ToList(),
+            } );
+         }
+      }
+
+      return records;
+   }
+
+   /// <summary>
    /// The first note that marks a statement held by one run's field of one target.
    /// </summary>
    /// <param name="run">The run folder name.</param>
@@ -203,7 +241,37 @@ public sealed class RunPageNoteList
 
       string statement = Text( e, "statement" ) is { Length: > 0 } s ? s : throw new ConsolidateRefusal( $"the run-page notes list: {where}.statement is missing" );
       string note = Text( e, "note" ) is { Length: > 0 } t ? t : throw new ConsolidateRefusal( $"the run-page notes list: {where}.note is missing" );
-      return new RunPageNote( runs.Distinct( StringComparer.Ordinal ).ToList(), Text( e, "target" ) ?? string.Empty, statement, kind, note );
+      return new RunPageNote( runs.Distinct( StringComparer.Ordinal ).ToList(), Text( e, "target" ) ?? string.Empty, statement, kind, note, Text( e, "field" ) ?? string.Empty, ReadSources( e, where ) );
+   }
+
+   /// <summary>
+   /// Reads the sources of one note. Why at least one: the page draws a correction only with what it is bound to, so a note with none could not be shown, and the file this list goes into would be refused.
+   /// </summary>
+   /// <param name="e">The note's object.</param>
+   /// <param name="where">Where the note sits in the file, for messages.</param>
+   /// <returns>The sources in list order.</returns>
+   /// <exception cref="ConsolidateRefusal">There is no source, or one lacks a kind, a ref or a value.</exception>
+   private static List<RunPageNoteSource> ReadSources( JsonElement e, string where )
+   {
+      if( !e.TryGetProperty( "sources", out JsonElement list ) || list.ValueKind != JsonValueKind.Array || list.GetArrayLength() == 0 )
+      {
+         throw new ConsolidateRefusal( $"the run-page notes list: {where}.sources is empty; a correction with no source is not printed" );
+      }
+
+      var sources = new List<RunPageNoteSource>();
+      foreach( ( JsonElement source, int j ) in list.EnumerateArray().Select( ( x, j ) => ( x, j ) ) )
+      {
+         string kind = source.ValueKind == JsonValueKind.Object ? Text( source, "kind" ) ?? string.Empty : string.Empty;
+         string reference = source.ValueKind == JsonValueKind.Object ? Text( source, "ref" ) ?? string.Empty : string.Empty;
+         if( kind.Length == 0 || reference.Length == 0 )
+         {
+            throw new ConsolidateRefusal( $"the run-page notes list: {where}.sources[{j}] needs a kind and a ref" );
+         }
+
+         sources.Add( new RunPageNoteSource( kind, reference, Text( source, "value" ) ?? string.Empty ) );
+      }
+
+      return sources;
    }
 
    /// <summary>

@@ -70,17 +70,17 @@ public class BenchResultsConsolidatedTests
    }
 
    /// <summary>
-   /// A row names the engines it is not separated from by their display names, and a row separated from every engine prints a dash.
+   /// A row names the engines it is not separated from by their display names, and a row separated from every engine prints "none" (v8j: a dash means "no figure" on this page).
    /// </summary>
    [Fact]
-   public void NotSeparated_NamesTheEngines_AndAFullySeparatedRowPrintsADash()
+   public void NotSeparated_NamesTheEngines_AndAFullySeparatedRowPrintsNone()
    {
       string html = Html();
       string mariadb = RowOf( html, "p50Ms", "mariadb" );
       string redis = RowOf( html, "p50Ms", "redis" );
 
       Assert.Contains( "<td>pgvector</td>", mariadb );
-      Assert.Contains( "<td>-</td>", redis );
+      Assert.Contains( "<td>none</td>", redis );
       Assert.DoesNotContain( "Redis, ", mariadb );
    }
 

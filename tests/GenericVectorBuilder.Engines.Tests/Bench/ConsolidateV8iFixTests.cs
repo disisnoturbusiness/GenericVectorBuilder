@@ -217,7 +217,11 @@ public sealed class ConsolidateV8iFixTests : IClassFixture<RealV8Fixture>
       Assert.NotEmpty( notes );
       Assert.All( notes, n => Assert.Contains( n.GetProperty( "kind" ).GetString(), new[] { "false", "misleading", "unbacked" } ) );
       List<string> everyString = new();
-      Strings( _fixture.Both.Root, everyString );
+      foreach( JsonProperty property in _fixture.Both.Root.EnumerateObject().Where( p => p.Name != "runPageNotes" ) )
+      {
+         // the corrections list is where each marked statement is quoted together with its correction, so it is the one place the rule does not read
+         Strings( property.Value, everyString );
+      }
       string[] paragraphs = _fixture.Both.Md.Split( "\n\n", StringSplitOptions.RemoveEmptyEntries );
       List<string> sentences = _fixture.Both.Root.GetProperty( "sentences" ).EnumerateArray().Select( s => s.GetProperty( "text" ).GetString()! ).ToList();
 
@@ -246,7 +250,7 @@ public sealed class ConsolidateV8iFixTests : IClassFixture<RealV8Fixture>
    [Fact]
    public void TheDriftSentence_SaysFigure_AndNamesTheExcludedClickHouseCell()
    {
-      Assert.Equal( "From v7 to v8, a ranked figure's session median moved 1.44% in the middle case and 4.66% at most (opensearch, exact p50).", _fixture.Both.Text( "drift.median" ) );
+      Assert.Equal( "From v7 to v8, a ranked figure's session median moved 1.43% in the middle case and 4.66% at most (opensearch, exact p50).", _fixture.Both.Text( "drift.median" ) );
       Assert.Equal( "The NOT HELD clickhouse QPS@8 cell is left out of these figures; its session median moved 13.36%, with v7 runs at 375 to 428 and v8 runs at 336 to 380.", _fixture.Both.Text( "drift.excluded.clickhouse.qps8" ) );
       JsonElement excluded = Assert.Single( _fixture.Both.Root.GetProperty( "drift" ).GetProperty( "excluded" ).EnumerateArray() );
       Assert.Equal( ( "clickhouse", "qps8", -1336 ), ( excluded.GetProperty( "target" ).GetString(), excluded.GetProperty( "metric" ).GetString(), excluded.GetProperty( "moveBp" ).GetInt32() ) );

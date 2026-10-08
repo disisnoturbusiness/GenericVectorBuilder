@@ -58,6 +58,7 @@ public static class Consolidator
       using var raw = RawRuns.Load( sessions, input );
       IReadOnlyList<ResolvedFact> facts = ConsolidateAudit.ValidateFacts( input, raw.Claim, report.Targets );
       report.Audit = new AuditInfo { FactsSha256 = input.FactsSha256, ExclusionsSha256 = input.ExclusionsSha256, ObserverSha256 = report.Observer?.Sha256, ObserverSha256Others = report.ObserverOthers.ToDictionary( o => o.Session, o => o.Sha256, StringComparer.Ordinal ), ClassesSha256 = input.ClassesSha256, RunPageNotesSha256 = input.RunPageNotes.Sha256, FactsChecked = facts.Count };
+      report.RunPageNotes = input.RunPageNotes.ToRecords( report.Sessions.SelectMany( s => s.Runs.Select( r => r.Folder ) ).Concat( report.Basis.Runs.Select( r => r.Folder ) ).ToHashSet( StringComparer.Ordinal ) );
       ConsolidateClasses.Validate( input, sessions, raw.Claim, report );
       report.Why = ConsolidateWhy.Build( sessions, report, facts, input );
       report.HttpClientCount = ConsolidateTextParts.HttpClientTargets( report ).Count;

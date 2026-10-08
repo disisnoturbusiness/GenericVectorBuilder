@@ -320,13 +320,17 @@ public sealed class ClauseWriter
    /// The sentence for the clause of a run note that says every CPU's clock is held at its ceiling whatever the engine runs.
    /// With an observer summary that read the per-CPU clock it names the pass the observer found under the pin and how far; without one it says no reading was given to check the clause.
    /// Why not printed: the clause is the tool's own words about every engine, and the observer's APERF and MPERF readings put one engine's pass under the pin in every run.
+   /// Why the source is the clause's first characters and not the whole clause: the run-page notes list marks the whole clause (false for v8, unbacked for v7), and no string of the report may quote a
+   /// marked statement without its correction; the words that start the clause are enough for the audit to find the note in the run.
    /// </summary>
    /// <param name="piece">The clause.</param>
    /// <param name="run">The run the note is quoted from.</param>
    /// <param name="path">The note's path in that run's results.json.</param>
    private void ClockHeldNotice( TextPiece piece, string run, string path )
    {
-      SentenceSource cited = S.Token( run, path, piece.Text.Trim( ',', ';', ' ' ) );
+      string clause = piece.Text.Trim( ',', ';', ' ' );
+      int cut = clause.LastIndexOf( ' ', Math.Min( TOKEN_CHARS, clause.Length - 1 ) );
+      SentenceSource cited = S.Token( run, path, clause.Length <= TOKEN_CHARS ? clause : clause[..( cut > 0 ? cut : TOKEN_CHARS )] );
       string slot = $"{_slot}.dropped.{_dropped++}";
       if( _w.Report.Observer?.Dip is not ObserverDip dip )
       {
