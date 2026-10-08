@@ -82,6 +82,15 @@ public sealed class ConsolidatedReport
    /// <summary>Recall as whole hits per run.</summary>
    public List<RecallRow> Recall { get; set; } = new();
 
+   /// <summary>The claim sessions whose runs record no hit count, so the report derived their hits as the recall times the queries times the hits asked for.</summary>
+   public List<string> RecallDerivedSessions { get; set; } = new();
+
+   /// <summary>Targets with a row.</summary>
+   public int TargetCount { get; set; }
+
+   /// <summary>Targets whose protocol fact names the benchmark's own HttpClient REST code.</summary>
+   public int HttpClientCount { get; set; }
+
    /// <summary>The clock per session and the dropped mean-based warnings.</summary>
    public ClockInfo Clock { get; set; } = new();
 
@@ -115,8 +124,65 @@ public sealed class ConsolidatedReport
    /// <summary>Every sentence consolidated.md or the page prints, in reading order, each with its sources.</summary>
    public List<SentenceRecord> Sentences { get; set; } = new();
 
+   /// <summary>The timed passes the claim runs recorded as NOT HELD and the check that no order depends on them; null when no claim run recorded one.</summary>
+   public NotHeldInfo? NotHeld { get; set; }
+
+   /// <summary>The builds that measured the claim sessions and the build that made this report.</summary>
+   public BuildInfo Build { get; set; } = new();
+
    /// <summary>The audit that ran over every sentence and fact before anything was written.</summary>
    public AuditInfo Audit { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>The builds behind the report: the one that measured each claim session and the one that consolidated them.</summary>
+public sealed class BuildInfo
+{
+   #region Public Methods
+
+   /// <summary>One entry per claim session.</summary>
+   public List<SessionBuild> Measured { get; set; } = new();
+
+   /// <summary>The build that made this report.</summary>
+   public ConsolidatingBuild ConsolidatedBy { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>The build that measured a claim session.</summary>
+public sealed class SessionBuild
+{
+   #region Public Methods
+
+   /// <summary>The session.</summary>
+   public string Session { get; set; } = string.Empty;
+
+   /// <summary>The commit every run of the session records (conditions.build.commit); null when the runs record none or different ones.</summary>
+   public string? Commit { get; set; }
+
+   /// <summary>The first <see cref="ConsolidateBuild.SHORT_COMMIT"/> characters of the commit.</summary>
+   public string? CommitShort { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>The build that made the report.</summary>
+public sealed class ConsolidatingBuild
+{
+   #region Public Methods
+
+   /// <summary>The assembly's informational version; null when it carries none.</summary>
+   public string? InformationalVersion { get; set; }
+
+   /// <summary>The commit after the "+" of the version; null when it has none.</summary>
+   public string? Commit { get; set; }
+
+   /// <summary>The first characters of the commit.</summary>
+   public string? CommitShort { get; set; }
+
+   /// <summary>The SHA-256 of the assembly file; null when the assembly has no file.</summary>
+   public string? AssemblySha256 { get; set; }
 
    #endregion Public Methods
 }
@@ -148,6 +214,9 @@ public sealed class RunRef
 
    /// <summary>startedUtc.</summary>
    public string? StartedUtc { get; set; }
+
+   /// <summary>The SHA-256 of the run's results.json as this report read it.</summary>
+   public string? ResultsSha256 { get; set; }
 
    /// <summary>Lines of the run's results.md that hold a framing sentence this report retired (the latency split), so the page can mark the run page (hole H4); empty when none.</summary>
    public List<StaleLine> StaleLines { get; set; } = new();
@@ -221,11 +290,26 @@ public sealed class BasisInfo
    /// <summary>Splits in <see cref="SetupSplits"/>.</summary>
    public int SetupSplitCount { get; set; }
 
+   /// <summary>Per basis session: its runs and how many of them held the clock (turbo off).</summary>
+   public List<SessionClockHeld> ClockHeld { get; set; } = new();
+
    /// <summary>The largest one-engine or pair move of the basis, bp.</summary>
    public int MaxBp { get; set; }
 
    /// <summary>The move that set <see cref="MaxBp"/>.</summary>
    public BasisMove? MaxMove { get; set; }
+
+   /// <summary>
+   /// The timed passes behind <see cref="MaxMove"/> that their run recorded as NOT HELD (the engine was still changing when they were timed): one per run and engine of the move
+   /// whose pass for the move's metric was marked. Empty when the largest move rests on none.
+   /// </summary>
+   public List<NotHeldCell> MaxMoveNotHeld { get; set; } = new();
+
+   /// <summary>
+   /// The largest move and the threshold of the basis with the engines of <see cref="MaxMoveNotHeld"/> left out of every run and metric; null when the largest move rests on no NOT HELD pass.
+   /// Why: the threshold must not rest unseen on a pass its own run says not to quote, and the reader can then see what the line would be without it.
+   /// </summary>
+   public BasisWithout? MaxMoveWithout { get; set; }
 
    /// <summary>The threshold, bp.</summary>
    public int TBp { get; set; }
@@ -257,6 +341,153 @@ public sealed class BasisInfo
    #endregion Public Methods
 }
 
+/// <summary>How many runs of a basis session held the clock.</summary>
+public sealed class SessionClockHeld
+{
+   #region Public Methods
+
+   /// <summary>The session.</summary>
+   public string Session { get; set; } = string.Empty;
+
+   /// <summary>Its basis runs.</summary>
+   public int Runs { get; set; }
+
+   /// <summary>Of those, the runs that held the clock.</summary>
+   public int Held { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>One timed pass its run recorded as NOT HELD, as the largest move of the basis uses it.</summary>
+public sealed class NotHeldCell
+{
+   #region Public Methods
+
+   /// <summary>The run folder.</summary>
+   public string Run { get; set; } = string.Empty;
+
+   /// <summary>The run's seed.</summary>
+   public int? Seed { get; set; }
+
+   /// <summary>The engine.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>The pass name, such as default@8.</summary>
+   public string Pass { get; set; } = string.Empty;
+
+   /// <summary>The metric the move was taken on.</summary>
+   public string Metric { get; set; } = string.Empty;
+
+   /// <summary>The clause of the run's settle warning that records the pass, verbatim.</summary>
+   public string Token { get; set; } = string.Empty;
+
+   /// <summary>The timed figure with its unit, as the warning wrote it.</summary>
+   public string Timed { get; set; } = string.Empty;
+
+   /// <summary>How far it lay from the settled figure, percent, as written.</summary>
+   public string OffPercent { get; set; } = string.Empty;
+
+   /// <summary>The settled figure with its unit.</summary>
+   public string Settled { get; set; } = string.Empty;
+
+   /// <summary>The margin, percent, as written.</summary>
+   public string LimitPercent { get; set; } = string.Empty;
+
+   #endregion Public Methods
+}
+
+/// <summary>The claim runs' timed passes recorded as NOT HELD, and the table rows they leave unranked.</summary>
+public sealed class NotHeldInfo
+{
+   #region Public Methods
+
+   /// <summary>Every such pass behind a ranked metric, with the settled figure its own warm-up reached.</summary>
+   public List<NotHeldFigure> Cells { get; set; } = new();
+
+   /// <summary>The table rows shown and not ranked because of those cells: one per metric and target.</summary>
+   public List<NotHeldRow> Unranked { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>One NOT HELD pass of a claim run and the settled figure its own warm-up reached.</summary>
+public sealed class NotHeldFigure
+{
+   #region Public Methods
+
+   /// <summary>The run folder.</summary>
+   public string Run { get; set; } = string.Empty;
+
+   /// <summary>The run's seed.</summary>
+   public int? Seed { get; set; }
+
+   /// <summary>The engine.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>The pass name.</summary>
+   public string Pass { get; set; } = string.Empty;
+
+   /// <summary>The metric id the pass's figure stands for.</summary>
+   public string Metric { get; set; } = string.Empty;
+
+   /// <summary>The clause of the settle warning that records the pass, verbatim.</summary>
+   public string Token { get; set; } = string.Empty;
+
+   /// <summary>The timed figure with its unit.</summary>
+   public string Timed { get; set; } = string.Empty;
+
+   /// <summary>The settled figure with its unit.</summary>
+   public string Settled { get; set; } = string.Empty;
+
+   /// <summary>How far apart they were, percent, as written.</summary>
+   public string OffPercent { get; set; } = string.Empty;
+
+   /// <summary>The margin, percent, as written.</summary>
+   public string LimitPercent { get; set; } = string.Empty;
+
+   #endregion Public Methods
+}
+
+/// <summary>A table row shown and not ranked because the runs recorded its timed pass NOT HELD.</summary>
+public sealed class NotHeldRow
+{
+   #region Public Methods
+
+   /// <summary>Metric id of the table.</summary>
+   public string Metric { get; set; } = string.Empty;
+
+   /// <summary>The engine.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>The pass name.</summary>
+   public string Pass { get; set; } = string.Empty;
+
+   /// <summary>How many claim runs recorded the pass NOT HELD.</summary>
+   public int Runs { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>The basis recomputed with some engines left out: the largest move that remains and the threshold it gives.</summary>
+public sealed class BasisWithout
+{
+   #region Public Methods
+
+   /// <summary>The engines left out.</summary>
+   public List<string> Targets { get; set; } = new();
+
+   /// <summary>The largest move that remains, bp.</summary>
+   public int MaxBp { get; set; }
+
+   /// <summary>The move that set it.</summary>
+   public BasisMove? MaxMove { get; set; }
+
+   /// <summary>The threshold it gives, bp.</summary>
+   public int TBp { get; set; }
+
+   #endregion Public Methods
+}
+
 /// <summary>One basis run with its recorded conditions.</summary>
 public sealed class BasisRunInfo
 {
@@ -273,6 +504,9 @@ public sealed class BasisRunInfo
 
    /// <summary>startedUtc.</summary>
    public string? StartedUtc { get; set; }
+
+   /// <summary>The SHA-256 of the run's results.json as this report read it.</summary>
+   public string? ResultsSha256 { get; set; }
 
    /// <summary>Its conditions.</summary>
    public BasisConditionsInfo Conditions { get; set; } = new();
@@ -554,6 +788,9 @@ public sealed class BasisMove
 
    /// <summary>The move as max/min - 1, unrounded.</summary>
    public double Move { get; set; }
+
+   /// <summary>The move in bp before it is rounded up to <see cref="MoveBp"/>: <see cref="Move"/> times 10000.</summary>
+   public double MoveBpExact => Move * 10000.0;
 
    /// <summary>The target of a one-engine move.</summary>
    public string? Target { get; set; }
@@ -862,6 +1099,52 @@ public sealed class DriftInfo
    /// <summary>How many unconfirmed orders held in the second session alone.</summary>
    public int UnconfirmedFromSecond { get; set; }
 
+   /// <summary>
+   /// What the two sessions differ in, among the build that ran them, the day they started on and the outside load their passes saw ("build", "day", "outside load"); empty when they differ in none of them.
+   /// Why: drift between sessions is only the engines' own when nothing else about the sessions differs, and the sessions differ in these.
+   /// </summary>
+   public List<string> SessionDifferences { get; set; } = new();
+
+   /// <summary>Each session's outside load: the median of a run's passes' outside load during the pass, per run.</summary>
+   public List<SessionOutsideLoad> OutsideLoad { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>The outside load a session's passes saw: for each run the median over its passes of the load outside the benchmark during the pass.</summary>
+public sealed class SessionOutsideLoad
+{
+   #region Public Methods
+
+   /// <summary>The session.</summary>
+   public string Session { get; set; } = string.Empty;
+
+   /// <summary>One entry per run.</summary>
+   public List<RunOutsideLoad> Runs { get; set; } = new();
+
+   /// <summary>The lowest run median, CPUs.</summary>
+   public double MinCpus { get; set; }
+
+   /// <summary>The highest run median, CPUs.</summary>
+   public double MaxCpus { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>One run's median outside load.</summary>
+public sealed class RunOutsideLoad
+{
+   #region Public Methods
+
+   /// <summary>Run folder.</summary>
+   public string Run { get; set; } = string.Empty;
+
+   /// <summary>Median over the run's passes of outsideLoadDuring, CPUs.</summary>
+   public double MedianCpus { get; set; }
+
+   /// <summary>Passes behind the median.</summary>
+   public int Passes { get; set; }
+
    #endregion Public Methods
 }
 
@@ -978,6 +1261,21 @@ public sealed class SessionClock
 
    /// <summary>The clock tolerance, bp, when every run agrees.</summary>
    public int? ToleranceBp { get; set; }
+
+   /// <summary>
+   /// The ratio the pinned clock is, MHz over <see cref="ConsolidateClock.RATIO_STEP_MHZ"/> (35 for 3500 MHz), when the pin is a whole number of steps; null otherwise.
+   /// Why: the pin is the CPU's top ratio with turbo off, and the kernel's figure for that ratio is not the nominal MHz (it reads 3492 for 3500).
+   /// </summary>
+   public int? PinnedRatio { get; set; }
+
+   /// <summary>The median, over the passes of the session, of the kernel's pass medians for the engine CPUs and the client CPUs together, MHz; null when no pass recorded one.</summary>
+   public int? KernelMedianMhz { get; set; }
+
+   /// <summary>The lowest kernel pass median in the session, MHz.</summary>
+   public int? KernelMinMhz { get; set; }
+
+   /// <summary>The highest kernel pass median in the session, MHz.</summary>
+   public int? KernelMaxMhz { get; set; }
 
    /// <summary>Passes off the pinned clock by the median rule.</summary>
    public int ClockOffPasses { get; set; }
@@ -1222,6 +1520,154 @@ public sealed class ObserverInfo
    /// <summary>Passes during which a systemd timer fired, over those runs.</summary>
    public int PassesWithTimerFired { get; set; }
 
+   /// <summary>The clock the summary's per-CPU figures are measured against, MHz, from the session's runs; null when the summary holds no per-CPU figures.</summary>
+   public int? PinnedMhz { get; set; }
+
+   /// <summary>The CPU in a pass that lay furthest from the pinned clock over those runs; null when the summary holds no per-CPU figures.</summary>
+   public ObserverCpuDeviation? CpuWorst { get; set; }
+
+   /// <summary>The pass that ran under the pin on the CPUs more than any other, over those runs; null when none ran under it or the summary holds no per-CPU figures.</summary>
+   public ObserverDip? Dip { get; set; }
+
+   /// <summary>Where the observer's own threads ran, from the saved analysis of each run; null when the session has no saved analysis.</summary>
+   public ObserverPlacement? Placement { get; set; }
+
+   /// <summary>Passes whose mean clock the observer sampled outside the clock tolerance (what a mean-based rule flags and the median rule does not); empty when none or no figures.</summary>
+   public List<ObserverMeanDip> MeanDips { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>Where the observer ran, read from the analysis the run operator saved for each run.</summary>
+public sealed class ObserverPlacement
+{
+   #region Public Methods
+
+   /// <summary>One entry per run of the session.</summary>
+   public List<ObserverPlacementRun> Runs { get; set; } = new();
+
+   /// <summary>The most CPU the observer's cgroup used in any run, CPUs, as written.</summary>
+   public string MaxCgroupCpu { get; set; } = string.Empty;
+
+   /// <summary>The words of the saved analyses that say the observer was not pinned.</summary>
+   public string NotPinnedQuote { get; set; } = string.Empty;
+
+   #endregion Public Methods
+}
+
+/// <summary>The placement of the observer in one run.</summary>
+public sealed class ObserverPlacementRun
+{
+   #region Public Methods
+
+   /// <summary>Run folder.</summary>
+   public string Folder { get; set; } = string.Empty;
+
+   /// <summary>The saved analysis, relative to the repository.</summary>
+   public string File { get; set; } = string.Empty;
+
+   /// <summary>The share of the observer's resident-thread ticks seen on the engine CPUs, percent, as written.</summary>
+   public string Percent { get; set; } = string.Empty;
+
+   /// <summary>The engine CPUs the analysis names.</summary>
+   public string Cpus { get; set; } = string.Empty;
+
+   /// <summary>The observer's CPU use over the run by cgroup, CPUs, as written.</summary>
+   public string CgroupCpu { get; set; } = string.Empty;
+
+   /// <summary>The words of the analysis that carry the share.</summary>
+   public string PlacementQuote { get; set; } = string.Empty;
+
+   /// <summary>The words of the analysis that carry the CPU use.</summary>
+   public string CgroupQuote { get; set; } = string.Empty;
+
+   #endregion Public Methods
+}
+
+/// <summary>One CPU's APERF/MPERF clock in one pass against the pinned clock.</summary>
+public sealed class ObserverCpuDeviation
+{
+   #region Public Methods
+
+   /// <summary>Run folder.</summary>
+   public string Run { get; set; } = string.Empty;
+
+   /// <summary>Target.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>Pass.</summary>
+   public string Pass { get; set; } = string.Empty;
+
+   /// <summary>CPU number.</summary>
+   public int Cpu { get; set; }
+
+   /// <summary>The CPU's mean clock over the pass, MHz.</summary>
+   public double Mhz { get; set; }
+
+   /// <summary>How far from the pinned clock, bp, without its sign.</summary>
+   public double DeviationBp { get; set; }
+
+   /// <summary>True when the CPU ran under the pinned clock, false when over it.</summary>
+   public bool Under { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>The pass type that ran under the pinned clock on its CPUs, over the runs of a session.</summary>
+public sealed class ObserverDip
+{
+   #region Public Methods
+
+   /// <summary>Target.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>Pass.</summary>
+   public string Pass { get; set; } = string.Empty;
+
+   /// <summary>Runs of the session that hold this pass.</summary>
+   public int Runs { get; set; }
+
+   /// <summary>CPU readings of this pass over those runs (one per CPU per run).</summary>
+   public int CpuReadings { get; set; }
+
+   /// <summary>Of those, the readings under the pinned clock.</summary>
+   public int CpusUnder { get; set; }
+
+   /// <summary>True when every reading was under the pinned clock.</summary>
+   public bool EveryCpuUnder { get; set; }
+
+   /// <summary>The smallest deviation under the pin among those readings, bp.</summary>
+   public double MinBp { get; set; }
+
+   /// <summary>The largest deviation under the pin among those readings, bp.</summary>
+   public double MaxBp { get; set; }
+
+   /// <summary>The largest deviation, either way, of any CPU in any other pass of those runs, bp.</summary>
+   public double OtherWorstBp { get; set; }
+
+   #endregion Public Methods
+}
+
+/// <summary>A pass whose sampled mean clock lay outside the clock tolerance of the pin.</summary>
+public sealed class ObserverMeanDip
+{
+   #region Public Methods
+
+   /// <summary>Run folder.</summary>
+   public string Run { get; set; } = string.Empty;
+
+   /// <summary>Target.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>Pass.</summary>
+   public string Pass { get; set; } = string.Empty;
+
+   /// <summary>Mean of the engine CPUs' sampled clock over the pass, MHz.</summary>
+   public double EngineMeanMhz { get; set; }
+
+   /// <summary>Mean of the client CPUs' sampled clock over the pass, MHz.</summary>
+   public double ClientMeanMhz { get; set; }
+
    #endregion Public Methods
 }
 
@@ -1247,6 +1693,9 @@ public sealed class ObserverRun
 
    /// <summary>True when the summary says timers were covered.</summary>
    public bool? TimersCovered { get; set; }
+
+   /// <summary>The CPU in a pass that lay furthest from the pinned clock in this run; null when the summary holds no per-CPU figures.</summary>
+   public ObserverCpuDeviation? CpuWorst { get; set; }
 
    #endregion Public Methods
 }

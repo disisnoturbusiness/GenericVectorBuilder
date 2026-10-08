@@ -5,8 +5,8 @@ using GenericVectorBuilder.Bench.Stats;
 namespace GenericVectorBuilder.Bench.Report;
 
 /// <summary>
-/// consolidated.md of the v8 report: headline, subtitle, threshold and basis, the four tables,
-/// recall, why, drift, clock, disclosures, method, targets not in this report and runs used.
+/// consolidated.md of the v8 report: headline, subtitle, the rule that says what "not separated" means, the four tables, recall, why, then the threshold and basis, drift,
+/// disclosures, method, targets not in this report and runs used. The results come first and the argument for the threshold after them.
 /// Every sentence comes from the report's audited sentences[] by slot; everything else is a heading,
 /// a table header or a table cell holding a value of consolidated.json. No prose is written here.
 /// Why: the reader lens re-derives every sentence of this file from the raw files, and a sentence
@@ -27,9 +27,7 @@ public static class ConsolidatedMarkdown
       md.AppendLine( "# Vector engine benchmark" ).AppendLine();
       Paragraph( md, report, "headline", "stopped" );
       Paragraph( md, report, "subtitle" );
-      Section( md, "Threshold and basis" );
-      Paragraph( md, report, "rule", "basis" );
-      BasisTables( md, report );
+      Paragraph( md, report, "rule.claim" );
       var printed = new HashSet<string>( StringComparer.Ordinal );
       foreach( MetricTable table in report.Metrics )
       {
@@ -42,6 +40,9 @@ public static class ConsolidatedMarkdown
       Section( md, "Why some engines beat others: facts and measured costs" );
       Paragraph( md, report, "why" );
       WhyTable( md, report );
+      Section( md, "Threshold and basis" );
+      Paragraph( md, report, "rule.threshold", "basis" );
+      BasisTables( md, report );
       Drift( md, report );
       Section( md, "Disclosures" );
       Paragraph( md, report, "disclosure" );
@@ -224,6 +225,7 @@ public static class ConsolidatedMarkdown
 
       md.AppendLine();
       Paragraph( md, report, $"table.{table.Metric}.absent" );
+      Paragraph( md, report, $"table.{table.Metric}.notHeld" );
       foreach( MetricRow row in table.Rows.Where( r => r.Note != null ) )
       {
          md.AppendLine( row.Note ).AppendLine();

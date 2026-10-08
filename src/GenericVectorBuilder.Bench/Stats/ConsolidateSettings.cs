@@ -22,6 +22,16 @@ public static class ConsolidateSettings
    /// <summary>The key names that state how hard one query searches (not the build parameters).</summary>
    private static readonly Regex EFFORT_KEY = new( @"^(m?hnsw[._])?ef(_search|_runtime|search)?$|^num_?candidates$|candidate_list_size_for_search$", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds( 5 ) );
 
+   /// <summary>
+   /// Engine settings whose recorded key says more than the value is: the key the report prints instead, by target and recorded key.
+   /// Why: Chroma's HTTP API answers GET /api/v2/version with its API version (1.0.0), and the row was recorded as "chroma_version", which a reader takes for the product version; the image that ran
+   /// says 1.4.4 (checked with the pinned image's own binary). The row stays, labelled for what it is.
+   /// </summary>
+   public static readonly IReadOnlyDictionary<(string Target, string Key), string> RELABELED_KEYS = new Dictionary<(string, string), string>
+   {
+      [("chroma", "chroma_version")] = "chroma_version (API version reported)",
+   };
+
    /// <summary>A value that is only a number.</summary>
    private static readonly Regex PLAIN_NUMBER = new( @"^\d+$", RegexOptions.Compiled, TimeSpan.FromSeconds( 5 ) );
 
@@ -52,6 +62,17 @@ public static class ConsolidateSettings
       }
 
       return rows;
+   }
+
+   /// <summary>
+   /// The key the report prints for an engine setting: the recorded key, or its relabelled form.
+   /// </summary>
+   /// <param name="target">The target.</param>
+   /// <param name="key">The recorded key.</param>
+   /// <returns>The key to print.</returns>
+   public static string KeyShown( string target, string key )
+   {
+      return RELABELED_KEYS.TryGetValue( (target, key), out string? shown ) ? shown : key;
    }
 
    /// <summary>

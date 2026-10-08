@@ -50,6 +50,7 @@ public static class BenchConsolidatedReader
    private const string SEARCH_KIND = "search";
    private const string RANKED = "ranked";
    private const string ONE_SESSION = "one-session";
+   private const string NOT_HELD = BenchRow.NOT_HELD;
 
    #endregion Data Members
 
@@ -105,7 +106,7 @@ public static class BenchConsolidatedReader
       var model = new BenchConsolidated( sessions, BenchJson.Whole( threshold, "tBp", "threshold" ) ?? throw BenchJson.Bad( "threshold", "tBp", "a whole number" ),
          BenchJson.RequireNumber( threshold, "ratio", "threshold" ), ReadMetrics( root ), guards, ReadBasis( root, two ), ReadDrift( root, two ), ReadRecall( root ),
          ReadClock( root, two ), ReadPairs( BenchJson.Get( root, "machine" ), "machine" ), ReadImages( root ), ReadWhy( root ), ReadSentences( root ), ReadAudit( root ), ReadEngineSettings( root ),
-         BenchConsolidatedFields.Unread( root ) );
+         BenchConsolidatedFields.Unread( root ), ReadRunNotes( root ), ReadRecordedTexts( root ) );
       Validate( model, two );
       return model;
    }
@@ -127,7 +128,7 @@ public static class BenchConsolidatedReader
       {
          string path = $"sessions[{i}]";
          var runs = BenchJson.Items( s, "runs", path ).Select( ( r, j ) => new BenchSessionRun( BenchJson.RequireText( r, "folder", $"{path}.runs[{j}]" ),
-            BenchJson.Whole( r, "seed", $"{path}.runs[{j}]" ), BenchJson.Text( r, "startedUtc", $"{path}.runs[{j}]" ) ) ).ToList();
+            BenchJson.Whole( r, "seed", $"{path}.runs[{j}]" ), BenchJson.Text( r, "startedUtc", $"{path}.runs[{j}]" ), BenchJson.Text( r, "resultsSha256", $"{path}.runs[{j}]" ) ) ).ToList();
          sessions.Add( new BenchSession( BenchJson.RequireText( s, "name", path ), runs ) );
       }
 
@@ -208,9 +209,9 @@ public static class BenchConsolidatedReader
    private static BenchRow ReadRow( JsonElement r, string path )
    {
       string status = BenchJson.RequireText( r, "status", path );
-      if( status is not ( RANKED or ONE_SESSION ) )
+      if( status is not ( RANKED or ONE_SESSION or NOT_HELD ) )
       {
-         throw new InvalidDataException( $"{path}.status is \"{status}\"; the page knows \"{RANKED}\" and \"{ONE_SESSION}\"." );
+         throw new InvalidDataException( $"{path}.status is \"{status}\"; the page knows \"{RANKED}\", \"{ONE_SESSION}\" and \"{NOT_HELD}\"." );
       }
 
       var per = new Dictionary<string, BenchRange>( StringComparer.Ordinal );
@@ -289,7 +290,7 @@ public static class BenchConsolidatedReader
 
       JsonElement b = basis.Value;
       var runs = BenchJson.Items( b, "runs", "basis" ).Select( ( r, i ) => new BenchBasisRun( BenchJson.RequireText( r, "folder", $"basis.runs[{i}]" ), BenchJson.Whole( r, "seed", $"basis.runs[{i}]" ),
-         ReadPairs( BenchJson.Get( r, "conditions" ), $"basis.runs[{i}].conditions" ), BenchJson.Text( r, "session", $"basis.runs[{i}]" ), BenchJson.Text( r, "startedUtc", $"basis.runs[{i}]" ) ) ).ToList();
+         ReadPairs( BenchJson.Get( r, "conditions" ), $"basis.runs[{i}].conditions" ), BenchJson.Text( r, "session", $"basis.runs[{i}]" ), BenchJson.Text( r, "startedUtc", $"basis.runs[{i}]" ), BenchJson.Text( r, "resultsSha256", $"basis.runs[{i}]" ) ) ).ToList();
       List<BenchBasisMoves> moves = ReadMoves( BenchJson.Get( b, "perMetric" ), "basis.perMetric" );
       moves.AddRange( ReadNamedMoves( b, "basis", "maxMove", "exclusionsKept" ) );
       List<BenchBasisMoves> none = ReadMoves( BenchJson.Get( b, "noMachineControl" ), "basis.noMachineControl", true );
@@ -577,7 +578,7 @@ public static class BenchConsolidatedReader
    private static List<BenchImage> ReadImages( JsonElement root )
    {
       return BenchJson.Items( root, "images", FILE ).Select( ( e, i ) => new BenchImage( BenchJson.RequireText( e, "target", $"images[{i}]" ), BenchJson.Text( e, "id", $"images[{i}]" ) ?? string.Empty,
-         BenchJson.Text( e, "lastTagTimeUtc", $"images[{i}]" ), BenchJson.Flag( e, "beforeFirstV7Start", $"images[{i}]" ) ) ).ToList();
+         BenchJson.Text( e, "lastTagTimeUtc", $"images[{i}]" ), BenchJson.Flag( e, "beforeFirstV7Start", $"images[{i}]" ), BenchJson.Text( e, "ref", $"images[{i}]" ) is { Length: > 0 } image ? image : null ) ).ToList();
    }
 
    /// <summary>
@@ -757,6 +758,33 @@ public static class BenchConsolidatedReader
    }
 
    /// <summary>
+   /// The list of recorded statements the set marks as false or misleading ("runPageNotes"), with each correction and its sources.
+   /// </summary>
+   /// <param name="root">The file's root.</param>
+   /// <returns>The entries in file order; none when the file has no list.</returns>
+   private static IReadOnlyList<BenchRunNote> ReadRunNotes( JsonElement root )
+   {
+      return BenchJson.Get( root, BenchRunNotes.FIELD ) is { } list ? BenchRunNotes.Read( list, BenchRunNotes.FIELD, FILE ) : Array.Empty<BenchRunNote>();
+   }
+
+   /// <summary>
+   /// The engine texts the runs recorded, clause by clause ("recordedTexts"), with the class and basis the report gives each clause.
+   /// </summary>
+   /// <param name="root">The file's root.</param>
+   /// <returns>The texts in file order; none when the file has none.</returns>
+   private static IReadOnlyList<BenchRecordedText> ReadRecordedTexts( JsonElement root )
+   {
+      return BenchJson.Items( root, "recordedTexts", FILE ).Select( ( e, i ) =>
+      {
+         string path = $"recordedTexts[{i}]";
+         var clauses = BenchJson.Items( e, "clauses", path ).Select( ( c, j ) => new BenchClause( BenchJson.RequireText( c, "text", $"{path}.clauses[{j}]" ),
+            BenchJson.Text( c, "class", $"{path}.clauses[{j}]" ) ?? string.Empty, BenchJson.Strings( c, "basis", $"{path}.clauses[{j}]" ),
+            BenchJson.Flag( c, "printed", $"{path}.clauses[{j}]" ) ?? true, BenchJson.Text( c, "notPrinted", $"{path}.clauses[{j}]" ) ) ).ToList();
+         return new BenchRecordedText( BenchJson.Text( e, "target", path ) ?? string.Empty, BenchJson.RequireText( e, "field", path ), BenchJson.Text( e, "run", path ), BenchJson.Get( e, "note" ) is { } note ? Describe( note ) : null, clauses );
+      } ).ToList();
+   }
+
+   /// <summary>
    /// The audit block.
    /// </summary>
    /// <param name="root">The file's root.</param>
@@ -861,6 +889,25 @@ public static class BenchConsolidatedReader
 
       ValidateSearchModes( model );
       ValidateReuse( model );
+      ValidateRunNotes( model );
+   }
+
+   /// <summary>
+   /// Every run a correction names must be a run the set uses: a correction for a run the set does not link to would be printed on no page a reader reaches
+   /// from the set, and a mistyped folder name must fail here and not vanish.
+   /// </summary>
+   /// <param name="model">The model read.</param>
+   private static void ValidateRunNotes( BenchConsolidated model )
+   {
+      var used = model.UsedRunRefs.Select( r => BenchFolderNames.LastSegment( r.Folder ) ).ToHashSet( StringComparer.Ordinal );
+      foreach( ( BenchRunNote note, int i ) in model.RunNoteList.Select( ( n, i ) => ( n, i ) ) )
+      {
+         string? unknown = note.Runs.FirstOrDefault( r => !used.Contains( r ) );
+         if( unknown != null )
+         {
+            throw new InvalidDataException( $"{BenchRunNotes.FIELD}[{i}] names run {unknown}, which the sessions and the basis runs do not list." );
+         }
+      }
    }
 
    /// <summary>
@@ -960,7 +1007,7 @@ public static class BenchConsolidatedReader
    /// <param name="path">Where the table sits, for messages.</param>
    private static void ValidateOrder( BenchMetric metric, Dictionary<string, BenchRow> byTarget, string path )
    {
-      List<BenchRow> ranked = metric.Rows.Where( r => r.Status == RANKED ).ToList();
+      List<BenchRow> ranked = metric.Rows.Where( r => r.Status == RANKED && !r.IsNotHeld ).ToList();
       for( int i = 1; i < ranked.Count; i++ )
       {
          double before = ranked[i - 1].Median!.Value;

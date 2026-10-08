@@ -71,6 +71,15 @@ public static class ConsolidateSources
       return new SentenceSource( SourceKinds.FILE, $"{path}#{token}", token );
    }
 
+   /// <summary>A quote from a saved page or text file of the repository.</summary>
+   /// <param name="path">Repository path.</param>
+   /// <param name="quote">The quote, inside one text node of the file.</param>
+   /// <returns>The source.</returns>
+   public static SentenceSource Doc( string path, string quote )
+   {
+      return new SentenceSource( SourceKinds.DOC, $"doc:{path}#{quote}", quote );
+   }
+
    /// <summary>A verbatim quote of one run's recorded text field.</summary>
    /// <param name="folder">Run folder name.</param>
    /// <param name="path">JSON path in results.json.</param>
@@ -99,6 +108,18 @@ public static class ConsolidateSources
    {
       decimal exact = decimal.Parse( value.ToString( "R", CultureInfo.InvariantCulture ), NumberStyles.Float, CultureInfo.InvariantCulture );
       return decimal.Round( exact, decimals, MidpointRounding.AwayFromZero ).ToString( "F" + decimals.ToString( CultureInfo.InvariantCulture ), CultureInfo.InvariantCulture );
+   }
+
+   /// <summary>
+   /// A number as written with the decimals it has and no more, up to four: 0.14 for 0.14, 0.2095 for 0.2095.
+   /// Why: a median of recorded three-decimal figures may end in a half, and a fixed number of decimals would round it away.
+   /// </summary>
+   /// <param name="value">The number.</param>
+   /// <returns>The text.</returns>
+   public static string Exact( double value )
+   {
+      decimal exact = decimal.Parse( value.ToString( "R", CultureInfo.InvariantCulture ), NumberStyles.Float, CultureInfo.InvariantCulture );
+      return decimal.Round( exact, 4, MidpointRounding.AwayFromZero ).ToString( "0.####", CultureInfo.InvariantCulture );
    }
 
    /// <summary>

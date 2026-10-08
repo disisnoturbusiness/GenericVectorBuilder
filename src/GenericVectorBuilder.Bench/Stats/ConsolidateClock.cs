@@ -18,6 +18,9 @@ public static class ConsolidateClock
 {
    #region Data Members
 
+   /// <summary>MHz per step of the core ratio on the CPUs this report is made on (Intel's 100 MHz bus clock): a pin of 3500 MHz is ratio 35.</summary>
+   public const int RATIO_STEP_MHZ = 100;
+
    private static readonly Regex MEAN_WARNING = new( @"^WARNING: clock off its pinned value during (?<target>\S+) (?<pass>\S+):", RegexOptions.Compiled );
 
    #endregion Data Members
@@ -61,6 +64,7 @@ public static class ConsolidateClock
          ToleranceBp = Same( runs.Select( r => (int?)r.Conditions.Clock.ToleranceBp ) ),
          LegacyParsed = runs.All( r => r.Conditions.Clock.LegacyParsed ),
       };
+      var kernel = new List<int>();
       foreach( RunResult run in runs )
       {
          foreach( PassFacts pass in run.Conditions.Passes )
@@ -70,7 +74,16 @@ public static class ConsolidateClock
             clock.PassesEvaluated++;
             clock.ClockOffPasses += found.Off ? 1 : 0;
             clock.ClockUnreadPasses += found.Read ? 0 : 1;
+            kernel.AddRange( new[] { found.EngineMedian, found.ClientMedian }.OfType<int>() );
          }
+      }
+
+      clock.PinnedRatio = clock.PinnedMhz is int pin && pin > 0 && pin % RATIO_STEP_MHZ == 0 ? pin / RATIO_STEP_MHZ : null;
+      if( kernel.Count > 0 )
+      {
+         clock.KernelMedianMhz = (int)Math.Round( ClaimRule.Median( kernel.Select( k => (double)k ).ToList() ), MidpointRounding.AwayFromZero );
+         clock.KernelMinMhz = kernel.Min();
+         clock.KernelMaxMhz = kernel.Max();
       }
 
       return clock;

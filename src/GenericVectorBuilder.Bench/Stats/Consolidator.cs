@@ -60,6 +60,7 @@ public static class Consolidator
       report.Audit = new AuditInfo { FactsSha256 = input.FactsSha256, ExclusionsSha256 = input.ExclusionsSha256, ObserverSha256 = report.Observer?.Sha256, ObserverSha256Others = report.ObserverOthers.ToDictionary( o => o.Session, o => o.Sha256, StringComparer.Ordinal ), ClassesSha256 = input.ClassesSha256, FactsChecked = facts.Count };
       ConsolidateClasses.Validate( input, sessions, raw.Claim, report );
       report.Why = ConsolidateWhy.Build( sessions, report, facts, input );
+      report.HttpClientCount = ConsolidateTextParts.HttpClientTargets( report ).Count;
       ConsolidateWhy.MarkSearchModes( report );
       List<Sentence> sentences = ConsolidateText.Write( report, sessions, input );
       ConsolidateAudit.CheckSentences( report, sentences, raw, input.RepoRoot );
@@ -92,14 +93,23 @@ public static class Consolidator
       List<MetricOutcome> outcomes = Tables( sessions, targets, changed, report );
       report.Guards.G2 = ClaimDrift.G2( outcomes, sessions, report.Threshold.TBp );
       report.Drift = sessions.Count == 2 ? ClaimDrift.Drift( outcomes, sessions, report.Threshold.TBp ) : null;
+      if( report.Drift != null )
+      {
+         report.Drift.OutsideLoad = ConsolidateSessions.OutsideLoad( sessions );
+         report.Drift.SessionDifferences = ConsolidateSessions.Differences( sessions, report.Drift.OutsideLoad );
+      }
+
       report.Recall = Recall( sessions, targets );
+      report.RecallDerivedSessions = sessions.Where( s => s.Runs.All( r => targets.All( t => r.Find( t )!.RecallHits == null ) ) ).Select( s => s.Name ).ToList();
       report.Clock = Clock( sessions );
       report.Machine = Machine( claimRuns, report.Machine.Differences );
       report.Images = Images( sessions, targets );
       report.EngineSettings = Settings( sessions, targets );
       report.SearchSettings = ConsolidateSettings.Build( sessions, targets );
       ( report.Observer, report.ObserverOthers ) = ConsolidateObserver.Read( input.ObserverPaths, sessions );
+      ConsolidateObserverPlacement.Fill( report.Observer, sessions[^1], input.RepoRoot );
       report.Queries = Queries( claimRuns, input.RepoRoot );
+      report.Build = new BuildInfo { Measured = ConsolidateBuild.Measured( sessions ), ConsolidatedBy = input.Build };
       Counts( report, sessions );
       Status( report );
       return report;
@@ -416,12 +426,14 @@ public static class Consolidator
          throw new ConsolidateRefusal( "the threshold basis cannot be computed: " + ex.Message );
       }
 
+      basis.ClockHeld = basisRuns.GroupBy( b => b.Session, StringComparer.Ordinal ).Select( g => new SessionClockHeld { Session = g.Key, Runs = g.Count(), Held = g.Count( b => b.Run.Conditions.Clock.Pinned ) } ).OrderBy( c => c.Session, StringComparer.Ordinal ).ToList();
       basis.Runs = basisRuns.OrderBy( b => b.Folder, StringComparer.Ordinal ).Select( b => new BasisRunInfo
       {
          Folder = b.Folder,
          Seed = b.Seed,
          Session = b.Session,
          StartedUtc = b.Run.StartedUtc,
+         ResultsSha256 = ResultsHash( b.Run ),
          Conditions = b.Conditions.ToInfo(),
          StaleLines = StaleLines( b.Run ),
       } ).ToList();
@@ -468,7 +480,10 @@ public static class Consolidator
             throw new ConsolidateRefusal( $"{string.Join( ", ", partial )} has {ClaimMetrics.FieldOf( metric )} in some claim runs and not in others" );
          }
 
-         MetricOutcome outcome = ClaimRule.Build( metric, sessions, holding.Where( t => !changed.Contains( t ) ).ToList(), holding.Where( changed.Contains ).ToList(), report.Basis.TBp );
+         List<NotHeldFigure> cells = NotHeldCells( sessions, targets, metric );
+         List<string> notHeld = cells.Select( c => c.Target ).Distinct( StringComparer.Ordinal ).Where( t => holding.Contains( t ) && !changed.Contains( t ) ).ToList();
+         MetricOutcome outcome = ClaimRule.Build( metric, sessions, holding.Where( t => !changed.Contains( t ) && !notHeld.Contains( t ) ).ToList(), holding.Where( changed.Contains ).ToList(), report.Basis.TBp, notHeld );
+         NoteNotHeld( report, metric, cells.Where( c => notHeld.Contains( c.Target ) ).ToList() );
          foreach( MetricRow row in outcome.Table.Rows )
          {
             IReadOnlyList<RunResult> shown = row.Status == ClaimRule.ONE_SESSION && sessions.Count == 2 ? sessions[1].Runs : runs;
@@ -489,6 +504,47 @@ public static class Consolidator
       }
 
       return outcomes;
+   }
+
+   /// <summary>
+   /// The cells the claim runs recorded as NOT HELD for a metric.
+   /// </summary>
+   /// <param name="sessions">Claim sessions.</param>
+   /// <param name="targets">Targets with rows.</param>
+   /// <param name="metric">Metric id.</param>
+   /// <returns>The cells.</returns>
+   /// <exception cref="ConsolidateRefusal">A NOT HELD pass has no metric to stand for.</exception>
+   private static List<NotHeldFigure> NotHeldCells( List<ClaimSession> sessions, List<string> targets, string metric )
+   {
+      try
+      {
+         return ConsolidateNotHeld.Cells( sessions, targets, metric );
+      }
+      catch( InvalidDataException ex )
+      {
+         throw new ConsolidateRefusal( "NOT HELD pass: " + ex.Message );
+      }
+   }
+
+   /// <summary>
+   /// Records the cells of the rows a table leaves unranked, and the rows themselves.
+   /// </summary>
+   /// <param name="report">The report.</param>
+   /// <param name="metric">Metric id.</param>
+   /// <param name="cells">The cells of the rows left unranked.</param>
+   private static void NoteNotHeld( ConsolidatedReport report, string metric, List<NotHeldFigure> cells )
+   {
+      if( cells.Count == 0 )
+      {
+         return;
+      }
+
+      report.NotHeld ??= new NotHeldInfo();
+      report.NotHeld.Cells.AddRange( cells );
+      foreach( IGrouping<string, NotHeldFigure> target in cells.GroupBy( c => c.Target, StringComparer.Ordinal ) )
+      {
+         report.NotHeld.Unranked.Add( new NotHeldRow { Metric = metric, Target = target.Key, Pass = target.First().Pass, Runs = target.Select( c => c.Run ).Distinct( StringComparer.Ordinal ).Count() } );
+      }
    }
 
    /// <summary>
@@ -646,7 +702,7 @@ public static class Consolidator
    {
       ClaimSession newest = sessions[^1];
       return targets.Select( t => ( Target: t, List: newest.Runs[0].Find( t )!.EngineSettingsList ) ).Where( x => x.List.Count > 0 )
-         .Select( x => new EngineSettingsRow { Target = x.Target, Session = newest.Name, Settings = x.List.Select( s => new EngineSettingEntry { Key = s.Key, Value = s.Value, How = s.How } ).ToList() } ).ToList();
+         .Select( x => new EngineSettingsRow { Target = x.Target, Session = newest.Name, Settings = x.List.Select( s => new EngineSettingEntry { Key = ConsolidateSettings.KeyShown( x.Target, s.Key ), Value = s.Value, How = s.How } ).ToList() } ).ToList();
    }
 
    /// <summary>
@@ -693,6 +749,7 @@ public static class Consolidator
       report.RunsPerSession = RUNS_PER_SESSION;
       report.RunsShown = RUNS_PER_SESSION * sessions.Count;
       report.ClaimRunCount = sessions.Sum( s => s.Runs.Count );
+      report.TargetCount = report.Targets.Count;
       report.ImageTargets = report.Images.Count;
       report.Basis.RunCount = report.Basis.Runs.Count;
       report.Basis.LeftOutCount = report.Basis.LeftOut.Count;
@@ -742,7 +799,19 @@ public static class Consolidator
          throw new ConsolidateRefusal( $"claim run {run.Folder} must lie inside the results folder {root} (give --results-dir), and its folder name may not hold a dot" );
       }
 
-      return new RunRef { Folder = Path.GetRelativePath( root, run.Folder ), Seed = run.RunSeed, StartedUtc = run.StartedUtc, StaleLines = StaleLines( run ) };
+      return new RunRef { Folder = Path.GetRelativePath( root, run.Folder ), Seed = run.RunSeed, StartedUtc = run.StartedUtc, ResultsSha256 = ResultsHash( run ), StaleLines = StaleLines( run ) };
+   }
+
+   /// <summary>
+   /// The SHA-256 of a run's results.json.
+   /// Why recorded: the report is made from these files, and a reader can then tell which bytes of each run it read.
+   /// </summary>
+   /// <param name="run">The run.</param>
+   /// <returns>Lower-case hex, or null when the run was not read from a file.</returns>
+   private static string? ResultsHash( RunResult run )
+   {
+      string path = Path.Combine( run.Folder, "results.json" );
+      return File.Exists( path ) ? EngineFactSheet.FileSha256( path ) : null;
    }
 
    /// <summary>

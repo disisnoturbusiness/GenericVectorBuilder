@@ -1,0 +1,4 @@
+Byte copies of the run operator's analysis of the three v8 runs (seeds 801, 802, 803), made 2026-10-08 from /home/dan/gvb-work/lanes/v8-final/observer/analysis-80N.txt.
+Line X12 of each lists the engines whose data folder, read by a witness when the container was created (before the engine ran), differs by more than one percent from the
+tool's bytesAtStart. deploy/bench/run-page-notes.json cites that line for the corrections it prints on the run pages (deploy/bench/make-run-page-notes.py reads these files).
+SHA-256 of each file: SHA256SUMS in this folder.

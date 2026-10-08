@@ -657,7 +657,7 @@ public sealed class ConsolidateDryFixTests : IClassFixture<DryFixFixture>
    {
       await ConsolidateHarness.Timed( () =>
       {
-         Assert.Equal( "At 524 vectors each figure is the cost of one request through the engine's .NET client, and does not show how an index scales.", _fixture.Two.Text( "subtitle.scope" ) );
+         Assert.Equal( "At 524 vectors each figure is the cost of one request through the benchmark's client for that engine, and does not show how an index scales.", _fixture.Two.Text( "subtitle.scope" ) );
          Assert.Contains( "does not show how an index scales", _fixture.Two.Md );
       } );
    }

@@ -61,7 +61,7 @@ public static class ConsolidateTextFlags
    /// <returns>The text.</returns>
    private static string One( Writer w, string slot, FlagEvidence e )
    {
-      var sources = e.Values.Select( v => S.Result( e.Run, v.Path, v.Value ) ).ToList();
+      var sources = e.Code == ConsolidateFlags.NOT_HELD ? new List<SentenceSource> { S.Token( e.Run, e.Values[0].Path, e.Values[0].Value ) } : e.Values.Select( v => S.Result( e.Run, v.Path, v.Value ) ).ToList();
       if( e.PassIndex is int index )
       {
          sources.Add( S.Token( e.Run, $"conditions.passes[{index}].target", e.Target ) );
@@ -78,6 +78,7 @@ public static class ConsolidateTextFlags
          ConsolidateFlags.GOVERNOR => T.Fill( T.FLAG_GOVERNOR, e.Run, pass, V( 0 ) ),
          ConsolidateFlags.THROTTLE => T.Fill( T.FLAG_THROTTLE, e.Run, e.Target, V( 0 ), V( 1 ) ),
          ConsolidateFlags.UNSETTLED => T.Fill( T.FLAG_UNSETTLED, e.Run, e.Target ),
+         ConsolidateFlags.NOT_HELD => T.Fill( T.FLAG_NOT_HELD, e.Run, pass, e.Target, V( 1 ), V( 2 ), V( 3 ), V( 4 ) ),
          ConsolidateFlags.INDEX_NOT_READY => T.Fill( T.FLAG_INDEX, e.Run, e.Target, e.Pass == "afterLoad" ? T.AFTER_LOAD : T.AFTER_SEARCH, V( 0 ), V( 1 ) ),
          ConsolidateFlags.SEGMENT_LAYOUT => T.Fill( T.FLAG_LAYOUT, e.Run, e.Target, V( 0 ) ),
          ConsolidateFlags.SEARCH_ERRORS => T.Fill( T.FLAG_SEARCH_ERRORS, e.Run, V( 0 ), e.Target ),

@@ -1,0 +1,987 @@
+{
+ "format": "run-page-notes-1",
+ "generatedBy": "deploy/bench/make-run-page-notes.py",
+ "runs": [
+  "20261005-023459-eshoponweb",
+  "20261005-031556-eshoponweb",
+  "20261005-035711-eshoponweb",
+  "20261005-073329-eshoponweb",
+  "20261005-085448-eshoponweb",
+  "20261005-101815-eshoponweb",
+  "20261006-130619-eshoponweb",
+  "20261006-142724-eshoponweb",
+  "20261006-154837-eshoponweb",
+  "20261007-205106-eshoponweb",
+  "20261007-221429-eshoponweb",
+  "20261007-233551-eshoponweb"
+ ],
+ "notes": [
+  {
+   "runs": [
+    "20261005-023459-eshoponweb"
+   ],
+   "target": "weaviate",
+   "field": "durability",
+   "statement": "weaviate.compose.yaml sets no persistence variable",
+   "kind": "false",
+   "note": "deploy/engines/weaviate.compose.yaml sets PERSISTENCE_DATA_PATH to /var/lib/weaviate. The compose file does set a persistence variable.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "deploy/engines/weaviate.compose.yaml#PERSISTENCE_DATA_PATH: /var/lib/weaviate",
+     "value": "PERSISTENCE_DATA_PATH: /var/lib/weaviate"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261005-023459-eshoponweb:targets[weaviate].durability#sets no persistence variable",
+     "value": "sets no persistence variable"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261005-023459-eshoponweb"
+   ],
+   "target": "clickhouse",
+   "field": "disk.text",
+   "statement": "1.27 GiB added by this load",
+   "kind": "misleading",
+   "note": "The figure is the growth of the whole data folder over the engine's turn, as the same line says (2.63 GiB at the end, 1.36 GiB before). The load itself is 524 vectors of 1024 dimensions, 2,146,304 bytes as 4-byte floats (2.05 MiB); the figure is 1,362,545,922 bytes.",
+   "sources": [
+    {
+     "kind": "results",
+     "ref": "results@20261005-023459-eshoponweb:targets[clickhouse].disk.text",
+     "value": "1.27 GiB added by this load (2.63 GiB (whole engine data folder), 1.36 GiB before)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261005-023459-eshoponweb:rows",
+     "value": "524"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261005-023459-eshoponweb:dimension",
+     "value": "1024"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261005-031556-eshoponweb"
+   ],
+   "target": "weaviate",
+   "field": "durability",
+   "statement": "weaviate.compose.yaml sets no persistence variable",
+   "kind": "false",
+   "note": "deploy/engines/weaviate.compose.yaml sets PERSISTENCE_DATA_PATH to /var/lib/weaviate. The compose file does set a persistence variable.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "deploy/engines/weaviate.compose.yaml#PERSISTENCE_DATA_PATH: /var/lib/weaviate",
+     "value": "PERSISTENCE_DATA_PATH: /var/lib/weaviate"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261005-031556-eshoponweb:targets[weaviate].durability#sets no persistence variable",
+     "value": "sets no persistence variable"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261005-031556-eshoponweb"
+   ],
+   "target": "clickhouse",
+   "field": "disk.text",
+   "statement": "906.61 MiB added by this load",
+   "kind": "misleading",
+   "note": "The figure is the growth of the whole data folder over the engine's turn, as the same line says (3.52 GiB at the end, 2.64 GiB before). The load itself is 524 vectors of 1024 dimensions, 2,146,304 bytes as 4-byte floats (2.05 MiB); the figure is 950,649,750 bytes.",
+   "sources": [
+    {
+     "kind": "results",
+     "ref": "results@20261005-031556-eshoponweb:targets[clickhouse].disk.text",
+     "value": "906.61 MiB added by this load (3.52 GiB (whole engine data folder), 2.64 GiB before)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261005-031556-eshoponweb:rows",
+     "value": "524"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261005-031556-eshoponweb:dimension",
+     "value": "1024"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261005-035711-eshoponweb"
+   ],
+   "target": "weaviate",
+   "field": "durability",
+   "statement": "weaviate.compose.yaml sets no persistence variable",
+   "kind": "false",
+   "note": "deploy/engines/weaviate.compose.yaml sets PERSISTENCE_DATA_PATH to /var/lib/weaviate. The compose file does set a persistence variable.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "deploy/engines/weaviate.compose.yaml#PERSISTENCE_DATA_PATH: /var/lib/weaviate",
+     "value": "PERSISTENCE_DATA_PATH: /var/lib/weaviate"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261005-035711-eshoponweb:targets[weaviate].durability#sets no persistence variable",
+     "value": "sets no persistence variable"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261005-035711-eshoponweb"
+   ],
+   "target": "clickhouse",
+   "field": "disk.text",
+   "statement": "2.42 GiB added by this load",
+   "kind": "misleading",
+   "note": "The figure is the growth of the whole data folder over the engine's turn, as the same line says (5.95 GiB at the end, 3.53 GiB before). The load itself is 524 vectors of 1024 dimensions, 2,146,304 bytes as 4-byte floats (2.05 MiB); the figure is 2,594,340,474 bytes.",
+   "sources": [
+    {
+     "kind": "results",
+     "ref": "results@20261005-035711-eshoponweb:targets[clickhouse].disk.text",
+     "value": "2.42 GiB added by this load (5.95 GiB (whole engine data folder), 3.53 GiB before)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261005-035711-eshoponweb:rows",
+     "value": "524"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261005-035711-eshoponweb:dimension",
+     "value": "1024"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261005-073329-eshoponweb"
+   ],
+   "target": "weaviate",
+   "field": "durability",
+   "statement": "weaviate.compose.yaml sets no persistence variable",
+   "kind": "false",
+   "note": "deploy/engines/weaviate.compose.yaml sets PERSISTENCE_DATA_PATH to /var/lib/weaviate. The compose file does set a persistence variable.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "deploy/engines/weaviate.compose.yaml#PERSISTENCE_DATA_PATH: /var/lib/weaviate",
+     "value": "PERSISTENCE_DATA_PATH: /var/lib/weaviate"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261005-073329-eshoponweb:targets[weaviate].durability#sets no persistence variable",
+     "value": "sets no persistence variable"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261005-085448-eshoponweb"
+   ],
+   "target": "weaviate",
+   "field": "durability",
+   "statement": "weaviate.compose.yaml sets no persistence variable",
+   "kind": "false",
+   "note": "deploy/engines/weaviate.compose.yaml sets PERSISTENCE_DATA_PATH to /var/lib/weaviate. The compose file does set a persistence variable.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "deploy/engines/weaviate.compose.yaml#PERSISTENCE_DATA_PATH: /var/lib/weaviate",
+     "value": "PERSISTENCE_DATA_PATH: /var/lib/weaviate"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261005-085448-eshoponweb:targets[weaviate].durability#sets no persistence variable",
+     "value": "sets no persistence variable"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261005-101815-eshoponweb"
+   ],
+   "target": "weaviate",
+   "field": "durability",
+   "statement": "weaviate.compose.yaml sets no persistence variable",
+   "kind": "false",
+   "note": "deploy/engines/weaviate.compose.yaml sets PERSISTENCE_DATA_PATH to /var/lib/weaviate. The compose file does set a persistence variable.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "deploy/engines/weaviate.compose.yaml#PERSISTENCE_DATA_PATH: /var/lib/weaviate",
+     "value": "PERSISTENCE_DATA_PATH: /var/lib/weaviate"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261005-101815-eshoponweb:targets[weaviate].durability#sets no persistence variable",
+     "value": "sets no persistence variable"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261006-130619-eshoponweb"
+   ],
+   "target": "weaviate",
+   "field": "durability",
+   "statement": "weaviate.compose.yaml sets no persistence variable",
+   "kind": "false",
+   "note": "deploy/engines/weaviate.compose.yaml sets PERSISTENCE_DATA_PATH to /var/lib/weaviate. The compose file does set a persistence variable.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "deploy/engines/weaviate.compose.yaml#PERSISTENCE_DATA_PATH: /var/lib/weaviate",
+     "value": "PERSISTENCE_DATA_PATH: /var/lib/weaviate"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261006-130619-eshoponweb:targets[weaviate].durability#sets no persistence variable",
+     "value": "sets no persistence variable"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261006-130619-eshoponweb"
+   ],
+   "target": "clickhouse",
+   "field": "disk.text",
+   "statement": "4.21 GiB added by this load",
+   "kind": "misleading",
+   "note": "The figure is the growth of the whole data folder over the engine's turn, as the same line says (4.21 GiB at the end, 99.17 KiB before). The load itself is 524 vectors of 1024 dimensions, 2,146,304 bytes as 4-byte floats (2.05 MiB); the figure is 4,515,349,223 bytes.",
+   "sources": [
+    {
+     "kind": "results",
+     "ref": "results@20261006-130619-eshoponweb:targets[clickhouse].disk.text",
+     "value": "4.21 GiB added by this load (4.21 GiB (whole engine data folder), 99.17 KiB before)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261006-130619-eshoponweb:rows",
+     "value": "524"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261006-130619-eshoponweb:dimension",
+     "value": "1024"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261006-142724-eshoponweb"
+   ],
+   "target": "weaviate",
+   "field": "durability",
+   "statement": "weaviate.compose.yaml sets no persistence variable",
+   "kind": "false",
+   "note": "deploy/engines/weaviate.compose.yaml sets PERSISTENCE_DATA_PATH to /var/lib/weaviate. The compose file does set a persistence variable.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "deploy/engines/weaviate.compose.yaml#PERSISTENCE_DATA_PATH: /var/lib/weaviate",
+     "value": "PERSISTENCE_DATA_PATH: /var/lib/weaviate"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261006-142724-eshoponweb:targets[weaviate].durability#sets no persistence variable",
+     "value": "sets no persistence variable"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261006-142724-eshoponweb"
+   ],
+   "target": "clickhouse",
+   "field": "disk.text",
+   "statement": "2.57 GiB added by this load",
+   "kind": "misleading",
+   "note": "The figure is the growth of the whole data folder over the engine's turn, as the same line says (6.79 GiB at the end, 4.22 GiB before). The load itself is 524 vectors of 1024 dimensions, 2,146,304 bytes as 4-byte floats (2.05 MiB); the figure is 2,758,116,325 bytes.",
+   "sources": [
+    {
+     "kind": "results",
+     "ref": "results@20261006-142724-eshoponweb:targets[clickhouse].disk.text",
+     "value": "2.57 GiB added by this load (6.79 GiB (whole engine data folder), 4.22 GiB before)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261006-142724-eshoponweb:rows",
+     "value": "524"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261006-142724-eshoponweb:dimension",
+     "value": "1024"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261006-154837-eshoponweb"
+   ],
+   "target": "weaviate",
+   "field": "durability",
+   "statement": "weaviate.compose.yaml sets no persistence variable",
+   "kind": "false",
+   "note": "deploy/engines/weaviate.compose.yaml sets PERSISTENCE_DATA_PATH to /var/lib/weaviate. The compose file does set a persistence variable.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "deploy/engines/weaviate.compose.yaml#PERSISTENCE_DATA_PATH: /var/lib/weaviate",
+     "value": "PERSISTENCE_DATA_PATH: /var/lib/weaviate"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261006-154837-eshoponweb:targets[weaviate].durability#sets no persistence variable",
+     "value": "sets no persistence variable"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261006-154837-eshoponweb"
+   ],
+   "target": "clickhouse",
+   "field": "disk.text",
+   "statement": "0 B added by this load",
+   "kind": "misleading",
+   "note": "The figure is the growth of the whole data folder over the engine's turn, as the same line says (6.79 GiB at the end, 6.79 GiB before). The load itself is 524 vectors of 1024 dimensions, 2,146,304 bytes as 4-byte floats (2.05 MiB); the figure is 0 bytes.",
+   "sources": [
+    {
+     "kind": "results",
+     "ref": "results@20261006-154837-eshoponweb:targets[clickhouse].disk.text",
+     "value": "0 B added by this load (6.79 GiB (whole engine data folder), 6.79 GiB before)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261006-154837-eshoponweb:rows",
+     "value": "524"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261006-154837-eshoponweb:dimension",
+     "value": "1024"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-205106-eshoponweb"
+   ],
+   "target": "weaviate",
+   "field": "durability",
+   "statement": "weaviate.compose.yaml sets no persistence variable",
+   "kind": "false",
+   "note": "deploy/engines/weaviate.compose.yaml sets PERSISTENCE_DATA_PATH to /var/lib/weaviate. The compose file does set a persistence variable.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "deploy/engines/weaviate.compose.yaml#PERSISTENCE_DATA_PATH: /var/lib/weaviate",
+     "value": "PERSISTENCE_DATA_PATH: /var/lib/weaviate"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-205106-eshoponweb:targets[weaviate].durability#sets no persistence variable",
+     "value": "sets no persistence variable"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-205106-eshoponweb"
+   ],
+   "target": "clickhouse",
+   "field": "disk.text",
+   "statement": "5.29 GiB added by this load",
+   "kind": "misleading",
+   "note": "The figure is the growth of the whole data folder over the engine's turn, as the same line says (5.31 GiB at the end, 14.01 MiB before). The load itself is 524 vectors of 1024 dimensions, 2,146,304 bytes as 4-byte floats (2.05 MiB); the figure is 5,685,109,857 bytes.",
+   "sources": [
+    {
+     "kind": "results",
+     "ref": "results@20261007-205106-eshoponweb:targets[clickhouse].disk.text",
+     "value": "5.29 GiB added by this load (5.31 GiB (whole engine data folder), 14.01 MiB before)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-205106-eshoponweb:rows",
+     "value": "524"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-205106-eshoponweb:dimension",
+     "value": "1024"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-205106-eshoponweb"
+   ],
+   "target": "clickhouse",
+   "field": "dataFolder.reset",
+   "statement": "(the folder was steady)",
+   "kind": "misleading",
+   "note": "The words describe the folder after the reset: it stayed within the tolerance over a stability window before the after reading was taken. They do not say the reset left the folder unchanged; the same sentence records 4.25 GiB before and 14.01 MiB after.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Bench/Targets/ClickHouseStartState.cs#the folder was steady",
+     "value": "the folder was steady"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Bench/Targets/ClickHouseStartState.cs#True when the folder stayed within the tolerance over a full stability window before the deadline.",
+     "value": "True when the folder stayed within the tolerance over a full stability window before the deadline."
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-205106-eshoponweb:targets[clickhouse].dataFolder.reset",
+     "value": "truncated 9 MergeTree log tables in database system (asynchronous_insert_log, asynchronous_metric_log, background_schedule_pool_log, metric_log, part_log, processors_profile_log, query_log, text_log, trace_log); ClickHouse's own active bytes of those tables 2.09 GiB before and 0 B after; data folder 4.25 GiB before and 14.01 MiB after (the folder was steady); not truncated, name does not end in _log: none"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-205106-eshoponweb"
+   ],
+   "target": "mariadb",
+   "field": "dataFolder.bytesAtStart",
+   "statement": "166.78 MiB at the start",
+   "kind": "misleading",
+   "note": "A witness read this data folder at 162,269,780 bytes (154.75 MiB) when the container was created, before the engine ran. The tool recorded 174,877,277 bytes (166.78 MiB) as the start, 8 percent above the witness. The two readings disagree; this line prints the tool's.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-801.txt#X12",
+     "value": "('mariadb', 174877277, 162269780)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-205106-eshoponweb:targets[mariadb].dataFolder.bytesAtStart",
+     "value": "174877277"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-205106-eshoponweb"
+   ],
+   "target": "milvus",
+   "field": "dataFolder.bytesAtStart",
+   "statement": "218 MiB at the start",
+   "kind": "misleading",
+   "note": "A witness read this data folder at 164,473,352 bytes (156.85 MiB) when the container was created, before the engine ran. The tool recorded 228,593,016 bytes (218 MiB) as the start, 39 percent above the witness. The two readings disagree; this line prints the tool's.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-801.txt#X12",
+     "value": "('milvus', 228593016, 164473352)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-205106-eshoponweb:targets[milvus].dataFolder.bytesAtStart",
+     "value": "228593016"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-205106-eshoponweb"
+   ],
+   "target": "sql",
+   "field": "dataFolder.bytesAtStart",
+   "statement": "105.06 MiB at the start",
+   "kind": "misleading",
+   "note": "A witness read this data folder at 380,452,110 bytes (362.83 MiB) when the container was created, before the engine ran. The tool recorded 110,158,310 bytes (105.06 MiB) as the start, 71 percent below the witness. The two readings disagree; this line prints the tool's.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-801.txt#X12",
+     "value": "('sql', 110158310, 380452110)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-205106-eshoponweb:targets[sql].dataFolder.bytesAtStart",
+     "value": "110158310"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-205106-eshoponweb"
+   ],
+   "target": "sql-diskann",
+   "field": "dataFolder.bytesAtStart",
+   "statement": "105.05 MiB at the start",
+   "kind": "misleading",
+   "note": "A witness read this data folder at 380,452,110 bytes (362.83 MiB) when the container was created, before the engine ran. The tool recorded 110,154,214 bytes (105.05 MiB) as the start, 71 percent below the witness. The two readings disagree; this line prints the tool's.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-801.txt#X12",
+     "value": "('sql-diskann', 110154214, 380452110)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-205106-eshoponweb:targets[sql-diskann].dataFolder.bytesAtStart",
+     "value": "110154214"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-205106-eshoponweb"
+   ],
+   "target": "typesense",
+   "field": "dataFolder.bytesAtStart",
+   "statement": "707.22 MiB at the start",
+   "kind": "misleading",
+   "note": "A witness read this data folder at 293,394,812 bytes (279.8 MiB) when the container was created, before the engine ran. The tool recorded 741,572,783 bytes (707.22 MiB) as the start, 153 percent above the witness. The two readings disagree; this line prints the tool's.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-801.txt#X12",
+     "value": "('typesense', 741572783, 293394812)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-205106-eshoponweb:targets[typesense].dataFolder.bytesAtStart",
+     "value": "741572783"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-221429-eshoponweb"
+   ],
+   "target": "weaviate",
+   "field": "durability",
+   "statement": "weaviate.compose.yaml sets no persistence variable",
+   "kind": "false",
+   "note": "deploy/engines/weaviate.compose.yaml sets PERSISTENCE_DATA_PATH to /var/lib/weaviate. The compose file does set a persistence variable.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "deploy/engines/weaviate.compose.yaml#PERSISTENCE_DATA_PATH: /var/lib/weaviate",
+     "value": "PERSISTENCE_DATA_PATH: /var/lib/weaviate"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-221429-eshoponweb:targets[weaviate].durability#sets no persistence variable",
+     "value": "sets no persistence variable"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-221429-eshoponweb"
+   ],
+   "target": "clickhouse",
+   "field": "disk.text",
+   "statement": "4.18 GiB added by this load",
+   "kind": "misleading",
+   "note": "The figure is the growth of the whole data folder over the engine's turn, as the same line says (6.9 GiB at the end, 2.72 GiB before). The load itself is 524 vectors of 1024 dimensions, 2,146,304 bytes as 4-byte floats (2.05 MiB); the figure is 4,491,193,144 bytes.",
+   "sources": [
+    {
+     "kind": "results",
+     "ref": "results@20261007-221429-eshoponweb:targets[clickhouse].disk.text",
+     "value": "4.18 GiB added by this load (6.9 GiB (whole engine data folder), 2.72 GiB before)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-221429-eshoponweb:rows",
+     "value": "524"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-221429-eshoponweb:dimension",
+     "value": "1024"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-221429-eshoponweb"
+   ],
+   "target": "clickhouse",
+   "field": "dataFolder.reset",
+   "statement": "(the folder was steady)",
+   "kind": "misleading",
+   "note": "The words describe the folder after the reset: it stayed within the tolerance over a stability window before the after reading was taken. They do not say the reset left the folder unchanged; the same sentence records 5.32 GiB before and 2.72 GiB after.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Bench/Targets/ClickHouseStartState.cs#the folder was steady",
+     "value": "the folder was steady"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Bench/Targets/ClickHouseStartState.cs#True when the folder stayed within the tolerance over a full stability window before the deadline.",
+     "value": "True when the folder stayed within the tolerance over a full stability window before the deadline."
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-221429-eshoponweb:targets[clickhouse].dataFolder.reset",
+     "value": "truncated 9 MergeTree log tables in database system (asynchronous_insert_log, asynchronous_metric_log, background_schedule_pool_log, metric_log, part_log, processors_profile_log, query_log, text_log, trace_log); ClickHouse's own active bytes of those tables 183.97 KiB before and 0 B after; data folder 5.32 GiB before and 2.72 GiB after (the folder was steady); not truncated, name does not end in _log: none"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-221429-eshoponweb"
+   ],
+   "target": "mariadb",
+   "field": "dataFolder.bytesAtStart",
+   "statement": "166.77 MiB at the start",
+   "kind": "misleading",
+   "note": "A witness read this data folder at 162,258,887 bytes (154.74 MiB) when the container was created, before the engine ran. The tool recorded 174,866,384 bytes (166.77 MiB) as the start, 8 percent above the witness. The two readings disagree; this line prints the tool's.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-802.txt#X12",
+     "value": "('mariadb', 174866384, 162258887)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-221429-eshoponweb:targets[mariadb].dataFolder.bytesAtStart",
+     "value": "174866384"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-221429-eshoponweb"
+   ],
+   "target": "milvus",
+   "field": "dataFolder.bytesAtStart",
+   "statement": "226.87 MiB at the start",
+   "kind": "misleading",
+   "note": "A witness read this data folder at 173,771,992 bytes (165.72 MiB) when the container was created, before the engine ran. The tool recorded 237,892,829 bytes (226.87 MiB) as the start, 37 percent above the witness. The two readings disagree; this line prints the tool's.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-802.txt#X12",
+     "value": "('milvus', 237892829, 173771992)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-221429-eshoponweb:targets[milvus].dataFolder.bytesAtStart",
+     "value": "237892829"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-221429-eshoponweb"
+   ],
+   "target": "sql",
+   "field": "dataFolder.bytesAtStart",
+   "statement": "105.07 MiB at the start",
+   "kind": "misleading",
+   "note": "A witness read this data folder at 380,458,862 bytes (362.83 MiB) when the container was created, before the engine ran. The tool recorded 110,169,158 bytes (105.07 MiB) as the start, 71 percent below the witness. The two readings disagree; this line prints the tool's.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-802.txt#X12",
+     "value": "('sql', 110169158, 380458862)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-221429-eshoponweb:targets[sql].dataFolder.bytesAtStart",
+     "value": "110169158"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-221429-eshoponweb"
+   ],
+   "target": "sql-diskann",
+   "field": "dataFolder.bytesAtStart",
+   "statement": "105.06 MiB at the start",
+   "kind": "misleading",
+   "note": "A witness read this data folder at 380,458,862 bytes (362.83 MiB) when the container was created, before the engine ran. The tool recorded 110,162,406 bytes (105.06 MiB) as the start, 71 percent below the witness. The two readings disagree; this line prints the tool's.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-802.txt#X12",
+     "value": "('sql-diskann', 110162406, 380458862)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-221429-eshoponweb:targets[sql-diskann].dataFolder.bytesAtStart",
+     "value": "110162406"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-221429-eshoponweb"
+   ],
+   "target": "typesense",
+   "field": "dataFolder.bytesAtStart",
+   "statement": "856.64 MiB at the start",
+   "kind": "misleading",
+   "note": "A witness read this data folder at 301,621,308 bytes (287.65 MiB) when the container was created, before the engine ran. The tool recorded 898,253,504 bytes (856.64 MiB) as the start, 198 percent above the witness. The two readings disagree; this line prints the tool's.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-802.txt#X12",
+     "value": "('typesense', 898253504, 301621308)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-221429-eshoponweb:targets[typesense].dataFolder.bytesAtStart",
+     "value": "898253504"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-233551-eshoponweb"
+   ],
+   "target": "weaviate",
+   "field": "durability",
+   "statement": "weaviate.compose.yaml sets no persistence variable",
+   "kind": "false",
+   "note": "deploy/engines/weaviate.compose.yaml sets PERSISTENCE_DATA_PATH to /var/lib/weaviate. The compose file does set a persistence variable.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "deploy/engines/weaviate.compose.yaml#PERSISTENCE_DATA_PATH: /var/lib/weaviate",
+     "value": "PERSISTENCE_DATA_PATH: /var/lib/weaviate"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-233551-eshoponweb:targets[weaviate].durability#sets no persistence variable",
+     "value": "sets no persistence variable"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-233551-eshoponweb"
+   ],
+   "target": "clickhouse",
+   "field": "disk.text",
+   "statement": "4.67 GiB added by this load",
+   "kind": "misleading",
+   "note": "The figure is the growth of the whole data folder over the engine's turn, as the same line says (6.76 GiB at the end, 2.09 GiB before). The load itself is 524 vectors of 1024 dimensions, 2,146,304 bytes as 4-byte floats (2.05 MiB); the figure is 5,014,957,314 bytes.",
+   "sources": [
+    {
+     "kind": "results",
+     "ref": "results@20261007-233551-eshoponweb:targets[clickhouse].disk.text",
+     "value": "4.67 GiB added by this load (6.76 GiB (whole engine data folder), 2.09 GiB before)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-233551-eshoponweb:rows",
+     "value": "524"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-233551-eshoponweb:dimension",
+     "value": "1024"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-233551-eshoponweb"
+   ],
+   "target": "clickhouse",
+   "field": "dataFolder.reset",
+   "statement": "(the folder was steady)",
+   "kind": "misleading",
+   "note": "The words describe the folder after the reset: it stayed within the tolerance over a stability window before the after reading was taken. They do not say the reset left the folder unchanged; the same sentence records 6.92 GiB before and 2.09 GiB after.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Bench/Targets/ClickHouseStartState.cs#the folder was steady",
+     "value": "the folder was steady"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Bench/Targets/ClickHouseStartState.cs#True when the folder stayed within the tolerance over a full stability window before the deadline.",
+     "value": "True when the folder stayed within the tolerance over a full stability window before the deadline."
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-233551-eshoponweb:targets[clickhouse].dataFolder.reset",
+     "value": "truncated 9 MergeTree log tables in database system (asynchronous_insert_log, asynchronous_metric_log, background_schedule_pool_log, metric_log, part_log, processors_profile_log, query_log, text_log, trace_log); ClickHouse's own active bytes of those tables 185.06 KiB before and 0 B after; data folder 6.92 GiB before and 2.09 GiB after (the folder was steady); not truncated, name does not end in _log: none"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-233551-eshoponweb"
+   ],
+   "target": "mariadb",
+   "field": "dataFolder.bytesAtStart",
+   "statement": "166.77 MiB at the start",
+   "kind": "misleading",
+   "note": "A witness read this data folder at 162,258,911 bytes (154.74 MiB) when the container was created, before the engine ran. The tool recorded 174,866,408 bytes (166.77 MiB) as the start, 8 percent above the witness. The two readings disagree; this line prints the tool's.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-803.txt#X12",
+     "value": "('mariadb', 174866408, 162258911)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-233551-eshoponweb:targets[mariadb].dataFolder.bytesAtStart",
+     "value": "174866408"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-233551-eshoponweb"
+   ],
+   "target": "milvus",
+   "field": "dataFolder.bytesAtStart",
+   "statement": "235.67 MiB at the start",
+   "kind": "misleading",
+   "note": "A witness read this data folder at 183,071,822 bytes (174.59 MiB) when the container was created, before the engine ran. The tool recorded 247,123,030 bytes (235.67 MiB) as the start, 35 percent above the witness. The two readings disagree; this line prints the tool's.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-803.txt#X12",
+     "value": "('milvus', 247123030, 183071822)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-233551-eshoponweb:targets[milvus].dataFolder.bytesAtStart",
+     "value": "247123030"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-233551-eshoponweb"
+   ],
+   "target": "sql",
+   "field": "dataFolder.bytesAtStart",
+   "statement": "105.07 MiB at the start",
+   "kind": "misleading",
+   "note": "A witness read this data folder at 380,464,398 bytes (362.84 MiB) when the container was created, before the engine ran. The tool recorded 110,170,598 bytes (105.07 MiB) as the start, 71 percent below the witness. The two readings disagree; this line prints the tool's.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-803.txt#X12",
+     "value": "('sql', 110170598, 380464398)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-233551-eshoponweb:targets[sql].dataFolder.bytesAtStart",
+     "value": "110170598"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-233551-eshoponweb"
+   ],
+   "target": "sql-diskann",
+   "field": "dataFolder.bytesAtStart",
+   "statement": "105.06 MiB at the start",
+   "kind": "misleading",
+   "note": "A witness read this data folder at 380,464,398 bytes (362.84 MiB) when the container was created, before the engine ran. The tool recorded 110,167,942 bytes (105.06 MiB) as the start, 71 percent below the witness. The two readings disagree; this line prints the tool's.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-803.txt#X12",
+     "value": "('sql-diskann', 110167942, 380464398)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-233551-eshoponweb:targets[sql-diskann].dataFolder.bytesAtStart",
+     "value": "110167942"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-233551-eshoponweb"
+   ],
+   "target": "typesense",
+   "field": "dataFolder.bytesAtStart",
+   "statement": "688.52 MiB at the start",
+   "kind": "misleading",
+   "note": "A witness read this data folder at 308,306,092 bytes (294.02 MiB) when the container was created, before the engine ran. The tool recorded 721,960,355 bytes (688.52 MiB) as the start, 134 percent above the witness. The two readings disagree; this line prints the tool's.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-803.txt#X12",
+     "value": "('typesense', 721960355, 308306092)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-233551-eshoponweb:targets[typesense].dataFolder.bytesAtStart",
+     "value": "721960355"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-233551-eshoponweb"
+   ],
+   "target": "vespa",
+   "field": "dataFolder.bytesAtStart",
+   "statement": "1.9 GiB at the start",
+   "kind": "misleading",
+   "note": "A witness read this data folder at 2,280,491,799 bytes (2.12 GiB) when the container was created, before the engine ran. The tool recorded 2,042,392,842 bytes (1.9 GiB) as the start, 10 percent below the witness. The two readings disagree; this line prints the tool's.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-803.txt#X12",
+     "value": "('vespa', 2042392842, 2280491799)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-233551-eshoponweb:targets[vespa].dataFolder.bytesAtStart",
+     "value": "2042392842"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-233551-eshoponweb"
+   ],
+   "target": "vespa",
+   "field": "disk.text",
+   "statement": "235.33 MiB added by this load",
+   "kind": "misleading",
+   "note": "The figure rests on the tool's start reading (2,042,392,842 bytes), which the witness disputes (above). From the witness's reading and the recorded end (2,291,891,892 bytes) the folder grew by 11,400,093 bytes (10.87 MiB) over the turn.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/observer-v8/analysis-803.txt#X12",
+     "value": "('vespa', 2042392842, 2280491799)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-233551-eshoponweb:targets[vespa].dataFolder.bytesAtStart",
+     "value": "2042392842"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261007-233551-eshoponweb:targets[vespa].dataFolder.bytesAtEnd",
+     "value": "2291891892"
+    }
+   ]
+  }
+ ]
+}

@@ -55,6 +55,9 @@ public sealed class ConsolidateInput
    /// <summary>SHA-256 of the classes file.</summary>
    public string ClassesSha256 { get; init; } = string.Empty;
 
+   /// <summary>The build that makes the report.</summary>
+   public ConsolidatingBuild Build { get; init; } = new();
+
    /// <summary>The command line, for the report.</summary>
    public string CommandLine { get; init; } = string.Empty;
 

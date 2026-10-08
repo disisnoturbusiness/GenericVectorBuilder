@@ -195,6 +195,7 @@ public static class ConsolidateObserver
          info.Runs.Add( ReadRun( run.Name, entry ) );
       }
 
+      ConsolidateObserverClock.Fill( info, session.Runs.Select( r => RunEntry( docs[holders[0]].RootElement, r.Name )!.Value ).ToList(), session.Runs[0].Conditions.Clock.PinnedMhz, session.Runs[0].Conditions.Clock.ToleranceBp );
       info.CpuMax = info.Runs.Select( r => r.ObserverCpuMax ).Max();
       info.AperfWorstDeviationBp = info.Runs.Select( r => r.AperfWorstDeviationBp ).Max();
       info.Msr620ValuesSeen = info.Runs.SelectMany( r => r.Msr620ValuesSeen ).Distinct( StringComparer.Ordinal ).OrderBy( v => v, StringComparer.Ordinal ).ToList();

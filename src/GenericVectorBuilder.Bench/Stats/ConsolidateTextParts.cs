@@ -14,6 +14,17 @@ public static class ConsolidateTextParts
    #region Public Methods
 
    /// <summary>
+   /// The targets whose protocol fact names the benchmark's own HttpClient REST code, each with that fact.
+   /// </summary>
+   /// <param name="report">The report, whose why rows are filled.</param>
+   /// <returns>The targets in why-table order.</returns>
+   public static List<(string Target, WhyFact Fact)> HttpClientTargets( ConsolidatedReport report )
+   {
+      return report.Why.Select( r => ( r.Target, Fact: r.Facts.FirstOrDefault( f => f.Kind == "protocol" && f.Text.StartsWith( T.HTTP_CLIENT, StringComparison.Ordinal ) ) ) )
+         .Where( x => x.Fact != null ).Select( x => ( x.Target, x.Fact! ) ).ToList();
+   }
+
+   /// <summary>
    /// Headline (or the stop sentences) and subtitle.
    /// </summary>
    /// <param name="w">The writer.</param>
@@ -50,6 +61,7 @@ public static class ConsolidateTextParts
          S.Consolidated( "basis.floorBp", S.Percent( b.FloorBp ), "bp-pct" ) );
       List<string> names = b.Runs.Select( r => r.Session ).Distinct( StringComparer.Ordinal ).ToList();
       w.Add( "basis.runs", T.Fill( T.THRESHOLD_BASIS, S.Whole( b.RunCount ), S.List( names ) ), S.Consolidated( "basis.runCount", S.Whole( b.RunCount ) ) );
+      BasisClock( w, b );
       w.Add( "basis.identity", T.THRESHOLD_IDENTITY );
       w.Add( "basis.identity.missing", T.THRESHOLD_IDENTITY_MISSING );
       MaxMove( w, b );
@@ -82,6 +94,8 @@ public static class ConsolidateTextParts
          {
             NoExact( w, entry );
          }
+
+         NotHeld( w, table.Metric );
       }
    }
 
@@ -101,6 +115,11 @@ public static class ConsolidateTextParts
       string queries = S.Whole( first.QueryCount ?? 0 );
       string of = S.Whole( w.Report.Recall[0].Of );
       w.Add( "recall.caption", T.Fill( T.RECALL, top, queries, of ), S.ResultAll( "top", top ), S.ResultAll( "queryCount", queries ), S.Consolidated( "recall[0].of", of ) );
+      for( int i = 0; i < w.Report.RecallDerivedSessions.Count; i++ )
+      {
+         w.Add( $"recall.derived.{w.Report.RecallDerivedSessions[i]}", T.Fill( T.RECALL_DERIVED, w.Report.RecallDerivedSessions[i], queries, top ),
+            S.Consolidated( $"recallDerivedSessions[{i}]", w.Report.RecallDerivedSessions[i] ), S.ResultAll( "queryCount", queries ), S.ResultAll( "top", top ) );
+      }
       foreach( RecallRow row in w.Report.Recall.Where( r => r.Differs ) )
       {
          var sources = new List<SentenceSource>();
@@ -181,7 +200,17 @@ public static class ConsolidateTextParts
       else
       {
          string count = S.Whole( d.OnLineCount );
-         w.Add( "drift.onLine", T.Fill( T.DRIFT_ONLINE, count, line, margin ), S.Consolidated( "drift.onLineCount", count ), S.Consolidated( "threshold.tBp", line, "bp-ratio" ), S.Consolidated( "drift.onLineBp", margin ) );
+         w.Add( "drift.onLine", T.Fill( d.OnLineCount == 1 ? T.DRIFT_ONLINE_ONE : T.DRIFT_ONLINE, count, line, margin ), S.Consolidated( "drift.onLineCount", count ), S.Consolidated( "threshold.tBp", line, "bp-ratio" ), S.Consolidated( "drift.onLineBp", margin ) );
+      }
+
+      if( d.SessionDifferences.Count > 0 )
+      {
+         w.Add( "drift.sessions", T.Fill( T.DRIFT_SESSIONS, S.List( d.SessionDifferences ) ), d.SessionDifferences.Select( ( n, i ) => S.Consolidated( $"drift.sessionDifferences[{i}]", n ) ) );
+      }
+
+      if( d.OutsideLoad.Count == 2 )
+      {
+         OutsideLoad( w, d.OutsideLoad );
       }
 
       w.Add( "drift.scope", T.DRIFT_SCOPE );
@@ -197,11 +226,9 @@ public static class ConsolidateTextParts
       foreach( (string name, SessionClock c) in w.Report.Clock.PerSession )
       {
          string at = $"clock.perSession.{name}";
-         if( c.Pinned && c.Uncore != null && c.PinnedMhz != null && c.CeilingBeforeMhz != null )
+         if( c.Pinned && c.Uncore != null && c.PinnedMhz != null && c.CeilingBeforeMhz != null && c.KernelMedianMhz != null )
          {
-            w.Add( $"disclosure.clock.held.{name}", T.Fill( T.CLOCK_HELD, name, T.Msr(), c.Uncore, S.Whole( c.PinnedMhz.Value ), S.Whole( c.CeilingBeforeMhz.Value ) ),
-               S.File( T.MSR_FILE, T.MSR_TOKEN ), S.Consolidated( at + ".uncore", c.Uncore ), S.Consolidated( at + ".pinnedMhz", S.Whole( c.PinnedMhz.Value ) ),
-               S.Consolidated( at + ".ceilingBeforeMhz", S.Whole( c.CeilingBeforeMhz.Value ) ), S.Consolidated( at + ".noTurbo", "1" ) );
+            ClockHeld( w, name, c, at );
          }
          else
          {
@@ -256,6 +283,79 @@ public static class ConsolidateTextParts
    #region Private Methods
 
    /// <summary>
+   /// The outside load each session's passes saw, run medians, from the passes' own record.
+   /// </summary>
+   /// <param name="w">The writer.</param>
+   /// <param name="load">The two sessions' outside load.</param>
+   private static void OutsideLoad( Writer w, IReadOnlyList<SessionOutsideLoad> load )
+   {
+      string a = S.Exact( load[0].MinCpus );
+      string b = S.Exact( load[0].MaxCpus );
+      string c = S.Exact( load[1].MinCpus );
+      string e = S.Exact( load[1].MaxCpus );
+      w.Add( "drift.outsideLoad", T.Fill( T.DRIFT_OUTSIDE_LOAD, a, b, load[0].Session, c, e, load[1].Session ),
+         S.Consolidated( "drift.outsideLoad[0].minCpus", a ), S.Consolidated( "drift.outsideLoad[0].maxCpus", b ), S.Consolidated( "drift.outsideLoad[0].session", load[0].Session ),
+         S.Consolidated( "drift.outsideLoad[1].minCpus", c ), S.Consolidated( "drift.outsideLoad[1].maxCpus", e ), S.Consolidated( "drift.outsideLoad[1].session", load[1].Session ) );
+   }
+
+   /// <summary>
+   /// The sentence under a table for each row it shows and does not rank because the runs recorded its timed pass NOT HELD.
+   /// </summary>
+   /// <param name="w">The writer.</param>
+   /// <param name="metric">Metric id.</param>
+   private static void NotHeld( Writer w, string metric )
+   {
+      if( w.Report.NotHeld == null )
+      {
+         return;
+      }
+
+      for( int i = 0; i < w.Report.NotHeld.Unranked.Count; i++ )
+      {
+         NotHeldRow row = w.Report.NotHeld.Unranked[i];
+         if( row.Metric != metric )
+         {
+            continue;
+         }
+
+         string at = $"notHeld.unranked[{i}]";
+         string runs = S.Whole( row.Runs );
+         string total = S.Whole( w.Report.RunsShown );
+         w.Add( $"table.{metric}.notHeld.{row.Target}", T.Fill( T.TABLE_NOT_HELD, row.Target, T.PassLabel( row.Pass ), runs, total ),
+            S.Consolidated( at + ".target", row.Target ), S.Consolidated( at + ".runs", runs ), S.Consolidated( "runsShown", total ) );
+      }
+   }
+
+   /// <summary>
+   /// The sentence that says a session held the clock: turbo off, the uncore MSR, the ratio the pin is and what the kernel reads at it.
+   /// Why the ratio and the kernel's figure: "every CPU at 3500 MHz" is a label; the CPU is held at its top ratio, and the kernel's median reading for that ratio is 3492 MHz.
+   /// </summary>
+   /// <param name="w">The writer.</param>
+   /// <param name="name">Session name.</param>
+   /// <param name="c">The session's clock.</param>
+   /// <param name="at">Its path in consolidated.json.</param>
+   private static void ClockHeld( Writer w, string name, SessionClock c, string at )
+   {
+      string mhz = S.Whole( c.PinnedMhz!.Value );
+      string kernel = S.Whole( c.KernelMedianMhz!.Value );
+      string ceiling = S.Whole( c.CeilingBeforeMhz!.Value );
+      var sources = new List<SentenceSource>
+      {
+         S.File( T.MSR_FILE, T.MSR_TOKEN ), S.Consolidated( at + ".uncore", c.Uncore! ), S.Consolidated( at + ".pinnedMhz", mhz ), S.Consolidated( at + ".kernelMedianMhz", kernel ),
+         S.Consolidated( at + ".ceilingBeforeMhz", ceiling ), S.Consolidated( at + ".noTurbo", "1" ),
+      };
+      if( c.PinnedRatio is int ratio )
+      {
+         sources.Add( S.Consolidated( at + ".pinnedRatio", S.Whole( ratio ) ) );
+         sources.Add( S.File( T.RATIO_STEP_FILE, T.RATIO_STEP_TOKEN ) );
+         w.Add( $"disclosure.clock.held.{name}", T.Fill( T.CLOCK_HELD, name, T.Msr(), c.Uncore!, S.Whole( ratio ), mhz, kernel, ceiling ), sources );
+         return;
+      }
+
+      w.Add( $"disclosure.clock.held.{name}", T.Fill( T.CLOCK_HELD_NO_RATIO, name, T.Msr(), c.Uncore!, mhz, kernel, ceiling ), sources );
+   }
+
+   /// <summary>
    /// The stop sentences.
    /// </summary>
    /// <param name="w">The writer.</param>
@@ -303,6 +403,7 @@ public static class ConsolidateTextParts
          S.ResultAll( "machine.cpu", m.Cpu ?? string.Empty ), S.ResultAll( "machine.logicalCpus", cpus ), S.ResultAll( "machine.ramGiB", ram ) );
       string template = ( first.Rows ?? 0 ) <= ConsolidateFraming.SMALL_COLLECTION_MAX_ROWS ? T.SUBTITLE_SCOPE_SMALL : T.SUBTITLE_SCOPE_LARGE;
       w.Add( "subtitle.scope", T.Fill( template, rows ), S.ResultAll( "rows", rows ) );
+      Clients( w );
       foreach( ClaimSession session in w.Sessions )
       {
          var sources = session.Runs.Select( r => S.Result( r.Name, "startedUtc", r.StartedUtc! ) ).ToList();
@@ -310,6 +411,7 @@ public static class ConsolidateTextParts
             sources.Concat( session.Runs.Select( r => w.RunSource( r.Name ) ) ) );
       }
 
+      Builds( w );
       QueriesInfo q = w.Report.Queries;
       List<string> matching = q.MatchingRuns;
       List<string> sessionsMatching = w.Sessions.Where( s => s.Runs.All( r => matching.Contains( r.Name ) ) ).Select( s => s.Name ).ToList();
@@ -320,6 +422,7 @@ public static class ConsolidateTextParts
       }
 
       List<ClaimSession> unmatched = w.Sessions.Where( s => !sessionsMatching.Contains( s.Name ) ).ToList();
+      Truth( w, q );
       if( unmatched.Count > 1 && unmatched.All( s => string.Equals( s.Runs[0].Queries, unmatched[0].Runs[0].Queries, StringComparison.Ordinal ) ) )
       {
          RunResult same = unmatched[0].Runs[0];
@@ -332,6 +435,87 @@ public static class ConsolidateTextParts
          RunResult run = session.Runs[0];
          w.Add( $"subtitle.queries.{session.Name}", run.Queries ?? string.Empty, S.Quote( run.Name, "queries", run.Queries ?? string.Empty ) );
       }
+   }
+
+   /// <summary>
+   /// The builds behind the report: the commit that measured each session whose runs record one, and the commit that consolidated them.
+   /// Why both: when the report code is fixed after the runs, the build that makes the report is not the build that made the runs, and the page says so.
+   /// </summary>
+   /// <param name="w">The writer.</param>
+   private static void Builds( Writer w )
+   {
+      List<SessionBuild> measured = w.Report.Build.Measured.Where( b => b.CommitShort != null ).ToList();
+      foreach( SessionBuild b in measured )
+      {
+         int index = w.Report.Build.Measured.IndexOf( b );
+         ClaimSession session = w.Sessions.First( s => s.Name == b.Session );
+         w.Add( $"subtitle.build.{b.Session}", T.Fill( T.SUBTITLE_BUILD_MEASURED, b.Session, b.CommitShort! ),
+            session.Runs.Select( r => S.Token( r.Name, "conditions.build.commit", b.CommitShort! ) ).Append( S.Consolidated( $"build.measured[{index}].session", b.Session ) ) );
+      }
+
+      ConsolidatingBuild c = w.Report.Build.ConsolidatedBy;
+      if( c.CommitShort == null )
+      {
+         w.Add( "subtitle.build.consolidated", T.SUBTITLE_BUILD_NONE );
+         return;
+      }
+
+      List<string> same = measured.Where( b => b.Commit == c.Commit ).Select( b => b.Session ).ToList();
+      var sources = new List<SentenceSource> { S.Consolidated( "build.consolidatedBy.commitShort", c.CommitShort ) };
+      if( measured.Count == 0 )
+      {
+         w.Add( "subtitle.build.consolidated", T.Fill( T.SUBTITLE_BUILD_ONLY, c.CommitShort ), sources );
+         return;
+      }
+
+      if( same.Count > 0 )
+      {
+         w.Add( "subtitle.build.consolidated", T.Fill( T.SUBTITLE_BUILD_SAME, c.CommitShort, S.List( same ) ), sources.Concat( same.Select( ( n, i ) => S.Consolidated( $"build.measured[session={n}].session", n ) ) ) );
+         return;
+      }
+
+      List<string> others = measured.Select( b => b.Session ).ToList();
+      w.Add( "subtitle.build.consolidated", T.Fill( T.SUBTITLE_BUILD_OTHER, c.CommitShort, S.List( others ) ), sources.Concat( others.Select( n => S.Consolidated( $"build.measured[session={n}].session", n ) ) ) );
+   }
+
+   /// <summary>
+   /// The engines the benchmark reaches with its own HttpClient REST code, from their protocol facts.
+   /// Why: the figure of such an engine is the cost of the benchmark's own request code, and of another engine the cost of that engine's vendor library; a sentence that says
+   /// "the engine's .NET client" is true of the second kind and not of the first.
+   /// </summary>
+   /// <param name="w">The writer.</param>
+   private static void Clients( Writer w )
+   {
+      List<(string Target, WhyFact Fact)> http = HttpClientTargets( w.Report );
+      if( http.Count == 0 )
+      {
+         return;
+      }
+
+      string count = S.Whole( http.Count );
+      string total = S.Whole( w.Report.TargetCount );
+      w.Add( "subtitle.clients", T.Fill( T.SUBTITLE_CLIENTS, total, count, S.List( http.Select( x => x.Target ).ToList() ) ),
+         new[] { S.Consolidated( "targetCount", total ), S.Consolidated( "httpClientCount", count ) }.Concat( http.Select( x => S.Fact( x.Fact ) ) ) );
+   }
+
+   /// <summary>
+   /// The truthNdcg of the claim runs, for the sessions whose runs record no question-file hash: the same figure in every run shows the runs read the same questions.
+   /// </summary>
+   /// <param name="w">The writer.</param>
+   /// <param name="q">The queries block.</param>
+   private static void Truth( Writer w, QueriesInfo q )
+   {
+      List<ClaimSession> unrecorded = w.Sessions.Where( s => s.Runs.Any( r => q.UnrecordedRuns.Contains( r.Name ) ) ).ToList();
+      List<double> values = w.Sessions.SelectMany( s => s.Runs ).Select( r => r.TruthNdcg ).OfType<double>().Distinct().ToList();
+      if( unrecorded.Count == 0 || values.Count != 1 || w.Sessions.SelectMany( s => s.Runs ).Any( r => r.TruthNdcg == null ) )
+      {
+         return;
+      }
+
+      string value = values[0].ToString( "R", System.Globalization.CultureInfo.InvariantCulture );
+      string runs = S.Whole( w.Report.ClaimRunCount );
+      w.Add( "subtitle.truth", T.Fill( T.SUBTITLE_TRUTH, S.List( unrecorded.Select( s => s.Name ).ToList() ), value, runs ),
+         S.ResultAll( "truthNdcg", value ), S.Consolidated( "claimRunCount", runs ) );
    }
 
    /// <summary>
@@ -355,14 +539,101 @@ public static class ConsolidateTextParts
          S.Consolidated( "basis.maxMove.moveBp", S.Percent( m.MoveBp ), "bp-pct" ), S.Consolidated( m.Target != null ? "basis.maxMove.target" : "basis.maxMove.pair", who ),
          S.Consolidated( "basis.maxMove.runs[0]", m.Runs[0] ), S.Consolidated( "basis.maxMove.runs[1]", m.Runs[1] ),
          S.Consolidated( "basis.maxMove.seeds[0]", seedA ), S.Consolidated( "basis.maxMove.seeds[1]", seedB ) );
+      w.Add( "basis.max.rounding", T.Fill( T.THRESHOLD_ROUNDING, S.Exact( m.MoveBpExact / 100.0 ), S.Percent( m.MoveBp ) ),
+         S.Consolidated( "basis.maxMove.moveBpExact", S.Exact( m.MoveBpExact / 100.0 ), "bp-pct" ), S.Consolidated( "basis.maxMove.moveBp", S.Percent( m.MoveBp ), "bp-pct" ), S.Consolidated( "basis.moveRule", b.MoveRule ) );
       if( m.DifferenceNames.Count == 0 )
       {
          w.Add( "basis.max.differences", T.THRESHOLD_MAX_SAME );
+      }
+      else
+      {
+         w.Add( "basis.max.differences", T.Fill( T.THRESHOLD_MAX_DIFFERENCES, S.List( m.DifferenceNames ) ),
+            m.DifferenceNames.Select( ( n, i ) => S.Consolidated( $"basis.maxMove.differenceNames[{i}]", n ) ) );
+      }
+
+      MaxMoveNotHeld( w, b );
+   }
+
+   /// <summary>
+   /// Which basis runs held the clock, by session: the sessions whose every run held it, the sessions none of whose runs did, and any session in between.
+   /// Why: "all with machine control on" is true of the v5 and v6 runs as well as of v7 and v8, but only v7 and v8 held the clock, and the threshold rests on all four.
+   /// </summary>
+   /// <param name="w">The writer.</param>
+   /// <param name="b">The basis.</param>
+   private static void BasisClock( Writer w, BasisInfo b )
+   {
+      if( b.ClockHeld.Count == 0 )
+      {
          return;
       }
 
-      w.Add( "basis.max.differences", T.Fill( T.THRESHOLD_MAX_DIFFERENCES, S.List( m.DifferenceNames ) ),
-         m.DifferenceNames.Select( ( n, i ) => S.Consolidated( $"basis.maxMove.differenceNames[{i}]", n ) ) );
+      List<SessionClockHeld> all = b.ClockHeld.Where( c => c.Held == c.Runs ).ToList();
+      List<SessionClockHeld> none = b.ClockHeld.Where( c => c.Held == 0 ).ToList();
+      List<SessionClockHeld> some = b.ClockHeld.Where( c => c.Held != 0 && c.Held != c.Runs ).ToList();
+      IEnumerable<SentenceSource> Sources( IEnumerable<SessionClockHeld> sessions ) => sessions.SelectMany( c => new[]
+      {
+         S.Consolidated( $"basis.clockHeld[session={c.Session}].session", c.Session ), S.Consolidated( $"basis.clockHeld[session={c.Session}].held", S.Whole( c.Held ) ),
+         S.Consolidated( $"basis.clockHeld[session={c.Session}].runs", S.Whole( c.Runs ) ),
+      } );
+      if( none.Count == 0 && some.Count == 0 )
+      {
+         w.Add( "basis.clock", T.THRESHOLD_CLOCK_ALL, Sources( all ) );
+      }
+      else if( all.Count == 0 && some.Count == 0 )
+      {
+         w.Add( "basis.clock", T.THRESHOLD_CLOCK_NONE, Sources( none ) );
+      }
+      else if( all.Count > 0 && none.Count > 0 )
+      {
+         w.Add( "basis.clock", T.Fill( T.THRESHOLD_CLOCK_BOTH, S.List( all.Select( c => c.Session ).ToList() ), S.List( none.Select( c => c.Session ).ToList() ) ), Sources( all ).Concat( Sources( none ) ) );
+      }
+      else if( all.Count > 0 )
+      {
+         w.Add( "basis.clock", T.Fill( T.THRESHOLD_CLOCK_EVERY_OF, S.List( all.Select( c => c.Session ).ToList() ) ), Sources( all ) );
+      }
+      else
+      {
+         w.Add( "basis.clock", T.Fill( T.THRESHOLD_CLOCK_NONE_OF, S.List( none.Select( c => c.Session ).ToList() ) ), Sources( none ) );
+      }
+
+      foreach( SessionClockHeld c in some )
+      {
+         w.Add( $"basis.clock.{c.Session}", T.Fill( T.THRESHOLD_CLOCK_SOME, S.Whole( c.Held ), S.Whole( c.Runs ), c.Session ), Sources( new[] { c } ) );
+      }
+   }
+
+   /// <summary>
+   /// The passes behind the largest move that their run recorded as NOT HELD, and what the basis gives without their engines.
+   /// Why: the threshold follows the largest move, so a page that does not say the move rests on a pass its own run says not to quote hides what sets the line.
+   /// </summary>
+   /// <param name="w">The writer.</param>
+   /// <param name="b">The basis.</param>
+   private static void MaxMoveNotHeld( Writer w, BasisInfo b )
+   {
+      for( int i = 0; i < b.MaxMoveNotHeld.Count; i++ )
+      {
+         NotHeldCell c = b.MaxMoveNotHeld[i];
+         string at = $"basis.maxMoveNotHeld[{i}]";
+         w.Add( $"basis.max.notHeld.{i}", T.Fill( T.FLAG_NOT_HELD, c.Run, T.PassLabel( c.Pass ), c.Target, c.Timed, c.OffPercent, c.Settled, c.LimitPercent ),
+            S.Consolidated( at + ".run", c.Run ), S.Consolidated( at + ".target", c.Target ), S.Consolidated( at + ".timed", c.Timed ), S.Consolidated( at + ".offPercent", c.OffPercent ),
+            S.Consolidated( at + ".settled", c.Settled ), S.Consolidated( at + ".limitPercent", c.LimitPercent ) );
+      }
+
+      if( b.MaxMoveWithout is not BasisWithout without || without.MaxMove == null )
+      {
+         return;
+      }
+
+      BasisMove m = without.MaxMove;
+      string what = T.Fill( m.Target != null ? T.MOVE_VALUE : T.MOVE_RATIO, T.Label( m.Metric ) );
+      string who = m.Target ?? m.Pair!;
+      var sources = new List<SentenceSource>
+      {
+         S.Consolidated( "basis.maxMoveWithout.maxBp", S.Percent( without.MaxBp ), "bp-pct" ), S.Consolidated( "basis.maxMoveWithout.tBp", S.Percent( without.TBp ), "bp-pct" ),
+         S.Consolidated( m.Target != null ? "basis.maxMoveWithout.maxMove.target" : "basis.maxMoveWithout.maxMove.pair", who ),
+      };
+      sources.AddRange( without.Targets.Select( ( t, i ) => S.Consolidated( $"basis.maxMoveWithout.targets[{i}]", t ) ) );
+      w.Add( "basis.max.without", T.Fill( T.THRESHOLD_MAX_WITHOUT, S.List( without.Targets ), S.Percent( without.MaxBp ), what, who, S.Percent( without.TBp ) ), sources );
    }
 
    /// <summary>

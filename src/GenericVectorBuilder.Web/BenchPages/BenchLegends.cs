@@ -259,6 +259,60 @@ public static class BenchLegends
    /// <summary>Message printed in place of the numbers when a file cannot be read.</summary>
    public const string UNREADABLE = "The summary numbers could not be read";
 
+   /// <summary>Heading of the block on a run page that lists the recorded statements a set marks as false or misleading.</summary>
+   public const string H_RUN_NOTES = "Corrections to statements recorded in this run";
+
+   /// <summary>What the corrections block of a run page is: the run's own text stays as written, and the markers show where each statement sits in it.</summary>
+   public const string RUN_NOTES_INTRO = "This run's report is kept as it was written. A set that uses this run states that the recorded statements below are false or misleading. Each is marked in the report text.";
+
+   /// <summary>Printed when the list of corrections cannot be read; the page never takes an unreadable list for an empty one.</summary>
+   public const string RUN_NOTES_UNREADABLE = "The list of corrections could not be read, so this page may print statements that a set marks as false or misleading:";
+
+   /// <summary>Printed on the summary when the set lists no corrections to recorded statements and the list file is absent: the run pages then print every recorded statement as written, and a reader is told so.</summary>
+   public const string NO_RUN_NOTES = "This set lists no corrections to recorded statements and the list file is absent, so the run pages print every recorded statement as written.";
+
+   /// <summary>Label of a correction of a statement the set contradicts.</summary>
+   public const string L_NOTE_FALSE = "False:";
+
+   /// <summary>Label of a correction of a statement that gives a wrong picture without being contradicted.</summary>
+   public const string L_NOTE_MISLEADING = "Misleading:";
+
+   /// <summary>Label before the statement as the run recorded it.</summary>
+   public const string L_NOTE_RECORDED = "Recorded:";
+
+   /// <summary>Label before the place the list of corrections came from.</summary>
+   public const string L_NOTE_LISTED_IN = "Listed in";
+
+   /// <summary>Words before the count of lines of the report text that carry the marker of a correction.</summary>
+   public const string L_NOTE_PLACES = "Marked in the report text, lines:";
+
+   /// <summary>Printed when a listed statement is not in the report text of the run.</summary>
+   public const string L_NOTE_NOT_FOUND = "This statement was not found in the report text below.";
+
+   /// <summary>Printed above the raw files list of a run page that carries corrections: the raw files hold the recorded statements as written.</summary>
+   public const string RAW_NOTES_UNEDITED = "The raw files below hold the recorded statements that the corrections above refer to, as written.";
+
+   /// <summary>What a row of a metric table marked not held is.</summary>
+   public const string NOT_HELD = "A row marked not held has figures from a timed pass the tool recorded as not held: the engine was still changing when it was timed. The row is shown and is not ranked.";
+
+   /// <summary>Label of the group of rows of a metric table that are shown and not ranked.</summary>
+   public const string H_NOT_RANKED = "Not ranked";
+
+   /// <summary>Text of the separation cell of a row that is not ranked because its pass was not held.</summary>
+   public const string L_NOT_HELD = "not held, not ranked";
+
+   /// <summary>Summary line of the block that lists the clauses of the engine texts that no sentence of the page prints.</summary>
+   public const string H_RECORDED_TEXTS = "Recorded engine texts, clause by clause";
+
+   /// <summary>What the clause table is: every clause of a recorded text that a sentence above does not already print, with its class and basis.</summary>
+   public const string RECORDED_TEXTS = "Each clause of a recorded text that no sentence on this page prints, with the class the report gives it and what it is bound to.";
+
+   /// <summary>Summary line of the block on the summary page that lists the corrections the run pages print; the count follows it.</summary>
+   public const string H_RUN_NOTES_SUMMARY = "Corrections printed on the run pages, count:";
+
+   /// <summary>What the block of corrections on the summary page is.</summary>
+   public const string RUN_NOTES_SUMMARY = "Each recorded statement below is false or misleading, as the correction says. The page of the run it was recorded in marks it and prints this correction with its sources.";
+
    private static readonly Dictionary<string, ( string Marker, string Legend )> FLAGS = new( StringComparer.Ordinal )
    {
       ["spread"] = ( "Sp", "The runs of this engine differ from each other by more than the spread limit named in the evidence." ),
@@ -287,6 +341,7 @@ public static class BenchLegends
       ["throttle-rise"] = ( "Th", "The CPU's thermal throttle counters rose between the start and the end of this engine's turn in the run. The evidence gives the rise." ),
       ["setup-changed"] = ( "St", "The recorded setup of this engine differs between the sessions." ),
       ["one-session"] = ( "Os", "The recorded setup of this engine differs between the sessions, so one session is shown and the row is not ranked." ),
+      ["not-held"] = ( "Nh", "The run recorded a timed pass of this engine as NOT HELD: the engine was still changing when it was timed. The evidence gives the figures. The row is shown, not ranked." ),
    };
 
    #endregion Data Members

@@ -11,7 +11,7 @@ namespace GenericVectorBuilder.Bench.Stats;
 /// Codes: busy-box (the run flagged the pass busy from its own outside load during the pass),
 /// clock-off (the median rule puts the pass off its pinned clock), clock-not-read, governor,
 /// throttle-rise (the thermal throttle counters rose during the target),
-/// unsettled, index-not-ready, segment-layout-differs, search-errors, warmup-errors and one-session
+/// unsettled, not-held (the timed pass itself was recorded NOT HELD), index-not-ready, segment-layout-differs, search-errors, warmup-errors and one-session
 /// (set by the consolidator for a target whose setup changed between sessions).
 /// What is gone and why: the busy flag from the 1-minute load average (it counted the engine's own
 /// start-up as outside work), the spread and p50-against-mean flags (the claim rule reads every run's
@@ -39,6 +39,9 @@ public static class ConsolidateFlags
    /// <summary>The run recorded the target as not settled before it was timed.</summary>
    public const string UNSETTLED = "unsettled";
 
+   /// <summary>The run recorded the timed pass itself as NOT HELD: the engine was still changing when it was timed, and the figure lies outside the margin around the settled one.</summary>
+   public const string NOT_HELD = "not-held";
+
    /// <summary>The engine reported its index not ready after the load or after the searches.</summary>
    public const string INDEX_NOT_READY = "index-not-ready";
 
@@ -55,7 +58,7 @@ public static class ConsolidateFlags
    public const string ONE_SESSION = "one-session";
 
    /// <summary>Every code, in the order rows list them; the page's legend allow-list.</summary>
-   public static readonly IReadOnlyList<string> CODES = new[] { BUSY_BOX, CLOCK_OFF, CLOCK_NOT_READ, GOVERNOR, THROTTLE, UNSETTLED, INDEX_NOT_READY, SEGMENT_LAYOUT, SEARCH_ERRORS, WARMUP_ERRORS, ONE_SESSION };
+   public static readonly IReadOnlyList<string> CODES = new[] { BUSY_BOX, CLOCK_OFF, CLOCK_NOT_READ, GOVERNOR, THROTTLE, UNSETTLED, NOT_HELD, INDEX_NOT_READY, SEGMENT_LAYOUT, SEARCH_ERRORS, WARMUP_ERRORS, ONE_SESSION };
 
    #endregion Data Members
 
@@ -140,6 +143,11 @@ public static class ConsolidateFlags
       if( pass.Governor != null && !RunConditions.IsPerformance( pass.Governor ) )
       {
          items.Add( new FlagEvidence( GOVERNOR, run.Name, pass.Target, pass.Pass, index, new[] { ( $"{at}.governor", pass.Governor ) } ) );
+      }
+
+      foreach( NotHeldPass held in run.Find( pass.Target )?.NotHeldPasses.Where( n => n.Pass == pass.Pass ) ?? Enumerable.Empty<NotHeldPass>() )
+      {
+         items.Add( new FlagEvidence( NOT_HELD, run.Name, pass.Target, pass.Pass, index, new[] { ( $"targets[{pass.Target}].notes", held.Token ), ( "timed", held.Timed ), ( "offPercent", held.OffPercent ), ( "settled", held.Settled ), ( "limitPercent", held.LimitPercent ) } ) );
       }
    }
 

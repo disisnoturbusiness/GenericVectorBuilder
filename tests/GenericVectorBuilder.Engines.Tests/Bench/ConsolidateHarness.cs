@@ -26,8 +26,11 @@ public static class ConsolidateHarness
    public static readonly string[] REPORT_SOURCES =
    {
       "Report/RunResult.cs", "Report/RunConditions.cs", "Report/ResultJson.cs", "Report/ConsolidateCommand.cs", "Report/ConsolidatedMarkdown.cs",
-      "Report/EngineFacts.cs", "Report/Sentence.cs", "Report/SentenceAudit.cs", "Report/BannedWords.cs", "Report/RecordedTextClasses.cs",
+      "Report/EngineFacts.cs", "Report/Sentence.cs", "Report/SentenceAudit.cs", "Report/BannedWords.cs", "Report/RecordedTextClasses.cs", "Report/SettleWarning.cs",
    };
+
+   /// <summary>The commit the compiled consolidation carries as its build, so the report names a consolidating build the way the frozen build does.</summary>
+   public const string BUILD_COMMIT = "fedcba9876543210fedcba9876543210fedcba98";
 
    private static readonly Lazy<Assembly> COMPILED = new( Compile );
 
@@ -91,6 +94,20 @@ public static class Api
    }
 
    public static string[] Banned( string text ) { return BannedWords.Find( text ).ToArray(); }
+
+   public static string[] NotHeld( string warning )
+   {
+      try
+      {
+         return SettleWarning.NotHeld( warning ).Select( n => $""{n.Pass}|{n.Metric}|{n.Timed}|{n.OffPercent}|{n.Settled}|{n.LimitPercent}|{n.Token}"" ).ToArray();
+      }
+      catch( InvalidDataException ex )
+      {
+         return new[] { ""refused: "" + ex.Message };
+      }
+   }
+
+   public static string CommitOf( string version ) { return ConsolidateBuild.CommitOf( version ) ?? ""null""; }
 
    public static int Words( string text ) { return SentenceAudit.WordCount( text ); }
 
@@ -196,6 +213,7 @@ public static class Api
          .Concat( REPORT_SOURCES.Select( s => Path.Combine( bench, s ) ) );
       var trees = files.Select( f => CSharpSyntaxTree.ParseText( File.ReadAllText( f ), path: f ) ).ToList();
       trees.Add( CSharpSyntaxTree.ParseText( FACADE ) );
+      trees.Add( CSharpSyntaxTree.ParseText( $"[assembly: System.Reflection.AssemblyInformationalVersion( \"1.0.0+{BUILD_COMMIT}\" )]" ) );
       IEnumerable<MetadataReference> references = ( (string)AppContext.GetData( "TRUSTED_PLATFORM_ASSEMBLIES" )! )
          .Split( Path.PathSeparator ).Select( p => MetadataReference.CreateFromFile( p ) );
       var options = new CSharpCompilationOptions( OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable );
@@ -225,7 +243,7 @@ public sealed class SyntheticBench : IDisposable
    /// <summary>Real repository files the templates cite, copied into the scratch repository.</summary>
    public static readonly string[] CITED_FILES =
    {
-      "src/GenericVectorBuilder.Bench/Running/MachineControlSampler.cs", "src/GenericVectorBuilder.Bench/Running/MachineControlPinning.cs", "src/GenericVectorBuilder.Bench/Data/GoldenQueries.cs",
+      "src/GenericVectorBuilder.Bench/Running/MachineControlSampler.cs", "src/GenericVectorBuilder.Bench/Running/MachineControlPinning.cs", "src/GenericVectorBuilder.Bench/Stats/ConsolidateClock.cs", "src/GenericVectorBuilder.Bench/Data/GoldenQueries.cs",
       "tests/GenericVectorBuilder.Engines.Tests/Bench/MachineControlV8Tests.cs",
    };
 

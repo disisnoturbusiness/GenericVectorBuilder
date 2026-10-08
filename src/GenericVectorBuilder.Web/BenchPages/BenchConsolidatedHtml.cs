@@ -131,7 +131,9 @@ public static class BenchConsolidatedHtml
    public static string MetricTable( BenchMetric metric, IReadOnlyList<BenchSession> sessions, IReadOnlyList<BenchWhy>? why = null )
    {
       bool search = metric.Rows.Any( r => r.SearchMode != null );
-      var names = metric.Rows.ToDictionary( r => r.Target, r => r.Display, StringComparer.Ordinal );
+      List<BenchRow> ranked = metric.Rows.Where( r => !r.IsNotHeld ).ToList();
+      List<BenchRow> unranked = metric.Rows.Where( r => r.IsNotHeld ).ToList();
+      var names = ranked.ToDictionary( r => r.Target, r => r.Display, StringComparer.Ordinal );
       var html = new StringBuilder( $"<h2 class=\"bench-metric\" data-metric=\"{BenchFormat.Enc( metric.Metric )}\">{BenchFormat.Enc( Heading( metric.Metric ) )}</h2>" );
       html.Append( "<div class=\"preview\"><table class=\"bench-table\"><thead><tr><th>Engine</th>" );
       foreach( BenchSession session in sessions )
@@ -140,17 +142,12 @@ public static class BenchConsolidatedHtml
       }
 
       html.Append( $"<th class=\"n\">Median of all runs</th>{( search ? $"<th data-column=\"search\">{BenchFormat.Enc( BenchLegends.H_SEARCH_MODE )}</th>" : string.Empty )}<th>Not separated from</th><th>Flags</th></tr></thead><tbody>" );
-      foreach( BenchRow row in metric.Rows )
+      ranked.ForEach( row => html.Append( MetricRow( row, metric, sessions, why, search, names ) ) );
+      if( unranked.Count > 0 )
       {
-         html.Append( $"<tr data-target=\"{BenchFormat.Enc( row.Target )}\"><td>{BenchFormat.Enc( row.Display )}{Note( row )}</td>" );
-         foreach( BenchSession session in sessions )
-         {
-            html.Append( $"<td class=\"n\">{BenchFormat.Enc( Range( row, session.Name, metric.LowerIsBetter ) )}</td>" );
-         }
-
-         html.Append( $"<td class=\"n\">{BenchFormat.Enc( row.Median == null ? "-" : BenchFormat.Figure( row.Median.Value, metric.LowerIsBetter ) )}</td>" );
-         html.Append( search ? $"<td data-column=\"search\">{SearchCell( row, why )}</td>" : string.Empty );
-         html.Append( $"<td>{Separation( row, names )}</td><td>{Markers( row )}</td></tr>" );
+         int columns = sessions.Count + ( search ? 5 : 4 );
+         html.Append( $"<tr class=\"bench-unranked\" data-group=\"not-ranked\"><th colspan=\"{columns}\">{BenchFormat.Enc( BenchLegends.H_NOT_RANKED )}</th></tr>" );
+         unranked.ForEach( row => html.Append( MetricRow( row, metric, sessions, why, search, names ) ) );
       }
 
       return html.Append( "</tbody></table></div>" ).ToString();
@@ -176,6 +173,30 @@ public static class BenchConsolidatedHtml
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// One row of a metric table: the engine and its note, the figures of each session, the median, the search mode, what the row is not separated from, and its flags.
+   /// A row the tool recorded as not held is drawn in the group of rows that are not ranked, and its separation cell says so.
+   /// </summary>
+   /// <param name="row">The row.</param>
+   /// <param name="metric">The metric.</param>
+   /// <param name="sessions">The sessions, in file order.</param>
+   /// <param name="why">The facts table, or null.</param>
+   /// <param name="search">True when the table has the search column.</param>
+   /// <param name="names">Display names of the ranked rows by target; a target not in it is not named in a separation cell.</param>
+   /// <returns>HTML fragment.</returns>
+   private static string MetricRow( BenchRow row, BenchMetric metric, IReadOnlyList<BenchSession> sessions, IReadOnlyList<BenchWhy>? why, bool search, Dictionary<string, string> names )
+   {
+      var html = new StringBuilder( $"<tr data-target=\"{BenchFormat.Enc( row.Target )}\"><td{( row.IsNotHeld ? " data-state=\"not-held\"" : string.Empty )}>{BenchFormat.Enc( row.Display )}{Note( row )}</td>" );
+      foreach( BenchSession session in sessions )
+      {
+         html.Append( $"<td class=\"n\">{BenchFormat.Enc( Range( row, session.Name, metric.LowerIsBetter ) )}</td>" );
+      }
+
+      html.Append( $"<td class=\"n\">{BenchFormat.Enc( row.Median == null ? "-" : BenchFormat.Figure( row.Median.Value, metric.LowerIsBetter ) )}</td>" );
+      html.Append( search ? $"<td data-column=\"search\">{SearchCell( row, why )}</td>" : string.Empty );
+      return html.Append( $"<td>{Separation( row, names )}</td><td>{Markers( row )}</td></tr>" ).ToString();
+   }
 
    /// <summary>
    /// The lead of the page: the headline, the subtitle and the machine line.
@@ -255,6 +276,11 @@ public static class BenchConsolidatedHtml
       if( model.Metrics.Any( m => m.Rows.Any( r => r.Status == "one-session" ) ) )
       {
          html.Append( $"<p class=\"bench-legend muted\">{BenchFormat.Enc( BenchLegends.ONE_SESSION )}</p>" );
+      }
+
+      if( model.Metrics.Any( m => m.Rows.Any( r => r.IsNotHeld ) ) )
+      {
+         html.Append( $"<p class=\"bench-legend muted\" data-legend=\"not-held\">{BenchFormat.Enc( BenchLegends.NOT_HELD )}</p>" );
       }
 
       html.Append( $"<p class=\"bench-legend muted\">{BenchFormat.Enc( BenchLegends.DASH )}</p>" );
@@ -819,6 +845,8 @@ public static class BenchConsolidatedHtml
       }
 
       html.Append( EngineSettingsTable( model ) );
+      html.Append( RunNotesTable( model ) );
+      html.Append( RecordedTextsTable( model ) );
 
       AppendSection( html, model, placed, BenchSlots.NOT_IN_REPORT, BenchLegends.H_NOT_IN_REPORT );
    }
@@ -874,6 +902,62 @@ public static class BenchConsolidatedHtml
    }
 
    /// <summary>
+   /// The corrections the file lists for the run pages, one row per run and statement, in a closed details: the run (a link), the engine, the field, the kind,
+   /// the statement as recorded and the correction. Why on the summary too: a reader of the summary learns which recorded statements the set marks as
+   /// false or misleading without opening twelve run pages, and the field the file carries is then drawn and not only read.
+   /// </summary>
+   /// <param name="model">The file.</param>
+   /// <returns>HTML fragment; empty when the file lists no correction.</returns>
+   private static string RunNotesTable( BenchConsolidated model )
+   {
+      var rows = model.RunNoteList.SelectMany( n => n.Runs.Select( r => ( Note: n, Run: r ) ) ).ToList();
+      if( rows.Count == 0 )
+      {
+         return string.Empty;
+      }
+
+      var html = new StringBuilder( $"<details class=\"bench-target\"><summary>{BenchFormat.Enc( BenchLegends.H_RUN_NOTES_SUMMARY )} {rows.Count}</summary><p class=\"muted\">{BenchFormat.Enc( BenchLegends.RUN_NOTES_SUMMARY )}</p>" );
+      html.Append( "<div class=\"preview\"><table class=\"bench-table\" data-table=\"run-notes\"><thead><tr><th>Run</th><th>Engine</th><th>Field</th><th>Kind</th><th>Recorded statement</th><th>Correction</th></tr></thead><tbody>" );
+      foreach( ( BenchRunNote note, string run ) in rows )
+      {
+         html.Append( $"<tr data-target=\"{BenchFormat.Enc( note.Target )}\"><td>{RunLink( run )}</td><td>{BenchFormat.Enc( note.Target.Length == 0 ? "-" : DisplayOf( model, note.Target ) )}</td><td>{BenchFormat.Enc( note.Field.Length == 0 ? "-" : note.Field )}</td>" );
+         html.Append( $"<td>{BenchFormat.Enc( note.Kind )}</td><td>{BenchFormat.Enc( note.Statement )}</td><td>{BenchFormat.Enc( note.Text )}{SourceList( note.Sources )}</td></tr>" );
+      }
+
+      return html.Append( "</tbody></table></div></details>" ).ToString();
+   }
+
+   /// <summary>
+   /// The clauses of the recorded engine texts that no sentence of the file prints, in a closed details: the engine, the field, the run, the clause, the class
+   /// the report gives it, whether the report prints it and what it is bound to. Why: the report lists every clause of every recorded text, and the page prints
+   /// the durability clauses as quoted sentences; the index and note clauses have no sentence, so without this table they would be in the report and not on the page.
+   /// </summary>
+   /// <param name="model">The file, for display names and the sentences already printed.</param>
+   /// <returns>HTML fragment; empty when every clause is already a sentence or the file lists none.</returns>
+   private static string RecordedTextsTable( BenchConsolidated model )
+   {
+      var printed = model.Sentences.Select( s => s.Text ).ToHashSet( StringComparer.Ordinal );
+      var rows = model.RecordedTextList.SelectMany( t => t.Clauses.Where( c => !printed.Contains( c.Text ) ).Select( c => ( Text: t, Clause: c ) ) ).ToList();
+      if( rows.Count == 0 )
+      {
+         return string.Empty;
+      }
+
+      var html = new StringBuilder( $"<details class=\"bench-target\"><summary>{BenchFormat.Enc( BenchLegends.H_RECORDED_TEXTS )}</summary><p class=\"muted\">{BenchFormat.Enc( BenchLegends.RECORDED_TEXTS )}</p>" );
+      html.Append( "<div class=\"preview\"><table class=\"bench-table\" data-table=\"recorded-texts\"><thead><tr><th>Engine</th><th>Field</th><th>Run</th><th>Clause</th><th>Class</th><th>Printed in the report</th><th>Bound to</th></tr></thead><tbody>" );
+      foreach( ( BenchRecordedText text, BenchClause clause ) in rows )
+      {
+         string engine = text.Target.Length == 0 ? "-" : DisplayOf( model, text.Target );
+         string basis = clause.Basis.Count == 0 ? "-" : "<ul class=\"bench-facts\">" + string.Join( string.Empty, clause.Basis.Select( b => $"<li><code>{BenchFormat.Enc( b.Length > MAX_SOURCE_VALUE ? b[..MAX_SOURCE_VALUE] + "..." : b )}</code></li>" ) ) + "</ul>";
+         html.Append( $"<tr data-target=\"{BenchFormat.Enc( text.Target )}\"><td>{BenchFormat.Enc( engine )}</td><td>{BenchFormat.Enc( text.Note == null ? text.Field : $"{text.Field} {text.Note}" )}</td><td>{( text.Run == null ? "-" : RunLink( text.Run ) )}</td>" );
+         html.Append( $"<td>{BenchFormat.Enc( clause.Text )}</td><td>{BenchFormat.Enc( clause.Class.Length == 0 ? "-" : clause.Class )}</td>" );
+         html.Append( $"<td>{( clause.Printed ? "yes" : "no" + ( clause.NotPrinted == null ? string.Empty : $" ({BenchFormat.Enc( clause.NotPrinted )})" ) )}</td><td>{basis}</td></tr>" );
+      }
+
+      return html.Append( "</tbody></table></div></details>" ).ToString();
+   }
+
+   /// <summary>
    /// The container images used.
    /// </summary>
    /// <param name="model">The file, for display names.</param>
@@ -881,10 +965,10 @@ public static class BenchConsolidatedHtml
    /// <returns>HTML fragment.</returns>
    private static string ImagesTable( BenchConsolidated model, IReadOnlyList<BenchImage> images )
    {
-      var html = new StringBuilder( $"<details class=\"bench-target\"><summary>{BenchLegends.H_IMAGES}</summary><div class=\"preview\"><table class=\"bench-table\"><thead><tr><th>Engine</th><th>Image id</th><th>Tag last set (UTC)</th><th>Before the first start</th></tr></thead><tbody>" );
+      var html = new StringBuilder( $"<details class=\"bench-target\"><summary>{BenchLegends.H_IMAGES}</summary><div class=\"preview\"><table class=\"bench-table\"><thead><tr><th>Engine</th><th>Image reference</th><th>Image id</th><th>Tag last set (UTC)</th><th>Before the first start</th></tr></thead><tbody>" );
       foreach( BenchImage image in images )
       {
-         html.Append( $"<tr><td>{BenchFormat.Enc( DisplayOf( model, image.Target ) )}</td><td title=\"{BenchFormat.Enc( image.Id )}\"><code>{BenchFormat.Enc( image.Id.Length == 0 ? "-" : BenchFormat.ShortId( image.Id ) )}</code></td>" );
+         html.Append( $"<tr><td>{BenchFormat.Enc( DisplayOf( model, image.Target ) )}</td><td>{( image.Ref == null ? "-" : $"<code>{BenchFormat.Enc( image.Ref )}</code>" )}</td><td title=\"{BenchFormat.Enc( image.Id )}\"><code>{BenchFormat.Enc( image.Id.Length == 0 ? "-" : BenchFormat.ShortId( image.Id ) )}</code></td>" );
          html.Append( $"<td>{BenchFormat.Enc( image.LastTagTimeUtc ?? "-" )}</td><td>{( image.BeforeFirstStart == null ? "-" : image.BeforeFirstStart.Value ? "yes" : "no" )}</td></tr>" );
       }
 
@@ -902,10 +986,11 @@ public static class BenchConsolidatedHtml
       html.Append( $"<h2>{BenchLegends.H_RUNS}</h2>" );
       AppendSentences( html, Take( model, placed, BenchSlots.RUNS ) );
 
-      html.Append( "<div class=\"preview\"><table class=\"bench-table\" data-table=\"runs-used\"><thead><tr><th>Session</th><th>Run</th><th class=\"n\">Seed</th><th>Started (UTC)</th></tr></thead><tbody>" );
-      foreach( ( string label, string folder, long? seed, string? started ) in RunsUsed( model ) )
+      html.Append( "<div class=\"preview\"><table class=\"bench-table\" data-table=\"runs-used\"><thead><tr><th>Session</th><th>Run</th><th class=\"n\">Seed</th><th>Started (UTC)</th><th>results.json SHA-256</th></tr></thead><tbody>" );
+      foreach( ( string label, string folder, long? seed, string? started, string? sha ) in RunsUsed( model ) )
       {
-         html.Append( $"<tr><td>{BenchFormat.Enc( label )}</td><td>{RunLink( folder )}</td><td class=\"n\">{BenchFormat.Enc( seed?.ToString( System.Globalization.CultureInfo.InvariantCulture ) ?? "-" )}</td><td>{BenchFormat.Enc( started ?? "-" )}</td></tr>" );
+         html.Append( $"<tr><td>{BenchFormat.Enc( label )}</td><td>{RunLink( folder )}</td><td class=\"n\">{BenchFormat.Enc( seed?.ToString( System.Globalization.CultureInfo.InvariantCulture ) ?? "-" )}</td><td>{BenchFormat.Enc( started ?? "-" )}</td>" );
+         html.Append( sha == null ? "<td>-</td></tr>" : $"<td title=\"{BenchFormat.Enc( sha )}\"><code>{BenchFormat.Enc( BenchFormat.ShortId( sha ) )}</code></td></tr>" );
       }
 
       html.Append( "</tbody></table></div>" );
@@ -918,15 +1003,15 @@ public static class BenchConsolidatedHtml
    /// page that lists the compared runs only makes that sentence false.
    /// </summary>
    /// <param name="model">The file.</param>
-   /// <returns>The rows: label, folder, seed, start.</returns>
-   private static List<( string Label, string Folder, long? Seed, string? Started )> RunsUsed( BenchConsolidated model )
+   /// <returns>The rows: label, folder, seed, start, SHA-256 of the results.json the report read (null when the file records none).</returns>
+   private static List<( string Label, string Folder, long? Seed, string? Started, string? Sha )> RunsUsed( BenchConsolidated model )
    {
-      var rows = model.Sessions.SelectMany( s => s.Runs.Select( r => ( Label: s.Name, r.Folder, r.Seed, Started: r.StartedUtc ) ) ).ToList();
+      var rows = model.Sessions.SelectMany( s => s.Runs.Select( r => ( Label: s.Name, r.Folder, r.Seed, Started: r.StartedUtc, Sha: r.ResultsSha256 ) ) ).ToList();
       foreach( BenchBasisRun run in model.Basis?.Runs ?? new List<BenchBasisRun>() )
       {
          if( !rows.Any( r => r.Folder == run.Folder && ( run.Session == null || r.Label == run.Session ) ) )
          {
-            rows.Add( ( run.Session == null ? "basis" : $"{run.Session} (basis)", run.Folder, run.Seed, run.StartedUtc ) );
+            rows.Add( ( run.Session == null ? "basis" : $"{run.Session} (basis)", run.Folder, run.Seed, run.StartedUtc, run.ResultsSha256 ) );
          }
       }
 
@@ -1133,20 +1218,27 @@ public static class BenchConsolidatedHtml
    }
 
    /// <summary>
-   /// The "not separated from" cell: the engines' display names, "one session" for a row that is not
-   /// ranked, or a dash when the row is separated from every engine.
+   /// The "not separated from" cell: the display names of the ranked engines the row is not separated from (an engine
+   /// that is not ranked, because its pass was not held, is never named), "one session" for a row that is not
+   /// ranked, the not held text for a row whose pass was not held, or a dash when the row is separated from every engine.
    /// </summary>
    /// <param name="row">The row.</param>
    /// <param name="names">Display names by target.</param>
    /// <returns>HTML fragment.</returns>
    private static string Separation( BenchRow row, Dictionary<string, string> names )
    {
+      if( row.IsNotHeld )
+      {
+         return $"<span class=\"bench-no\">{BenchFormat.Enc( BenchLegends.L_NOT_HELD )}</span>";
+      }
+
       if( row.Status == "one-session" )
       {
          return "<span class=\"bench-no\">one session</span>";
       }
 
-      return row.NotSeparatedFrom.Count == 0 ? "-" : BenchFormat.Enc( string.Join( ", ", row.NotSeparatedFrom.Select( t => names.GetValueOrDefault( t, t ) ) ) );
+      List<string> listed = row.NotSeparatedFrom.Where( names.ContainsKey ).Select( t => names[t] ).ToList();
+      return listed.Count == 0 ? "-" : BenchFormat.Enc( string.Join( ", ", listed ) );
    }
 
    /// <summary>

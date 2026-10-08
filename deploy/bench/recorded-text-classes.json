@@ -1385,7 +1385,14 @@
      "class": "documented",
      "basis": [
       "src/GenericVectorBuilder.Engines/Sinks/WeaviateSink.cs#[\"ef\"] = _options.Ef,",
-      "src/GenericVectorBuilder.Engines/Sinks/WeaviateSinkOptions.cs#int Ef = -1 );"
+      "src/GenericVectorBuilder.Engines/Sinks/WeaviateSinkOptions.cs#int Ef = -1 );",
+      "design/engine-docs/weaviate-vector-index-reference-2026-10-07.mdx#`ef`"
+     ],
+     "docRows": [
+      [
+       "ef",
+       "-1"
+      ]
      ]
     },
     {

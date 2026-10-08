@@ -216,7 +216,9 @@ public sealed class FactRun : IDisposable
 ///                (tags, scripts and styles removed, entities decoded, white space collapsed).
 ///   consolidated "consolidated:path[|conversion]" read in the consolidated document.
 ///   absent       "absent:results:path#alt1|alt2": none of the alternatives occurs, as a whole word
-///                ignoring case, anywhere in the text under the path in any selected run.
+///                ignoring case, anywhere in the text under the path in any selected run. The last field of the
+///                path may be a list joined by '+', as in "targets[sqlitevec].index+engine+durability": the check
+///                then covers those fields alone, each of which must be recorded in every run.
 /// Conversions (closed list): bp-pct (basis points shown as a percent), bp-ratio (1 plus basis
 /// points over 10000, shown as a ratio such as 1.35).
 /// Why: one reader for every kind keeps the fact checks and the sentence audit from disagreeing
@@ -755,21 +757,44 @@ public sealed class SourceResolver : ISourceResolver
       }
 
       string[] alternatives = parsed.Token.Split( '|', StringSplitOptions.RemoveEmptyEntries );
+      List<string> scope = ScopePaths( parsed.Path );
       foreach( FactRun run in selected )
       {
-         if( !TryPath( run.Root, parsed.Path, out JsonElement element, out string problem ) )
+         foreach( string path in scope )
          {
-            return SourceResolution.Missing( $"{run.Name}: {problem} in {parsed.Path}" );
-         }
+            if( !TryPath( run.Root, path, out JsonElement element, out string problem ) )
+            {
+               return SourceResolution.Missing( $"{run.Name}: {problem} in {path}" );
+            }
 
-         IReadOnlyList<string> hits = BannedWords.FindIn( Flatten( element ), alternatives );
-         if( hits.Count > 0 )
-         {
-            return SourceResolution.Missing( $"{run.Name}: '{hits[0]}' occurs in {parsed.Path}" );
+            IReadOnlyList<string> hits = BannedWords.FindIn( Flatten( element ), alternatives );
+            if( hits.Count > 0 )
+            {
+               return SourceResolution.Missing( $"{run.Name}: '{hits[0]}' occurs in {path}" );
+            }
          }
       }
 
       return SourceResolution.Ok( parsed.Token, $"none of {alternatives.Length} words in {selected.Count} run(s) at {parsed.Path}", "not recorded" );
+   }
+
+   /// <summary>
+   /// The paths an absence check reads: the path itself, or, when its last field is a list joined by '+', one path per field.
+   /// Why a field list: a target's whole record also holds text that is about something else (the engine-settings rows say a version was read
+   /// "on an in-memory connection"), so a check about where the vectors are kept reads the index, engine and durability text alone.
+   /// </summary>
+   /// <param name="path">The path of the reference, such as targets[sqlitevec].index+engine+durability.</param>
+   /// <returns>The paths to read, in the order of the list.</returns>
+   private static List<string> ScopePaths( string path )
+   {
+      int dot = path.LastIndexOf( '.' );
+      if( dot < 0 || dot < path.LastIndexOf( ']' ) || !path[( dot + 1 )..].Contains( '+', StringComparison.Ordinal ) )
+      {
+         return new List<string> { path };
+      }
+
+      string prefix = path[..dot];
+      return path[( dot + 1 )..].Split( '+', StringSplitOptions.RemoveEmptyEntries ).Select( field => $"{prefix}.{field}" ).ToList();
    }
 
    /// <summary>

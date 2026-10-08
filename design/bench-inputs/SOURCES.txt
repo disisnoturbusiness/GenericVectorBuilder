@@ -7,3 +7,6 @@ tie-check-eshoponweb-2026-10-07.json        its output: 524 rows, 0 pairs of row
 mariadb-effort-2026-10-07/                  the saved re-run of MariaDB's recall test (see its SOURCES.txt).
 recorded-text-classes-source/               the short form of deploy/bench/recorded-text-classes.json (classes_spec.py), the script that builds and checks it against the v7 runs (build_classes.py) and
                                             the script that exports the sweep table (export_table.py). The consolidate command reads and checks the JSON itself on every run.
+observer-placement/                         the analysis the v8 run operator saved for each of runs 801 to 803 (analysis-SEED.txt, copied byte for byte from the operator's observer folder after the runs): check X14 of each holds where the
+                                            observer's own threads ran (a share of its resident-thread ticks on the engine CPUs) and that the observer was not pinned. The consolidate command quotes those two figures
+                                            and the words "The observer is NOT pinned" from them; hashes in SHA256SUMS.

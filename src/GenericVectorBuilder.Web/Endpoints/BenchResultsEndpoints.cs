@@ -35,6 +35,7 @@ public static class BenchResultsEndpoints
 
    private const string DEFAULT_ROOT = "/home/dan/ForClaude/GenericVectorBuilder/bench-results";
    private const string CONFIG_KEY = "Gvb:BenchResultsPath";
+   private const string NOTES_CONFIG_KEY = "Gvb:BenchRunNotesPath";
    private const string HTML = "text/html; charset=utf-8";
    private const string RESULTS_JSON = "results.json";
    private const string CONSOLIDATED_JSON = "consolidated.json";
@@ -53,8 +54,9 @@ public static class BenchResultsEndpoints
    public static void Map( WebApplication app )
    {
       string root = Path.GetFullPath( app.Configuration[CONFIG_KEY] ?? DEFAULT_ROOT );
-      app.MapGet( "/bench-results", () => Results.Content( ListPageHtml( root ), HTML ) );
-      app.MapGet( "/bench-results/{run}", ( string run ) => RunPageHtml( root, run ) is string page ? Results.Content( page, HTML ) : Results.NotFound( new { error = "No such benchmark run." } ) );
+      string notesFile = NotesFilePath( root, app.Configuration[NOTES_CONFIG_KEY] );
+      app.MapGet( "/bench-results", () => Results.Content( ListPageHtml( root, notesFile ), HTML ) );
+      app.MapGet( "/bench-results/{run}", ( string run ) => RunPageHtml( root, run, notesFile ) is string page ? Results.Content( page, HTML ) : Results.NotFound( new { error = "No such benchmark run." } ) );
       app.MapGet( "/bench-results/{run}/{file}", ( string run, string file ) => RawFile( root, run, file ) );
       app.MapGet( "/bench-results/{run}/{dir}/{file}", ( string run, string dir, string file ) => RawFile( root, run, $"{dir}/{file}" ) );
    }
@@ -76,6 +78,19 @@ public static class BenchResultsEndpoints
 
       string full = Path.GetFullPath( file == null ? Path.Combine( root, run ) : Path.Combine( root, run, file ) );
       return full.StartsWith( root.TrimEnd( '/' ) + "/", StringComparison.Ordinal ) ? full : null;
+   }
+
+   /// <summary>
+   /// The path of the list file of corrections the run pages read for a set that carries no list of its own: the configured path, or
+   /// <see cref="BenchRunNotes.DEFAULT_FILE"/> in the repository that holds the results root (the folder above it).
+   /// Public so the rule can be tested.
+   /// </summary>
+   /// <param name="root">Results root.</param>
+   /// <param name="configured">The configured path, or null.</param>
+   /// <returns>The full path; the file may not exist.</returns>
+   public static string NotesFilePath( string root, string? configured )
+   {
+      return Path.GetFullPath( string.IsNullOrWhiteSpace( configured ) ? Path.Combine( root, "..", BenchRunNotes.DEFAULT_FILE ) : configured );
    }
 
    /// <summary>
@@ -125,8 +140,9 @@ public static class BenchResultsEndpoints
    /// Internal so tests can render it against a folder of their own.
    /// </summary>
    /// <param name="root">Results root.</param>
+   /// <param name="notesFile">The list file of corrections the run pages read, or null when the caller does not check for it.</param>
    /// <returns>Full HTML page.</returns>
-   internal static string ListPageHtml( string root )
+   internal static string ListPageHtml( string root, string? notesFile = null )
    {
       if( !Directory.Exists( root ) )
       {
@@ -137,7 +153,7 @@ public static class BenchResultsEndpoints
       IReadOnlyList<string> published = PublishedFolders( root );
       if( published.Count > 0 )
       {
-         body.Append( "<h1>Vector search benchmark</h1>" ).Append( PublishedSummary( root, published ) ).Append( "<h2>All runs</h2>" );
+         body.Append( "<h1>Vector search benchmark</h1>" ).Append( PublishedSummary( root, published, notesFile ) ).Append( "<h2>All runs</h2>" );
       }
       else
       {
@@ -155,8 +171,9 @@ public static class BenchResultsEndpoints
    /// </summary>
    /// <param name="root">Results root.</param>
    /// <param name="run">Folder name.</param>
+   /// <param name="notesFile">The list file of corrections to read for a run whose sets carry none, or null for no list file.</param>
    /// <returns>Full HTML page, or null when the name is refused or the folder does not exist.</returns>
-   internal static string? RunPageHtml( string root, string run )
+   internal static string? RunPageHtml( string root, string run, string? notesFile = null )
    {
       string? folder = Resolve( root, run, null );
       if( folder == null || !Directory.Exists( folder ) )
@@ -175,11 +192,15 @@ public static class BenchResultsEndpoints
          body.Append( $"<p class=\"errors bench-banner\">{Enc( banner )}</p>" );
       }
 
-      body.Append( isSet ? SetBlock( folder ) : RunBlock( root, folder, run ) );
-      string heading = recordOnly ? BenchLegends.H_REPORT_RECORD : BenchLegends.H_REPORT_TEXT;
       string text = BenchReportStrip.Apply( rest, out int stripped );
+      IReadOnlyList<BenchFolderFacts> facts = isSet ? Array.Empty<BenchFolderFacts>() : BenchRunUse.Scan( root );
+      string? listError = null;
+      IReadOnlyList<BenchRunNote> notes = isSet ? Array.Empty<BenchRunNote>() : BenchRunUse.RunNotesFor( facts, run, BenchRunNotes.ReadFile( notesFile, out listError ) );
+      text = BenchRunNotes.Apply( text, notes, out IReadOnlyList<int> found );
+      body.Append( isSet ? SetBlock( folder ) : RunBlock( folder, run, facts, BenchRunNotes.Block( notes, found, listError ) ) );
+      string heading = recordOnly ? BenchLegends.H_REPORT_RECORD : BenchLegends.H_REPORT_TEXT;
       body.Append( reportError != null ? $"<p class=\"errors\">The report could not be read: {Enc( reportError )}</p>" : ReportHtml( md, text, stripped, isSet, heading ) );
-      body.Append( RawFiles( folder, run, md == null ? null : Path.GetFileName( md ), stripped ) );
+      body.Append( RawFiles( folder, run, md == null ? null : Path.GetFileName( md ), stripped, notes.Count > 0 ) );
       return Page( title ?? run, body.ToString() );
    }
 
@@ -332,8 +353,9 @@ public static class BenchResultsEndpoints
    /// <param name="run">Folder name.</param>
    /// <param name="report">The file name of the report the page printed a copy of, or null when the folder has none.</param>
    /// <param name="stripped">How many sentences the page left out of its copy of the report; when it is above zero the raw file is said to hold them.</param>
+   /// <param name="corrected">True when the page printed corrections of the run's recorded statements; the raw files are then said to hold the statements as written.</param>
    /// <returns>HTML fragment.</returns>
-   private static string RawFiles( string folder, string run, string? report, int stripped )
+   private static string RawFiles( string folder, string run, string? report, int stripped, bool corrected = false )
    {
       var files = new List<string>();
       try
@@ -354,6 +376,11 @@ public static class BenchResultsEndpoints
       if( report != null && stripped > 0 )
       {
          html.Append( $"<p class=\"muted bench-raw-note\"><code>{Enc( report )}</code> {Enc( BenchLegends.RAW_UNEDITED )} {stripped}</p>" );
+      }
+
+      if( corrected )
+      {
+         html.Append( $"<p class=\"muted bench-raw-note\" data-note=\"corrections\">{Enc( BenchLegends.RAW_NOTES_UNEDITED )}</p>" );
       }
 
       html.Append( "<ul>" );
@@ -387,16 +414,17 @@ public static class BenchResultsEndpoints
    /// The block for one run folder: the run's table, then which consolidated folders use it, the note on why they
    /// reuse it and the clock warnings they dropped.
    /// </summary>
-   /// <param name="root">Results root.</param>
    /// <param name="folder">Folder path (already resolved).</param>
    /// <param name="run">Folder name.</param>
+   /// <param name="facts">Every consolidated folder's facts.</param>
+   /// <param name="notesHtml">The block of corrections to this run's recorded statements (see <see cref="BenchRunNotes.Block"/>); empty for none.</param>
    /// <returns>HTML fragment.</returns>
-   private static string RunBlock( string root, string folder, string run )
+   private static string RunBlock( string folder, string run, IReadOnlyList<BenchFolderFacts> facts, string notesHtml )
    {
       string results = Path.Combine( folder, RESULTS_JSON );
       if( !File.Exists( results ) )
       {
-         return string.Empty;
+         return notesHtml;
       }
 
       var html = new StringBuilder();
@@ -404,8 +432,8 @@ public static class BenchResultsEndpoints
       {
          BenchRunInfo info = BenchRunList.Describe( new DirectoryInfo( folder ) );
          html.Append( $"<p class=\"bench-data muted\">Run started {Enc( info.When )} UTC. Data: {Enc( info.Data )}. Queries: {Enc( info.Queries )}.</p>" );
-         IReadOnlyList<BenchFolderFacts> facts = BenchRunUse.Scan( root );
          html.Append( UsedBy( facts, run ) );
+         html.Append( notesHtml );
          html.Append( BenchRunTable.Block( BenchRunTable.Read( BenchRunList.ReadCapped( results ) ), BenchRunUse.NotesFor( facts, run ) ) );
       }
       catch( Exception ex ) when( IsReadError( ex ) )
@@ -472,8 +500,9 @@ public static class BenchResultsEndpoints
    /// </summary>
    /// <param name="root">Results root.</param>
    /// <param name="folders">Published folder names, newest first (not empty).</param>
+   /// <param name="notesFile">The list file of corrections the run pages read, or null when the caller does not check for it.</param>
    /// <returns>HTML fragment.</returns>
-   private static string PublishedSummary( string root, IReadOnlyList<string> folders )
+   private static string PublishedSummary( string root, IReadOnlyList<string> folders, string? notesFile )
    {
       string? failedFolder = null;
       string? failure = null;
@@ -481,10 +510,11 @@ public static class BenchResultsEndpoints
       {
          try
          {
-            string block = ConsolidatedHtml( BenchRunList.ReadCapped( Path.Combine( root, folder, CONSOLIDATED_JSON ) ), folder );
+            string json = BenchRunList.ReadCapped( Path.Combine( root, folder, CONSOLIDATED_JSON ) );
+            string block = ConsolidatedHtml( json, folder );
             string source = $"<p class=\"bench-source muted\">Numbers from <a href=\"/bench-results/{Enc( folder )}\">{Enc( folder )}</a>.</p>";
             string fallback = failedFolder == null ? string.Empty : $"<p class=\"errors\">The newest published results, {Enc( failedFolder )}, could not be read ({Enc( failure ?? "no reason given" )}), so the page shows the older {Enc( folder )}.</p>";
-            return fallback + source + block;
+            return fallback + source + NoListNotice( json, notesFile ) + block;
          }
          catch( Exception ex ) when( IsReadError( ex ) )
          {
@@ -494,6 +524,25 @@ public static class BenchResultsEndpoints
       }
 
       return $"<p class=\"errors\">{Enc( BenchLegends.UNREADABLE )}: {Enc( failure ?? "no reason given" )}</p>";
+   }
+
+   /// <summary>
+   /// The notice for a summary whose set lists no corrections to recorded statements while the list file is absent: the run pages then print every recorded
+   /// statement as written, and a reader is told so. Why: a list that is missing must be seen, and not taken for a list with nothing in it (an empty list in
+   /// either place prints no notice).
+   /// </summary>
+   /// <param name="json">The set's consolidated.json text.</param>
+   /// <param name="notesFile">The list file's path, or null when the caller does not check for it.</param>
+   /// <returns>HTML fragment; empty when the set lists corrections, the file exists, the caller does not check, or the set is not in the v8 shape.</returns>
+   private static string NoListNotice( string json, string? notesFile )
+   {
+      if( notesFile == null || File.Exists( notesFile ) || BenchConsolidatedReader.Detect( json ) != BenchShape.Consolidated )
+      {
+         return string.Empty;
+      }
+
+      using JsonDocument doc = JsonDocument.Parse( json );
+      return doc.RootElement.TryGetProperty( BenchRunNotes.FIELD, out _ ) ? string.Empty : $"<p class=\"errors\" data-notice=\"no-corrections-list\">{Enc( BenchLegends.NO_RUN_NOTES )}</p>";
    }
 
    /// <summary>

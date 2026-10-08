@@ -34,6 +34,12 @@ public static class ClaimRule
    /// <summary>Row status of a target shown with one session's figures and not ranked.</summary>
    public const string ONE_SESSION = "one-session";
 
+   /// <summary>
+   /// Row status of a target whose timed pass for this metric a claim run recorded as NOT HELD: its figures of every run are shown, it takes part in no pair, no other row lists it as not separated from,
+   /// and it is listed after the ranked rows. Why: the run says its figure may still include warm-up or a change the engine was going through, so no order may rest on it.
+   /// </summary>
+   public const string NOT_HELD = "not-held";
+
    #endregion Data Members
 
    #region Public Methods
@@ -100,19 +106,21 @@ public static class ClaimRule
    /// <param name="ranked">Targets ranked across the sessions.</param>
    /// <param name="oneSession">Targets shown with the last session's figures only (G3).</param>
    /// <param name="tBp">Threshold, bp.</param>
+   /// <param name="notHeld">Targets shown with every run's figures and not ranked, because a claim run recorded their timed pass NOT HELD; null for none.</param>
    /// <returns>The table and the per-pair results.</returns>
-   public static MetricOutcome Build( string metric, IReadOnlyList<ClaimSession> sessions, IReadOnlyList<string> ranked, IReadOnlyList<string> oneSession, int tBp )
+   public static MetricOutcome Build( string metric, IReadOnlyList<ClaimSession> sessions, IReadOnlyList<string> ranked, IReadOnlyList<string> oneSession, int tBp, IReadOnlyList<string>? notHeld = null )
    {
       bool lower = ClaimMetrics.LowerIsBetter( metric );
+      IReadOnlyList<string> unranked = notHeld ?? Array.Empty<string>();
       var values = new Dictionary<string, List<List<double>>>( StringComparer.Ordinal );
-      foreach( string target in ranked.Concat( oneSession ) )
+      foreach( string target in ranked.Concat( oneSession ).Concat( unranked ) )
       {
          values[target] = sessions.Select( s => s.Values( target, metric ) ).ToList();
       }
 
       List<PairOutcome> pairs = Pairs( ranked, values, lower, tBp, sessions );
       var outcome = new MetricOutcome { Metric = metric, Pairs = pairs };
-      outcome.Table = Table( metric, sessions, ranked, oneSession, values, pairs );
+      outcome.Table = Table( metric, sessions, ranked, oneSession, unranked, values, pairs );
       return outcome;
    }
 
@@ -163,10 +171,11 @@ public static class ClaimRule
    /// <param name="sessions">Sessions.</param>
    /// <param name="ranked">Ranked targets.</param>
    /// <param name="oneSession">One-session targets.</param>
+   /// <param name="notHeld">Targets shown and not ranked because their timed pass was recorded NOT HELD.</param>
    /// <param name="values">Values.</param>
    /// <param name="pairs">Pair results.</param>
    /// <returns>The table.</returns>
-   private static MetricTable Table( string metric, IReadOnlyList<ClaimSession> sessions, IReadOnlyList<string> ranked, IReadOnlyList<string> oneSession,
+   private static MetricTable Table( string metric, IReadOnlyList<ClaimSession> sessions, IReadOnlyList<string> ranked, IReadOnlyList<string> oneSession, IReadOnlyList<string> notHeld,
       Dictionary<string, List<List<double>>> values, List<PairOutcome> pairs )
    {
       bool lower = ClaimMetrics.LowerIsBetter( metric );
@@ -191,6 +200,8 @@ public static class ClaimRule
       List<MetricRow> ordered = ( lower ? rows.OrderBy( r => r.Median ) : rows.OrderByDescending( r => r.Median ) ).ThenBy( r => r.Target, StringComparer.Ordinal ).ToList();
       List<string> order = ordered.Select( r => r.Target ).ToList();
       ordered.ForEach( r => r.NotSeparatedFrom = r.NotSeparatedFrom.OrderBy( t => order.IndexOf( t ) ).ToList() );
+      List<MetricRow> unranked = notHeld.Select( t => UnrankedRow( t, sessions, values ) ).ToList();
+      ordered.AddRange( lower ? unranked.OrderBy( r => r.Median ) : unranked.OrderByDescending( r => r.Median ) );
       return new MetricTable
       {
          Metric = metric,
@@ -199,6 +210,26 @@ public static class ClaimRule
          OrderedPairs = pairs.Count( p => p.AAhead || p.BAhead ),
          ComparedPairs = pairs.Count,
       };
+   }
+
+   /// <summary>
+   /// The row of a target whose timed pass was recorded NOT HELD: every run's figure, the median of them, and no relation to any other row.
+   /// </summary>
+   /// <param name="target">The target.</param>
+   /// <param name="sessions">Sessions.</param>
+   /// <param name="values">Values by target and session.</param>
+   /// <returns>The row, with status <see cref="NOT_HELD"/> and an empty not-separated list.</returns>
+   private static MetricRow UnrankedRow( string target, IReadOnlyList<ClaimSession> sessions, Dictionary<string, List<List<double>>> values )
+   {
+      var row = new MetricRow { Target = target, Display = target, Status = NOT_HELD };
+      for( int s = 0; s < sessions.Count; s++ )
+      {
+         List<double> v = values[target][s];
+         row.PerSession[sessions[s].Name] = new SessionFigures { Min = v.Min(), Max = v.Max(), Runs = v.ToList() };
+      }
+
+      row.Median = Median( values[target].SelectMany( v => v ).ToList() );
+      return row;
    }
 
    /// <summary>

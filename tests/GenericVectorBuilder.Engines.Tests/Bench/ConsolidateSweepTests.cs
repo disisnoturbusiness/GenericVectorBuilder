@@ -199,6 +199,7 @@ public sealed class ConsolidateSweepTests : IClassFixture<DryFixFixture>, IDispo
    /// <summary>
    /// Reason 1: Weaviate's effort clause "(dynamic: limit x 8 clamped 100..500)" is neither set nor read back, so it is printed as documented on saved pages, and the label says it
    /// was not read back; the pages are saved with the commit they were taken at, hashed and listed; the three numbers are rows of the saved reference table.
+   /// V8 fix-with 13: its "ef=-1" is the value the saved reference table lists for ef, so it is labelled documented on a saved page and not read back, and not as a value the runs read.
    /// </summary>
    /// <returns>A task.</returns>
    [Fact]
@@ -210,7 +211,9 @@ public sealed class ConsolidateSweepTests : IClassFixture<DryFixFixture>, IDispo
          List<JsonElement> under = two.Root.GetProperty( "sentences" ).EnumerateArray().Where( s => s.GetProperty( "slot" ).GetString()!.StartsWith( "why.effort.weaviate.", StringComparison.Ordinal ) ).ToList();
          int at = under.FindIndex( s => s.GetProperty( "text" ).GetString() == "(dynamic: limit x 8 clamped 100..500)," || s.GetProperty( "text" ).GetString() == "(dynamic: limit x 8 clamped 100..500)" );
          Assert.True( at > 0, string.Join( " | ", under.Select( s => s.GetProperty( "text" ).GetString() ) ) );
-         JsonElement label = under[at - 1];
+         int ef = under.FindIndex( s => s.GetProperty( "text" ).GetString() == "ef=-1" );
+         Assert.Equal( ef + 1, at );
+         JsonElement label = under[ef - 1];
          Assert.Equal( "Documented on a saved page, not read back from the engine:", label.GetProperty( "text" ).GetString() );
          string refs = string.Join( "\n", label.GetProperty( "sources" ).EnumerateArray().Select( s => s.GetProperty( "ref" ).GetString() ) );
          Assert.Contains( "weaviate-vector-index-reference-2026-10-07.mdx", refs );
@@ -226,7 +229,8 @@ public sealed class ConsolidateSweepTests : IClassFixture<DryFixFixture>, IDispo
          string listed = File.ReadAllText( Path.Combine( docs, "SOURCES.txt" ) );
          Assert.Contains( "weaviate-vector-index-reference-2026-10-07.mdx  https://raw.githubusercontent.com/weaviate/docs/", listed );
          Assert.Contains( "weaviate-vector-index-concepts-2026-10-07.md  https://raw.githubusercontent.com/weaviate/docs/", listed );
-         Assert.Equal( "Set by a line of code or a compose file saved in this repository, not read back from the engine:", under[under.FindIndex( s => s.GetProperty( "text" ).GetString() == "ef=-1" ) - 1].GetProperty( "text" ).GetString() );
+         Assert.Contains( "weaviate-vector-index-reference-2026-10-07.mdx#`ef`", refs );
+         Assert.Matches( @"(?m)^\| `ef`.*\|\s*-1\s*\|\s*Yes\s*\|$", reference );
       } );
    }
 
@@ -673,7 +677,7 @@ public sealed class ConsolidateSweepTests : IClassFixture<DryFixFixture>, IDispo
    {
       return clauseClass switch
       {
-         "unverified" => new[] { labels["CLAUSE_UNVERIFIED"], labels["CLAUSE_UNLISTED"] },
+         "unverified" => new[] { labels["CLAUSE_UNVERIFIED"], labels["CLAUSE_UNVERIFIED_CITES"], labels["CLAUSE_UNLISTED"] },
          "documented" => new[] { labels["CLAUSE_DOC_PAGE"], labels["CLAUSE_DOC_LOG"], labels["CLAUSE_DOC_CODE"], labels["CLAUSE_DOC_TEST"] },
          "measured" => new[] { labels["CLAUSE_MEASURED"] },
          _ => new[] { labels["CLAUSE_READ_BACK"], labels["CLAUSE_READ_BY_CODE"] },

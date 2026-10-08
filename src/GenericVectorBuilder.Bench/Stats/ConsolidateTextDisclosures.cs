@@ -276,9 +276,13 @@ public static class ConsolidateTextDisclosures
       string end = S.Whole( folder.BytesAtEnd!.Value );
       if( folder.Reset != null && folder.BytesAfterReset != null )
       {
+         ResetText reset = ResetText.Read( run, folder.Reset );
          string after = S.Whole( folder.BytesAfterReset.Value );
-         w.Add( $"disclosure.dataFolder.{target}.{run}", T.Fill( T.DISCLOSURE_DATA_FOLDER, run, target, start, after, folder.Reset, end ), w.RunSource( run ),
-            S.Result( run, at + ".bytesAtStart", start ), S.Result( run, at + ".bytesAfterReset", after ), S.Result( run, at + ".bytesAtEnd", end ), S.Token( run, at + ".reset", folder.Reset ) );
+         string slot = $"disclosure.dataFolder.{target}.{run}";
+         w.Add( slot, T.Fill( reset.Stopped ? T.DISCLOSURE_DATA_FOLDER : T.DISCLOSURE_DATA_FOLDER_STILL, run, target, start, after, end ), w.RunSource( run ),
+            S.Result( run, at + ".bytesAtStart", start ), S.Result( run, at + ".bytesAfterReset", after ), S.Result( run, at + ".bytesAtEnd", end ), S.Token( run, at + ".reset", reset.Settled ) );
+         w.Add( slot + ".tables", T.Fill( T.DISCLOSURE_DATA_FOLDER_TABLES, run, reset.TruncatedCount, target, reset.ActiveBefore, reset.ActiveAfter ), w.RunSource( run ),
+            S.Token( run, at + ".reset", reset.Truncated ), S.Token( run, at + ".reset", reset.ActiveBefore ), S.Token( run, at + ".reset", reset.ActiveAfter ) );
          return;
       }
 
@@ -335,12 +339,21 @@ public static class ConsolidateTextDisclosures
          w.Add( $"disclosure.{slotName}{suffix}", T.Fill( T.DISCLOSURE_OBSERVER, o.Session, max, o.Copy ), S.Consolidated( at + ".cpuMax", max ), S.Consolidated( at + ".copy", o.Copy ) );
       }
 
-      if( o.AperfWorstDeviationBp is double bp && o.Msr620ValuesSeen.Count > 0 )
+      if( o.Msr620ValuesSeen.Count > 0 && o.CpuWorst is ObserverCpuDeviation worst && o.PinnedMhz is int pin )
+      {
+         ObserverClock( w, o, at, suffix, slotName, worst, pin );
+      }
+      else if( o.AperfWorstDeviationBp is double bp && o.Msr620ValuesSeen.Count > 0 )
       {
          string pct = S.Percent( bp );
          string values = S.List( o.Msr620ValuesSeen );
          w.Add( $"disclosure.{slotName}.clock{suffix}", T.Fill( T.DISCLOSURE_OBSERVER_CLOCK, pct, T.Msr(), values ), new[] { S.Consolidated( at + ".aperfWorstDeviationBp", pct, "bp-pct" ), S.File( T.MSR_FILE, T.MSR_TOKEN ) }
             .Concat( o.Msr620ValuesSeen.Select( ( v, i ) => S.Consolidated( $"{at}.msr620ValuesSeen[{i}]", v ) ) ) );
+      }
+
+      if( o.Placement is ObserverPlacement placement )
+      {
+         ObserverPlacementSentence( w, o, at, suffix, slotName, placement );
       }
 
       if( o.TimersCovered )
@@ -352,6 +365,127 @@ public static class ConsolidateTextDisclosures
       {
          w.Add( $"disclosure.timers{suffix}", T.Fill( T.DISCLOSURE_TIMERS_NOT_COVERED, o.Session ) );
       }
+   }
+
+   /// <summary>
+   /// The observer's per-CPU clock check of one session: the CPU furthest from the pin, the MSR value, the pass that ran under the pin on its CPUs, and the passes whose mean a mean rule flags.
+   /// </summary>
+   /// <param name="w">The writer.</param>
+   /// <param name="o">The observer block.</param>
+   /// <param name="at">Its path in consolidated.json.</param>
+   /// <param name="suffix">The slot suffix.</param>
+   /// <param name="slotName">The slot name.</param>
+   /// <param name="worst">The CPU furthest from the pin.</param>
+   /// <param name="pin">The pinned clock, MHz.</param>
+   private static void ObserverClock( Writer w, ObserverInfo o, string at, string suffix, string slotName, ObserverCpuDeviation worst, int pin )
+   {
+      string pct = S.Percent( worst.DeviationBp );
+      string mhz = S.Number( worst.Mhz, 1 );
+      string cpu = S.Whole( worst.Cpu );
+      w.Add( $"disclosure.{slotName}.clock{suffix}", T.Fill( T.DISCLOSURE_OBSERVER_CPU, pct, worst.Target, T.PassLabel( worst.Pass ), cpu, mhz, S.Whole( pin ) ),
+         S.Consolidated( at + ".cpuWorst.deviationBp", pct, "bp-pct" ), S.Consolidated( at + ".cpuWorst.target", worst.Target ), S.Consolidated( at + ".cpuWorst.cpu", cpu ),
+         S.Consolidated( at + ".cpuWorst.mhz", mhz ), S.Consolidated( at + ".pinnedMhz", S.Whole( pin ) ) );
+      w.Add( $"disclosure.{slotName}.msr{suffix}", T.Fill( T.DISCLOSURE_OBSERVER_MSR, T.Msr(), S.List( o.Msr620ValuesSeen ) ),
+         new[] { S.File( T.MSR_FILE, T.MSR_TOKEN ) }.Concat( o.Msr620ValuesSeen.Select( ( v, i ) => S.Consolidated( $"{at}.msr620ValuesSeen[{i}]", v ) ) ) );
+      if( o.Dip is ObserverDip dip )
+      {
+         ObserverDipSentence( w, o, at, suffix, slotName, dip );
+      }
+
+      for( int i = 0; i < o.MeanDips.Count; i++ )
+      {
+         ObserverMeanDip d = o.MeanDips[i];
+         if( w.Report.Clock.DroppedWarnings.Any( x => x.Run == d.Run && x.Target == d.Target && x.Pass == d.Pass ) || MedianRuleFlags( w, d ) )
+         {
+            continue;
+         }
+
+         string engine = S.Number( d.EngineMeanMhz, 1 );
+         string client = S.Number( d.ClientMeanMhz, 1 );
+         var sources = new List<SentenceSource>
+         {
+            S.Consolidated( $"{at}.meanDips[{i}].run", d.Run ), S.Consolidated( $"{at}.meanDips[{i}].engineMeanMhz", engine ), S.Consolidated( $"{at}.meanDips[{i}].clientMeanMhz", client ),
+         };
+         List<string> earlier = w.Sessions.Where( s => s.Name != o.Session && s.Runs.Any( r => w.Report.Clock.DroppedWarnings.Any( x => x.Run == r.Name && x.Target == d.Target && x.Pass == d.Pass ) ) ).Select( s => s.Name ).ToList();
+         if( earlier.Count == 0 )
+         {
+            w.Add( $"disclosure.{slotName}.meandip{suffix}.{i}", T.Fill( T.DISCLOSURE_MEAN_DIP, d.Run, d.Target, T.PassLabel( d.Pass ), engine, client ), sources );
+            continue;
+         }
+
+         sources.AddRange( earlier.Select( n => S.Consolidated( $"sessions[name={n}].name", n ) ) );
+         w.Add( $"disclosure.{slotName}.meandip{suffix}.{i}", T.Fill( T.DISCLOSURE_MEAN_DIP_AS, d.Run, d.Target, T.PassLabel( d.Pass ), engine, client, S.List( earlier ) ), sources );
+      }
+   }
+
+   /// <summary>
+   /// Whether the median rule flags a pass whose sampled mean lay outside the tolerance.
+   /// Why: the mean-dip sentence says the median rule does not flag the pass, and a pass the median rule does flag has its own flag text and no such sentence.
+   /// </summary>
+   /// <param name="w">The writer.</param>
+   /// <param name="dip">The pass.</param>
+   /// <returns>True when the median rule puts the pass off the pinned clock.</returns>
+   private static bool MedianRuleFlags( Writer w, ObserverMeanDip dip )
+   {
+      RunResult? run = w.Sessions.SelectMany( s => s.Runs ).FirstOrDefault( r => r.Name == dip.Run );
+      PassFacts? pass = run?.Conditions.Passes.LastOrDefault( p => p.Target == dip.Target && p.Pass == dip.Pass );
+      return run != null && pass != null && ConsolidateClock.Recompute( run, pass ).Off;
+   }
+
+   /// <summary>
+   /// The sentence about the pass that ran under the pin on its CPUs.
+   /// </summary>
+   /// <param name="w">The writer.</param>
+   /// <param name="o">The observer block.</param>
+   /// <param name="at">Its path in consolidated.json.</param>
+   /// <param name="suffix">The slot suffix.</param>
+   /// <param name="slotName">The slot name.</param>
+   /// <param name="dip">The pass.</param>
+   private static void ObserverDipSentence( Writer w, ObserverInfo o, string at, string suffix, string slotName, ObserverDip dip )
+   {
+      string runs = S.Whole( dip.Runs );
+      string other = S.Percent( dip.OtherWorstBp );
+      string high = S.Percent( dip.MaxBp );
+      var sources = new List<SentenceSource>
+      {
+         S.Consolidated( at + ".dip.target", dip.Target ), S.Consolidated( at + ".dip.runs", runs ), S.Consolidated( at + ".dip.maxBp", high, "bp-pct" ),
+         S.Consolidated( at + ".dip.otherWorstBp", other, "bp-pct" ), S.Consolidated( at + ".session", o.Session ),
+      };
+      if( dip.EveryCpuUnder )
+      {
+         string low = S.Percent( dip.MinBp );
+         sources.Add( S.Consolidated( at + ".dip.minBp", low, "bp-pct" ) );
+         w.Add( $"disclosure.{slotName}.dip{suffix}", T.Fill( T.DISCLOSURE_OBSERVER_DIP, dip.Target, T.PassLabel( dip.Pass ), low, high, runs, o.Session, other ), sources );
+         return;
+      }
+
+      string under = S.Whole( dip.CpusUnder );
+      string readings = S.Whole( dip.CpuReadings );
+      sources.Add( S.Consolidated( at + ".dip.cpusUnder", under ) );
+      sources.Add( S.Consolidated( at + ".dip.cpuReadings", readings ) );
+      w.Add( $"disclosure.{slotName}.dip{suffix}", T.Fill( T.DISCLOSURE_OBSERVER_DIP_SOME, dip.Target, T.PassLabel( dip.Pass ), under, readings, runs, o.Session, high, other ), sources );
+   }
+
+   /// <summary>
+   /// The sentence that says the observer was not pinned, with where its threads ran and the most CPU it used, each figure a quote of the saved analysis of its run.
+   /// </summary>
+   /// <param name="w">The writer.</param>
+   /// <param name="o">The observer block.</param>
+   /// <param name="at">Its path in consolidated.json.</param>
+   /// <param name="suffix">The slot suffix.</param>
+   /// <param name="slotName">The slot name.</param>
+   /// <param name="placement">The placement.</param>
+   private static void ObserverPlacementSentence( Writer w, ObserverInfo o, string at, string suffix, string slotName, ObserverPlacement placement )
+   {
+      string cpus = S.List( placement.Runs.Select( r => r.Cpus ).Distinct( StringComparer.Ordinal ).ToList() );
+      var sources = new List<SentenceSource> { S.Consolidated( at + ".session", o.Session ), S.Doc( placement.Runs[0].File, placement.NotPinnedQuote ) };
+      foreach( ObserverPlacementRun run in placement.Runs )
+      {
+         sources.Add( S.Doc( run.File, run.PlacementQuote ) );
+         sources.Add( S.Doc( run.File, run.CgroupQuote ) );
+      }
+
+      w.Add( $"disclosure.{slotName}.placement{suffix}", T.Fill( T.DISCLOSURE_OBSERVER_PLACEMENT, o.Session, S.List( placement.Runs.Select( r => r.Percent ).ToList() ), cpus, placement.MaxCgroupCpu ), sources );
    }
 
    /// <summary>

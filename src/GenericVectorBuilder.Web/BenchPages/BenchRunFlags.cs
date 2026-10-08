@@ -1,12 +1,13 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace GenericVectorBuilder.Web.BenchPages;
 
 /// <summary>
 /// The flags one run's results.json shows for a target by itself, as the same flag codes the consolidated
 /// page uses (see <see cref="BenchLegends"/>): an engine recorded as not settled, an index its engine reported
-/// as not ready after the load or after the searches, failed searches and warm-up searches, a rise of the
+/// as not ready after the load or after the searches, a timed pass its run recorded as not held, failed searches and warm-up searches, a rise of the
 /// thermal throttle counters during the engine's turn, a p50 that disagrees with the mean implied by the
 /// one-searcher QPS, and the per-pass records of the clock, of the governor and of CPUs busy outside the benchmark.
 /// Why these: the consolidated page raises each of them from the same recorded fields, and a flag the summary
@@ -25,6 +26,12 @@ public static class BenchRunFlags
 
    /// <summary>Mean above p50 by more than this ratio is flagged. The consolidate command no longer raises this flag; the run page keeps it, with both limits in its evidence.</summary>
    public const double MEAN_ABOVE_P50_RATIO = 1.5;
+
+   /// <summary>The words the settle warning of a target uses to record a timed pass as not held.</summary>
+   public const string NOT_HELD_MARK = "NOT HELD";
+
+   private static readonly TimeSpan MATCH_TIMEOUT = TimeSpan.FromSeconds( 5 );
+   private static readonly Regex PASS_START = new( @"(?<![A-Za-z0-9@])(?<pass>default@\d+|exact): warm-up", RegexOptions.Compiled | RegexOptions.CultureInvariant, MATCH_TIMEOUT );
 
    #endregion Data Members
 
@@ -56,6 +63,7 @@ public static class BenchRunFlags
             + $"limits: p50 above the mean by more than {P50_ABOVE_MEAN_RATIO.ToString( "0.##", CultureInfo.InvariantCulture )} times, or the mean above p50 by more than {MEAN_ABOVE_P50_RATIO.ToString( "0.##", CultureInfo.InvariantCulture )} times" ) );
       }
 
+      flags.AddRange( FromNotHeld( target ) );
       flags.AddRange( FromIndexState( target ) );
       flags.AddRange( FromErrors( target, search ) );
       flags.AddRange( FromThrottle( Text( target, "name" ), conditions ) );
@@ -66,6 +74,31 @@ public static class BenchRunFlags
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// The not-held flag: one per timed pass that the target's settle warning records as NOT HELD (the engine was still changing when the pass was timed),
+   /// with the pass's name and the warning's clause for it, from "the timed pass" to "NOT HELD". The same flag code the consolidated page uses, read from
+   /// the same recorded note, so a pass the summary shows as not held shows so on the page of its run. A mark the page cannot place in a pass or a clause
+   /// is flagged all the same, with the words around it, and never dropped.
+   /// </summary>
+   /// <param name="target">The target object.</param>
+   /// <returns>The flags, one per pass marked.</returns>
+   private static IEnumerable<BenchFlagEntry> FromNotHeld( JsonElement target )
+   {
+      if( UnsettledNote( target ) is not { } warning )
+      {
+         yield break;
+      }
+
+      List<Match> starts = PASS_START.Matches( warning ).ToList();
+      for( int at = warning.IndexOf( NOT_HELD_MARK, StringComparison.Ordinal ); at >= 0; at = warning.IndexOf( NOT_HELD_MARK, at + NOT_HELD_MARK.Length, StringComparison.Ordinal ) )
+      {
+         string pass = starts.LastOrDefault( m => m.Index < at )?.Groups["pass"].Value ?? "pass not named";
+         int from = warning.LastIndexOf( "the timed pass ", at, StringComparison.Ordinal );
+         string clause = from >= 0 ? warning[from..( at + NOT_HELD_MARK.Length )] : warning[Math.Max( 0, at - 120 )..Math.Min( warning.Length, at + NOT_HELD_MARK.Length )];
+         yield return new BenchFlagEntry( BenchRow.NOT_HELD, $"{pass}: {clause}" );
+      }
+   }
 
    /// <summary>
    /// The index-not-ready flag: one per snapshot (after the load, after the searches) in which the engine reported its index not ready, with the vector counts

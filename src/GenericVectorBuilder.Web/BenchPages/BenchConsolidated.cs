@@ -4,7 +4,8 @@ namespace GenericVectorBuilder.Web.BenchPages;
 /// <param name="Folder">The run's folder name under the results root (untrusted text: the page checks it before it links to it).</param>
 /// <param name="Seed">The run's seed, or null when the file does not give it.</param>
 /// <param name="StartedUtc">When the run started, as the file wrote it, or null.</param>
-public sealed record BenchSessionRun( string Folder, long? Seed, string? StartedUtc );
+/// <param name="ResultsSha256">The SHA-256 of the results.json the report read for the run, as the file records it, or null when it records none.</param>
+public sealed record BenchSessionRun( string Folder, long? Seed, string? StartedUtc, string? ResultsSha256 = null );
 
 /// <summary>One session of runs (for example the three runs of one night) a consolidated set compares.</summary>
 /// <param name="Name">The session's name, e.g. "v7"; it is also the key of every row's per-session figures.</param>
@@ -36,10 +37,23 @@ public sealed record BenchFlagEntry( string Code, string Text );
 public sealed record BenchRow( string Target, string Display, string Status, IReadOnlyDictionary<string, BenchRange> PerSession, double? Median,
    IReadOnlyList<string> NotSeparatedFrom, IReadOnlyList<BenchFlagEntry> Flags, string? Note, string? SearchMode = null, IReadOnlyList<BenchSource>? NoteSources = null )
 {
+   #region Data Members
+
+   /// <summary>The status, and the flag code, of a row whose timed pass the tool recorded as not held at its settled level.</summary>
+   public const string NOT_HELD = "not-held";
+
+   #endregion Data Members
+
    #region Public Methods
 
    /// <summary>The sources of the row's note; never null.</summary>
    public IReadOnlyList<BenchSource> NoteSourceList => NoteSources ?? Array.Empty<BenchSource>();
+
+   /// <summary>
+   /// True when the row is shown and not ranked because the tool recorded its timed pass as not held: the status is "not-held", or the row carries the flag
+   /// "not-held". Why both: the page must not rank a figure the tool says not to quote, whichever way the file marks it.
+   /// </summary>
+   public bool IsNotHeld => Status == NOT_HELD || Flags.Any( f => f.Code == NOT_HELD );
 
    #endregion Public Methods
 }
@@ -114,7 +128,8 @@ public sealed record BenchSetupSplit( string Target, IReadOnlyList<BenchSetupCha
 /// <param name="Conditions">The conditions the file records for it (turbo, uncore, warm-up and so on), as they are written.</param>
 /// <param name="Session">The name of the session of earlier runs the run belongs to (for example "v5"), or null when the file does not give it.</param>
 /// <param name="StartedUtc">When the run started, as the file wrote it, or null.</param>
-public sealed record BenchBasisRun( string Folder, long? Seed, IReadOnlyList<BenchPair> Conditions, string? Session = null, string? StartedUtc = null );
+/// <param name="ResultsSha256">The SHA-256 of the results.json the report read for the run, as the file records it, or null when it records none.</param>
+public sealed record BenchBasisRun( string Folder, long? Seed, IReadOnlyList<BenchPair> Conditions, string? Session = null, string? StartedUtc = null, string? ResultsSha256 = null );
 
 /// <summary>The data the threshold rests on.</summary>
 /// <param name="Runs">The runs that count towards it.</param>
@@ -189,7 +204,24 @@ public sealed record BenchClock( IReadOnlyList<( string Session, IReadOnlyList<B
 /// <param name="Id">The image id.</param>
 /// <param name="LastTagTimeUtc">When the tag was last set, or null.</param>
 /// <param name="BeforeFirstStart">True when that time precedes the first session's first start; null when not given.</param>
-public sealed record BenchImage( string Target, string Id, string? LastTagTimeUtc, bool? BeforeFirstStart );
+/// <param name="Ref">The image reference the engine's compose file names (for example a repository and a tag); null when the file gives none. A floating tag is visible only here: the id says which image ran, not whether the reference can name another one later.</param>
+public sealed record BenchImage( string Target, string Id, string? LastTagTimeUtc, bool? BeforeFirstStart, string? Ref = null );
+
+/// <summary>One clause of an engine text the runs recorded (its index or durability description, or a note), with how the report classed it.</summary>
+/// <param name="Text">The clause as recorded.</param>
+/// <param name="Class">How the report classes it ("documented", "read-back", "unverified" and so on), as written.</param>
+/// <param name="Basis">What the clause is bound to (a repository file and a token, a saved log); empty when it has none.</param>
+/// <param name="Printed">True when the report prints the clause.</param>
+/// <param name="NotPrinted">Why the report does not print it, or null.</param>
+public sealed record BenchClause( string Text, string Class, IReadOnlyList<string> Basis, bool Printed, string? NotPrinted );
+
+/// <summary>An engine text one run recorded, split into the clauses the report classes one by one.</summary>
+/// <param name="Target">The engine; empty for a note that belongs to no engine.</param>
+/// <param name="Field">The recorded field ("index", "durability", "notes").</param>
+/// <param name="Run">The run the text was taken from, or null.</param>
+/// <param name="Note">Which note of the run the text is (the report numbers a run's notes), as written, or null for a text that is not a note.</param>
+/// <param name="Clauses">The clauses in text order.</param>
+public sealed record BenchRecordedText( string Target, string Field, string? Run, string? Note, IReadOnlyList<BenchClause> Clauses );
 
 /// <summary>One engine setting as the runs recorded it.</summary>
 /// <param name="Key">The setting's name.</param>
@@ -304,11 +336,20 @@ public sealed record BenchAudit( long SentencesChecked, IReadOnlyList<string> Fa
 /// <param name="Audit">The audit result, or null.</param>
 /// <param name="EngineSettings">The settings read from each running engine or set from a repository file, by engine; none when the runs recorded none.</param>
 /// <param name="UnreadFields">The paths of fields the file holds that the page neither draws nor lists as deliberately left out (see <see cref="BenchConsolidatedFields"/>); none for a file the page reads whole.</param>
+/// <param name="RunNotes">The recorded statements of the runs that the set marks as false or misleading, each with its correction and sources (the file's "runPageNotes"); none when the file lists none.</param>
+/// <param name="RecordedTexts">The engine texts the runs recorded, clause by clause, with the class the report gives each; none when the file lists none.</param>
 public sealed record BenchConsolidated( IReadOnlyList<BenchSession> Sessions, long TBp, double Ratio, IReadOnlyList<BenchMetric> Metrics, BenchGuards Guards, BenchBasis? Basis,
    BenchDrift? Drift, IReadOnlyList<BenchRecall> Recall, BenchClock? Clock, IReadOnlyList<BenchPair> Machine, IReadOnlyList<BenchImage> Images, IReadOnlyList<BenchWhy> Why,
-   IReadOnlyList<BenchSentence> Sentences, BenchAudit? Audit, IReadOnlyList<BenchEngineSettings>? EngineSettings = null, IReadOnlyList<string>? UnreadFields = null )
+   IReadOnlyList<BenchSentence> Sentences, BenchAudit? Audit, IReadOnlyList<BenchEngineSettings>? EngineSettings = null, IReadOnlyList<string>? UnreadFields = null,
+   IReadOnlyList<BenchRunNote>? RunNotes = null, IReadOnlyList<BenchRecordedText>? RecordedTexts = null )
 {
    #region Public Methods
+
+   /// <summary>The recorded statements the set marks as false or misleading; never null.</summary>
+   public IReadOnlyList<BenchRunNote> RunNoteList => RunNotes ?? Array.Empty<BenchRunNote>();
+
+   /// <summary>The engine texts the runs recorded, clause by clause; never null.</summary>
+   public IReadOnlyList<BenchRecordedText> RecordedTextList => RecordedTexts ?? Array.Empty<BenchRecordedText>();
 
    /// <summary>True when the set is marked stopped: the page then prints no headline and no tables.</summary>
    public bool Stopped => Guards.AnyStopped;

@@ -68,13 +68,37 @@ public static class ConsolidateText
    public const string SUBTITLE_MACHINE = "Machine: {0}, {1} logical CPUs, {2} GiB of RAM.";
 
    /// <summary>Subtitle: what a figure is at a small collection (design O14: per-request cost, client library included, not index scaling).</summary>
-   public const string SUBTITLE_SCOPE_SMALL = "At {0} vectors each figure is the cost of one request through the engine's .NET client, and does not show how an index scales.";
+   public const string SUBTITLE_SCOPE_SMALL = "At {0} vectors each figure is the cost of one request through the benchmark's client for that engine, and does not show how an index scales.";
+
+   /// <summary>The start of the text of a protocol fact that names the benchmark's own REST client.</summary>
+   public const string HTTP_CLIENT = "HttpClient";
+
+   /// <summary>Subtitle: the engines the benchmark reaches with its own REST code.</summary>
+   public const string SUBTITLE_CLIENTS = "Of the {0} engines, {1} are reached through the benchmark's own HttpClient REST code: {2}.";
+
+   /// <summary>Subtitle: the runs of a session that record no question-file hash.</summary>
+   public const string SUBTITLE_TRUTH = "The runs of {0} record no question-file hash, and truthNdcg reads {1} in all {2} claim runs.";
 
    /// <summary>Subtitle: the size a larger collection's order applies to.</summary>
    public const string SUBTITLE_SCOPE_LARGE = "At {0} vectors each order applies to this size alone.";
 
    /// <summary>Subtitle: one session's runs.</summary>
    public const string SUBTITLE_SESSION = "Session {0}: runs {1}, started from {2} to {3}.";
+
+   /// <summary>Subtitle: the build that measured a session, by commit.</summary>
+   public const string SUBTITLE_BUILD_MEASURED = "The runs of {0} were measured by build {1}.";
+
+   /// <summary>Subtitle: the consolidating build is one that measured a session.</summary>
+   public const string SUBTITLE_BUILD_SAME = "This report was consolidated by build {0}, which also measured the runs of {1}.";
+
+   /// <summary>Subtitle: the consolidating build measured none of the sessions with a recorded build.</summary>
+   public const string SUBTITLE_BUILD_OTHER = "This report was consolidated by build {0}, not by the build that measured the runs of {1}.";
+
+   /// <summary>Subtitle: the consolidating build, when no session records a commit to compare it with.</summary>
+   public const string SUBTITLE_BUILD_ONLY = "This report was consolidated by build {0}.";
+
+   /// <summary>Subtitle: the consolidating build carries no commit.</summary>
+   public const string SUBTITLE_BUILD_NONE = "The build that consolidated this report carries no commit.";
 
    /// <summary>Subtitle: the question file of the runs that recorded its SHA-256.</summary>
    public const string SUBTITLE_QUESTIONS = "The runs of {0} read a question file with the same SHA256 hash as {1}.";
@@ -94,8 +118,32 @@ public static class ConsolidateText
    /// <summary>What the basis holds.</summary>
    public const string THRESHOLD_BASIS = "The basis holds the {0} runs of sessions {1}, all with machine control on.";
 
+   /// <summary>Which basis runs held the clock, by session.</summary>
+   public const string THRESHOLD_CLOCK_BOTH = "The clock was held in the runs of {0} and not in those of {1}.";
+
+   /// <summary>Every basis run held the clock.</summary>
+   public const string THRESHOLD_CLOCK_ALL = "The clock was held in every basis run.";
+
+   /// <summary>No basis run held the clock.</summary>
+   public const string THRESHOLD_CLOCK_NONE = "The clock was held in no basis run.";
+
+   /// <summary>Every run of some sessions held the clock, and the rest are in between.</summary>
+   public const string THRESHOLD_CLOCK_EVERY_OF = "The clock was held in every basis run of {0}.";
+
+   /// <summary>No run of some sessions held the clock, and the rest are in between.</summary>
+   public const string THRESHOLD_CLOCK_NONE_OF = "The clock was held in no basis run of {0}.";
+
+   /// <summary>A session of which only some basis runs held the clock.</summary>
+   public const string THRESHOLD_CLOCK_SOME = "The clock was held in {0} of the {1} basis runs of {2}.";
+
+   /// <summary>Moves are rounded up: the largest, unrounded and as printed.</summary>
+   public const string THRESHOLD_ROUNDING = "Each move is rounded up to the next basis point before it is printed: the largest, {0}% unrounded, prints as {1}%.";
+
    /// <summary>The largest move.</summary>
    public const string THRESHOLD_MAX = "The largest move was {0}%, the {1} of {2} between runs {3} (seed {4}) and {5} (seed {6}).";
+
+   /// <summary>The largest move includes a pass its run recorded as NOT HELD; what the basis gives without the engine of that pass.</summary>
+   public const string THRESHOLD_MAX_WITHOUT = "The largest move includes a NOT HELD pass; with {0} left out of the basis, the largest move is {1}%, the {2} of {3}, and the threshold would be {4}%.";
 
    /// <summary>The differences between the two runs of the largest move.</summary>
    public const string THRESHOLD_MAX_DIFFERENCES = "Those two runs differ in {0}.";
@@ -154,6 +202,12 @@ public static class ConsolidateText
    /// <summary>The token on that line.</summary>
    public const string MSR_TOKEN = "LIMIT_MSR = \"0x620\"";
 
+   /// <summary>The repository file whose code line fixes the MHz one step of the core ratio is.</summary>
+   public const string RATIO_STEP_FILE = "src/GenericVectorBuilder.Bench/Stats/ConsolidateClock.cs";
+
+   /// <summary>The token on that line.</summary>
+   public const string RATIO_STEP_TOKEN = "public const int RATIO_STEP_MHZ = 100;";
+
    /// <summary>The index state after the load.</summary>
    public const string AFTER_LOAD = "after the load";
 
@@ -183,6 +237,9 @@ public static class ConsolidateText
 
    /// <summary>The exact table.</summary>
    public const string TABLE_EXACT = "Exact p50 is the median latency of each engine's own exact mode, which is a different operation per engine; the why table's CPU figures come from the other passes.";
+
+   /// <summary>A row shown and not ranked because its timed pass was recorded NOT HELD.</summary>
+   public const string TABLE_NOT_HELD = "{0} is shown and not ranked in this table: its timed {1} pass was recorded NOT HELD in {2} of the {3} runs.";
 
    /// <summary>A target without an exact pass whose search fact says exact.</summary>
    public const string TABLE_EXACT_ABSENT_EXACT = "{0} has no exact pass; its search fact says: {1}.";
@@ -223,6 +280,9 @@ public static class ConsolidateText
    /// <summary>Flag: unsettled.</summary>
    public const string FLAG_UNSETTLED = "Run {0}: {1} was recorded as not settled before its timed passes.";
 
+   /// <summary>Flag: the timed pass itself was recorded NOT HELD.</summary>
+   public const string FLAG_NOT_HELD = "Run {0}: the timed {1} pass of {2} read {3}, {4}% from the settled {5} (limit {6}%), and the run recorded it as NOT HELD.";
+
    /// <summary>Flag: index not ready.</summary>
    public const string FLAG_INDEX = "Run {0}: {1}'s index state {2} read not ready, {3} of {4} vectors indexed.";
 
@@ -240,6 +300,9 @@ public static class ConsolidateText
 
    /// <summary>Recall caption.</summary>
    public const string RECALL = "Recall counts hits of the exact top {0} over {1} queries, {2} per run; it is printed, never ranked.";
+
+   /// <summary>Recall hits that the runs did not record and the report derived.</summary>
+   public const string RECALL_DERIVED = "The recall hits of {0} are the recall of each run times {1} queries times {2} hits, rounded; those runs record no hit count.";
 
    /// <summary>Recall differs.</summary>
    public const string RECALL_DIFFERS = "{0}'s recall hits differ between runs: {1}.";
@@ -285,14 +348,26 @@ public static class ConsolidateText
    /// <summary>Drift: ordered pairs on the line.</summary>
    public const string DRIFT_ONLINE = "{0} ordered pairs cleared {1} times by {2} bp or less in their lowest session; they are listed as on the line.";
 
+   /// <summary>Drift: one ordered pair on the line.</summary>
+   public const string DRIFT_ONLINE_ONE = "{0} ordered pair cleared {1} times by {2} bp or less in its lowest session; it is listed as on the line.";
+
    /// <summary>Drift: no pair on the line.</summary>
    public const string DRIFT_ONLINE_NONE = "No ordered pair cleared {0} times by {1} bp or less in its lowest session.";
+
+   /// <summary>Drift: what the two sessions differ in besides the engines.</summary>
+   public const string DRIFT_SESSIONS = "The sessions differ in {0}, and this test does not separate those from the engines' own drift.";
+
+   /// <summary>Drift: the outside load each session saw, from the passes' own record.</summary>
+   public const string DRIFT_OUTSIDE_LOAD = "The median outside load of a pass, per run, was {0} to {1} CPUs in {2} and {3} to {4} in {5}.";
 
    /// <summary>Drift: scope.</summary>
    public const string DRIFT_SCOPE = "Both sessions ran with the clock held; drift under other conditions is not measured here.";
 
    /// <summary>Clock held.</summary>
-   public const string CLOCK_HELD = "In {0}, every run held the clock: turbo off, MSR {1} at {2}, every CPU at {3} MHz; the ceiling before was {4} MHz, so absolute figures are for the held clock.";
+   public const string CLOCK_HELD = "In {0}, every run held the clock: turbo off, MSR {1} at {2}, top ratio {3} (nominally {4} MHz); the median of the kernel's pass medians is {5} MHz; the ceiling before was {6} MHz.";
+
+   /// <summary>Clock held, when the pin is not a whole number of ratio steps.</summary>
+   public const string CLOCK_HELD_NO_RATIO = "In {0}, every run held the clock: turbo off, MSR {1} at {2}, pinned at {3} MHz; the median of the kernel's pass medians is {4} MHz; the ceiling before was {5} MHz.";
 
    /// <summary>Clock not held.</summary>
    public const string CLOCK_NOT_HELD = "In {0}, the runs did not all hold the clock.";
@@ -369,6 +444,9 @@ public static class ConsolidateText
    /// <summary>A group of clauses nothing backs.</summary>
    public const string CLAUSE_UNVERIFIED = "Typed in the program's own text; not read back, measured or backed by a saved source:";
 
+   /// <summary>A group of clauses nothing backs that cite a measurement: the figure or the date of a measurement, which this report does not show.</summary>
+   public const string CLAUSE_UNVERIFIED_CITES = "Typed in the program's own text; it cites a measurement that these runs did not repeat, and no saved source backs this clause:";
+
    /// <summary>A text the list of classes does not cover, printed whole.</summary>
    public const string CLAUSE_UNLISTED = "Not classified by this report's list of recorded clauses, so printed as unverified:";
 
@@ -414,8 +492,14 @@ public static class ConsolidateText
    /// <summary>A measured exact search fact.</summary>
    public const string DISCLOSURE_SCAN = "{0}'s measured search fact says: {1}.";
 
-   /// <summary>ClickHouse data folder, v8.</summary>
-   public const string DISCLOSURE_DATA_FOLDER = "Run {0}: {1}'s data folder held {2} bytes at its start, {3} bytes after its tables {4} were truncated, and {5} bytes at its end.";
+   /// <summary>ClickHouse data folder, v8: the size at the start, the size read after the system log tables were truncated and the folder stopped changing, and the size at the end.</summary>
+   public const string DISCLOSURE_DATA_FOLDER = "Run {0}: {1}'s data folder held {2} bytes at its start, {3} bytes after its system log tables were truncated and it stopped changing, and {4} bytes at its end.";
+
+   /// <summary>The same when the recorded text says the folder was still changing at the deadline of the wait.</summary>
+   public const string DISCLOSURE_DATA_FOLDER_STILL = "Run {0}: {1}'s data folder held {2} bytes at its start, {3} bytes after its system log tables were truncated and while it was still changing at the deadline, and {4} bytes at its end.";
+
+   /// <summary>What the reset truncated and what ClickHouse itself counted in those tables.</summary>
+   public const string DISCLOSURE_DATA_FOLDER_TABLES = "Run {0}: the reset truncated {1} MergeTree log tables, whose active bytes by {2}'s own count were {3} before and {4} after.";
 
    /// <summary>Data folder without a reset.</summary>
    public const string DISCLOSURE_DATA_FOLDER_PLAIN = "Run {0}: {1}'s data folder held {2} bytes at its start and {3} bytes at its end.";
@@ -426,8 +510,29 @@ public static class ConsolidateText
    /// <summary>Observer present.</summary>
    public const string DISCLOSURE_OBSERVER = "An observer process ran beside the {0} runs; its own CPU, at most {1} CPUs in a pass, counts as outside load, and its summary is {2} beside this report.";
 
-   /// <summary>Observer clock check.</summary>
-   public const string DISCLOSURE_OBSERVER_CLOCK = "By APERF and MPERF, the observer's largest clock deviation in a pass was {0}%, and it read MSR {1} as {2}.";
+   /// <summary>Observer clock check, when the summary holds no per-CPU figures: the figure is the largest of a CPU group's mean.</summary>
+   public const string DISCLOSURE_OBSERVER_CLOCK = "By APERF and MPERF, the largest deviation of a CPU group's mean in a pass was {0}%, and the observer read MSR {1} as {2}.";
+
+   /// <summary>Observer clock check, per CPU: the worst single CPU of any pass.</summary>
+   public const string DISCLOSURE_OBSERVER_CPU = "By APERF and MPERF, the largest deviation of one CPU in a pass was {0}%: {1}'s {2} pass on CPU {3}, at {4} MHz against the pin of {5} MHz.";
+
+   /// <summary>The MSR the observer read.</summary>
+   public const string DISCLOSURE_OBSERVER_MSR = "The observer read MSR {0} as {1}.";
+
+   /// <summary>The pass that ran under the pin on every CPU.</summary>
+   public const string DISCLOSURE_OBSERVER_DIP = "{0}'s {1} pass ran {2}% to {3}% under the pin on every CPU in all {4} runs of {5}; no other pass was more than {6}% from it, and why is not known.";
+
+   /// <summary>The pass that ran under the pin on some CPUs.</summary>
+   public const string DISCLOSURE_OBSERVER_DIP_SOME = "{0}'s {1} pass ran under the pin on {2} of {3} CPU readings in {4} runs of {5}, by up to {6}%; no other pass was more than {7}% from it, and why is not known.";
+
+   /// <summary>A pass whose sampled mean lay outside the tolerance: what a mean rule flags and the median rule does not.</summary>
+   public const string DISCLOSURE_MEAN_DIP = "Run {0}: {1}'s {2} pass averaged {3} MHz on the engine CPUs and {4} MHz on the client CPUs; a mean rule flags it and the median rule does not.";
+
+   /// <summary>The same, when an earlier session's recorded warnings flag the same pass by a mean.</summary>
+   public const string DISCLOSURE_MEAN_DIP_AS = "Run {0}: {1}'s {2} pass averaged {3} MHz on the engine CPUs and {4} MHz on the client CPUs, as in {5}; a mean rule flags it and the median rule does not.";
+
+   /// <summary>The observer was not pinned; where its threads ran and what it used.</summary>
+   public const string DISCLOSURE_OBSERVER_PLACEMENT = "The observer was not pinned: in the {0} runs {1} percent of its resident-thread ticks were seen on engine CPUs {2}, and it used at most {3} CPUs by cgroup.";
 
    /// <summary>Timers.</summary>
    public const string DISCLOSURE_TIMERS = "The observer saw a systemd timer fire during {0} timed passes of the {1} runs.";
@@ -448,7 +553,7 @@ public static class ConsolidateText
    public const string DISCLOSURE_CSTATES = "CPU idle states were recorded and left as found: driver {0}, governor {1}.";
 
    /// <summary>dockerd test.</summary>
-   public const string DISCLOSURE_DOCKERD_TEST = "The test {0} holds this outside-load accounting equal to the accounting of v7, bit for bit.";
+   public const string DISCLOSURE_DOCKERD_TEST = "The test {0} holds the formula that turns CPU counters into outside load equal to the formula of v7, on fixed counters; it does not make the measured load of two sessions equal.";
 
    /// <summary>dockerd not recorded.</summary>
    public const string DISCLOSURE_DOCKERD_NONE = "The runs of {0} did not record how dockerd's CPU was counted.";

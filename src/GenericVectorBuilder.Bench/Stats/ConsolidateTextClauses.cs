@@ -197,6 +197,7 @@ public sealed class ClauseWriter
          TextClass.DOCUMENTED when paths.Any( p => p.StartsWith( "design/", StringComparison.Ordinal ) ) => T.CLAUSE_DOC_LOG,
          TextClass.DOCUMENTED when paths.Any( p => p.StartsWith( "tests/", StringComparison.Ordinal ) ) => T.CLAUSE_DOC_TEST,
          TextClass.DOCUMENTED => T.CLAUSE_DOC_CODE,
+         TextClass.UNVERIFIED when span.Cites != null => T.CLAUSE_UNVERIFIED_CITES,
          _ => T.CLAUSE_UNVERIFIED,
       };
    }

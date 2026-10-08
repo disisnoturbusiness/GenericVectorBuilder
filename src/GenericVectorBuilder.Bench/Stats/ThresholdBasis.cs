@@ -40,6 +40,9 @@ public static class ThresholdBasis
    /// <summary>The kind of an exclusion row that removes cells measured after an unrecorded configuration change.</summary>
    public const string KIND_CONFIG = "unrecorded config change";
 
+   /// <summary>The kind of the row <see cref="Without"/> adds to leave an engine out of every run and metric; it is not a row of basis-exclusions.json.</summary>
+   public const string KIND_LEFT_OUT = "left out";
+
    /// <summary>The TBp rule as the report prints it.</summary>
    public const string TBP_RULE = "TBp = max(FLOOR_BP 3500, the smallest multiple of STEP_BP 500 that is at least MaxBp + MARGIN_BP 500)";
 
@@ -101,13 +104,71 @@ public static class ThresholdBasis
          throw new InvalidDataException( "the basis holds no two runs of one engine at one identity, so no move and no threshold can be computed" );
       }
 
-      info.MaxMove = all.OrderByDescending( m => m.MoveBp ).ThenByDescending( m => m.Move ).First();
+      info.MaxMove = LargestOf( all );
       info.MaxBp = info.MaxMove.MoveBp;
       info.TBp = TBpFor( info.MaxBp );
+      info.MaxMoveNotHeld = NotHeldBehind( info.MaxMove, pool );
+      info.MaxMoveWithout = info.MaxMoveNotHeld.Count == 0 ? null : Without( pool, exclusions, info.MaxMoveNotHeld.Select( c => c.Target ).Distinct( StringComparer.Ordinal ).OrderBy( t => t, StringComparer.Ordinal ).ToList() );
       info.NoMachineControl = Maxima( info.PerMetric.Values.Select( m => m.OneEngineNoMachineControl ), info.PerMetric.Values.Select( m => m.PairNoMachineControl ) );
       info.ExclusionsKept = KeptOverall( info, exclusions );
       info.SetupSplits = ThresholdSplits.Compute( pool, exclusions, info.MaxBp );
       return info;
+   }
+
+   /// <summary>
+   /// The timed passes behind a move that their run recorded as NOT HELD: for each of the move's two runs and each engine in it, the pass of the move's metric when the run marked it.
+   /// </summary>
+   /// <param name="move">The move.</param>
+   /// <param name="pool">Basis runs.</param>
+   /// <returns>The cells, in run order and then engine order; empty when no pass behind the move is marked.</returns>
+   public static List<NotHeldCell> NotHeldBehind( BasisMove move, IReadOnlyList<BasisRun> pool )
+   {
+      var cells = new List<NotHeldCell>();
+      string pass = ClaimMetrics.PassOf( move.Metric );
+      IEnumerable<string> engines = move.Target != null ? new[] { move.Target } : move.Pair!.Split( '/' );
+      foreach( string folder in move.Runs )
+      {
+         BasisRun run = pool.First( r => r.Folder == folder );
+         foreach( string engine in engines )
+         {
+            foreach( NotHeldPass held in run.Run.Find( engine )?.NotHeldPasses.Where( n => n.Pass == pass ) ?? Enumerable.Empty<NotHeldPass>() )
+            {
+               cells.Add( new NotHeldCell
+               {
+                  Run = folder, Seed = run.Seed, Target = engine, Pass = held.Pass, Metric = move.Metric, Token = held.Token, Timed = held.Timed, OffPercent = held.OffPercent, Settled = held.Settled, LimitPercent = held.LimitPercent,
+               } );
+            }
+         }
+      }
+
+      return cells;
+   }
+
+   /// <summary>
+   /// The basis with some engines left out of every run and metric: the largest move that remains and the threshold it gives.
+   /// </summary>
+   /// <param name="pool">Basis runs.</param>
+   /// <param name="exclusions">Exclusion rows in force.</param>
+   /// <param name="engines">The engines to leave out.</param>
+   /// <returns>The largest remaining move and its threshold.</returns>
+   /// <exception cref="InvalidDataException">No move remains once the engines are left out.</exception>
+   public static BasisWithout Without( IReadOnlyList<BasisRun> pool, IReadOnlyList<ExclusionRow> exclusions, IReadOnlyList<string> engines )
+   {
+      List<int> seeds = pool.Where( r => r.Seed.HasValue ).Select( r => r.Seed!.Value ).Distinct().ToList();
+      List<ExclusionRow> extended = exclusions.Concat( engines.Select( e => new ExclusionRow { Target = e, Seeds = seeds, Metric = "*", Kind = KIND_LEFT_OUT } ) ).ToList();
+      var moves = new List<BasisMove>();
+      foreach( string metric in ClaimMetrics.ALL )
+      {
+         moves.AddRange( new[] { OneEngine( pool, metric, false, extended ), Pair( pool, metric, false, extended ) }.OfType<BasisMove>() );
+      }
+
+      if( moves.Count == 0 )
+      {
+         throw new InvalidDataException( $"with {string.Join( ", ", engines )} left out of the basis no move remains, so no threshold can be computed without them" );
+      }
+
+      BasisMove largest = LargestOf( moves );
+      return new BasisWithout { Targets = engines.ToList(), MaxBp = largest.MoveBp, MaxMove = largest, TBp = TBpFor( largest.MoveBp ) };
    }
 
    /// <summary>
@@ -185,6 +246,16 @@ public static class ThresholdBasis
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// The largest of some moves: by bp, then by the unrounded move.
+   /// </summary>
+   /// <param name="moves">At least one move.</param>
+   /// <returns>The largest.</returns>
+   private static BasisMove LargestOf( IEnumerable<BasisMove> moves )
+   {
+      return moves.OrderByDescending( m => m.MoveBp ).ThenByDescending( m => m.Move ).First();
+   }
 
    /// <summary>
    /// Every move of one metric: all runs, same settings, each exclusion kind kept in, and the runs without machine control.

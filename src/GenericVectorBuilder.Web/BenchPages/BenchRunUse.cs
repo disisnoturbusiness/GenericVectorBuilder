@@ -34,8 +34,9 @@ public sealed record BenchRunRef( string Run, string Role, string? Session = nul
 /// <param name="Dropped">The clock warnings it dropped.</param>
 /// <param name="Error">Why the file could not be read, or null.</param>
 /// <param name="RowNotes">The notes its metric rows carry beside an engine's name (for example that an engine holds its data in memory) with their sources, by target; null for a file with none.</param>
+/// <param name="RunNotes">The recorded statements of its runs that it marks as false or misleading, each stamped with this folder as its origin; null for a file with none.</param>
 public sealed record BenchFolderFacts( string Folder, BenchFolderKind Kind, BenchShape? Shape, int EngineCount, IReadOnlyList<BenchRunRef> Runs, IReadOnlyList<BenchSentence> Reuse,
-   IReadOnlyList<BenchDroppedWarning> Dropped, string? Error, IReadOnlyDictionary<string, BenchRowNote>? RowNotes = null );
+   IReadOnlyList<BenchDroppedWarning> Dropped, string? Error, IReadOnlyDictionary<string, BenchRowNote>? RowNotes = null, IReadOnlyList<BenchRunNote>? RunNotes = null );
 
 /// <summary>
 /// Finds which consolidated folders use which runs.
@@ -157,6 +158,31 @@ public static class BenchRunUse
       return notes;
    }
 
+   /// <summary>
+   /// The corrections that belong on the page of a run: the entries of every folder that uses the run (a published, candidate or withdrawn folder, and a
+   /// blocked folder only when no other folder uses the run) that name the run, then the entries of the list file that name it. An entry that says the same
+   /// thing about the same statement of the same engine twice is listed once, from the folder first.
+   /// Why the folders' entries and not only the published ones: a correction of a recorded statement is true of the run whichever set found it.
+   /// </summary>
+   /// <param name="facts">Every folder's facts.</param>
+   /// <param name="run">The run's folder name.</param>
+   /// <param name="fileNotes">The entries of the list file, or none.</param>
+   /// <returns>The corrections, in the order the page numbers them.</returns>
+   public static IReadOnlyList<BenchRunNote> RunNotesFor( IReadOnlyList<BenchFolderFacts> facts, string run, IReadOnlyList<BenchRunNote>? fileNotes = null )
+   {
+      IEnumerable<BenchRunNote> fromFolders = MarksFor( facts, run ).Select( m => m.Folder ).Distinct().SelectMany( f => f.RunNotes ?? Array.Empty<BenchRunNote>() );
+      var notes = new List<BenchRunNote>();
+      foreach( BenchRunNote note in fromFolders.Concat( fileNotes ?? Array.Empty<BenchRunNote>() ).Where( n => n.Runs.Contains( run, StringComparer.Ordinal ) ) )
+      {
+         if( !notes.Any( n => n.Target == note.Target && n.Statement == note.Statement && n.Text == note.Text ) )
+         {
+            notes.Add( note );
+         }
+      }
+
+      return notes;
+   }
+
    #endregion Public Methods
 
    #region Private Methods
@@ -209,7 +235,8 @@ public static class BenchRunUse
       int engines = model.Metrics.SelectMany( m => m.Rows.Select( r => r.Target ) ).Distinct( StringComparer.Ordinal ).Count();
       Dictionary<string, BenchRowNote> notes = model.Metrics.SelectMany( m => m.Rows ).Where( r => !string.IsNullOrWhiteSpace( r.Note ) )
          .GroupBy( r => r.Target, StringComparer.Ordinal ).ToDictionary( g => g.Key, g => new BenchRowNote( g.First().Note!, g.First().NoteSourceList ), StringComparer.Ordinal );
-      return new BenchFolderFacts( folder, kind, BenchShape.Consolidated, engines, runs, reuse, model.Clock?.Dropped ?? new List<BenchDroppedWarning>(), null, notes );
+      List<BenchRunNote> runNotes = model.RunNoteList.Select( n => n with { Origin = folder } ).ToList();
+      return new BenchFolderFacts( folder, kind, BenchShape.Consolidated, engines, runs, reuse, model.Clock?.Dropped ?? new List<BenchDroppedWarning>(), null, notes, runNotes );
    }
 
    /// <summary>

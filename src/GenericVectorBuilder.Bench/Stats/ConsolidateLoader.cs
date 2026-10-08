@@ -59,6 +59,7 @@ public static class ConsolidateLoader
          ObserverPaths = args.Observers.Select( o => Existing( Path.GetFullPath( o ), "--observer" ) ).ToList(),
          Classes = RecordedTextClasses.Load( classesPath ),
          ClassesSha256 = EngineFactSheet.FileSha256( classesPath ),
+         Build = ConsolidateBuild.Of( typeof( ConsolidateLoader ).Assembly ),
          CommandLine = commandLine,
          CreatedUtc = DateTime.UtcNow.ToString( "yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture ),
       };

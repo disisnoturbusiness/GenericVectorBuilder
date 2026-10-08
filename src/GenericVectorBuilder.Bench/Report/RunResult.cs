@@ -332,6 +332,9 @@ public sealed class TargetResult
    /// <summary>The run's own words on why the target was or was not settled; null when not recorded.</summary>
    public string? SettleDetail { get; init; }
 
+   /// <summary>The timed passes the settle warning records as NOT HELD (the engine was still changing when they were timed); empty when it records none or the run has no warning.</summary>
+   public IReadOnlyList<NotHeldPass> NotHeldPasses { get; init; } = Array.Empty<NotHeldPass>();
+
    /// <summary>The two passes of this target a consolidated report should compare by default, as the target declared them; null when it declared none.</summary>
    public PairHintValue? PairHint { get; init; }
 
@@ -420,6 +423,7 @@ public sealed class TargetResult
          SearchSettingsEntries = SettingsEntries( t, search ),
          Settled = ReadSettled( t, search ) ?? notedSettled,
          SettleDetail = ReadSettleDetail( t, search ) ?? notedDetail,
+         NotHeldPasses = SettleWarning.NotHeld( notedDetail ),
          PairHint = PairHintValue.Parse( ResultJson.Child( t, "pairHint" ) ),
          MeanMs = Search( search, "meanMs" ) ?? Search( search, "latencyMeanMs" ),
          CpuCap = CpuCapText( t ),

@@ -246,7 +246,8 @@ SPEC[('pgvector', 'index')] = [
 SPEC[('weaviate', 'index')] = [
     ('HNSW maxConnections(M)=16 efConstruction=128,', 'DO',
      [S + 'WeaviateSink.cs#["maxConnections"] = _options.MaxConnections,', S + 'WeaviateSink.cs#["efConstruction"] = _options.EfConstruction,', S + 'WeaviateSinkOptions.cs#int MaxConnections = 16,', S + 'WeaviateSinkOptions.cs#int EfConstruction = 128,']),
-    (' ef=-1', 'DO', [S + 'WeaviateSink.cs#["ef"] = _options.Ef,', S + 'WeaviateSinkOptions.cs#int Ef = -1 );']),
+    (' ef=-1', 'DO', [S + 'WeaviateSink.cs#["ef"] = _options.Ef,', S + 'WeaviateSinkOptions.cs#int Ef = -1 );', W + 'weaviate-vector-index-reference-2026-10-07.mdx#`ef`'],
+     {'docRows': [['ef', '-1']]}),
     (' (dynamic: limit x 8 clamped 100..500),', 'DO',
      [W + 'weaviate-vector-index-reference-2026-10-07.mdx#`dynamicEfFactor`', W + 'weaviate-vector-index-reference-2026-10-07.mdx#`dynamicEfMin`', W + 'weaviate-vector-index-reference-2026-10-07.mdx#`dynamicEfMax`',
       W + 'weaviate-vector-index-concepts-2026-10-07.md#The dynamic list size will be set as the query limit multiplied by `dynamicEfFactor`, modified by a minimum of `dynamicEfMin` and a maximum of `dynamicEfMax`.'],
