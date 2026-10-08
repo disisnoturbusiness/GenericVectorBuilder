@@ -259,14 +259,14 @@ public static class BenchLegends
    /// <summary>Message printed in place of the numbers when a file cannot be read.</summary>
    public const string UNREADABLE = "The summary numbers could not be read";
 
-   /// <summary>Heading of the block on a run page that lists the recorded statements a set marks as false or misleading.</summary>
+   /// <summary>Heading of the block on a run page that lists the recorded statements a set marks as false, misleading or not backed by a saved source.</summary>
    public const string H_RUN_NOTES = "Corrections to statements recorded in this run";
 
    /// <summary>What the corrections block of a run page is: the run's own text stays as written, and the markers show where each statement sits in it.</summary>
-   public const string RUN_NOTES_INTRO = "This run's report is kept as it was written. A set that uses this run states that the recorded statements below are false or misleading. Each is marked in the report text.";
+   public const string RUN_NOTES_INTRO = "This run's report is kept as it was written. A set that uses this run states that the recorded statements below are false, misleading or unbacked. Each is marked in the report text.";
 
    /// <summary>Printed when the list of corrections cannot be read; the page never takes an unreadable list for an empty one.</summary>
-   public const string RUN_NOTES_UNREADABLE = "The list of corrections could not be read, so this page may print statements that a set marks as false or misleading:";
+   public const string RUN_NOTES_UNREADABLE = "The list of corrections could not be read, so this page may print statements that a set marks as false, misleading or not backed by a saved source:";
 
    /// <summary>Printed on the summary when the set lists no corrections to recorded statements and the list file is absent: the run pages then print every recorded statement as written, and a reader is told so.</summary>
    public const string NO_RUN_NOTES = "This set lists no corrections to recorded statements and the list file is absent, so the run pages print every recorded statement as written.";
@@ -276,6 +276,9 @@ public static class BenchLegends
 
    /// <summary>Label of a correction of a statement that gives a wrong picture without being contradicted.</summary>
    public const string L_NOTE_MISLEADING = "Misleading:";
+
+   /// <summary>Label of a correction of a statement that cites a figure or a reading no saved source backs; it is not shown to be wrong.</summary>
+   public const string L_NOTE_UNBACKED = "Not backed by a saved source:";
 
    /// <summary>Label before the statement as the run recorded it.</summary>
    public const string L_NOTE_RECORDED = "Recorded:";
@@ -311,7 +314,7 @@ public static class BenchLegends
    public const string H_RUN_NOTES_SUMMARY = "Corrections printed on the run pages, count:";
 
    /// <summary>What the block of corrections on the summary page is.</summary>
-   public const string RUN_NOTES_SUMMARY = "Each recorded statement below is false or misleading, as the correction says. The page of the run it was recorded in marks it and prints this correction with its sources.";
+   public const string RUN_NOTES_SUMMARY = "Each recorded statement below is false, misleading or unbacked, as the correction says. The page of the run it was recorded in marks it and prints this correction with its sources.";
 
    private static readonly Dictionary<string, ( string Marker, string Legend )> FLAGS = new( StringComparer.Ordinal )
    {

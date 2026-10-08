@@ -4,13 +4,13 @@ using System.Text.Json;
 namespace GenericVectorBuilder.Web.BenchPages;
 
 /// <summary>
-/// One statement a run recorded that the set using the run states is false or misleading, with the correction and what the correction is bound to.
+/// One statement a run recorded that the set using the run states is false, misleading or not backed by a saved source, with the correction and what the correction is bound to.
 /// </summary>
 /// <param name="Runs">The run folders whose report holds the statement (each checked safe by the reader).</param>
 /// <param name="Target">The engine whose section of the report holds the statement; empty for a statement that belongs to no engine.</param>
 /// <param name="Field">The recorded field the statement comes from (for example "disk.text" or "durability"); empty when the list gives none.</param>
 /// <param name="Statement">The statement exactly as the run's report holds it. The page finds it in the report text by these words.</param>
-/// <param name="Kind">"false" or "misleading".</param>
+/// <param name="Kind">"false", "misleading" or "unbacked".</param>
 /// <param name="Text">The correction, as the list holds it.</param>
 /// <param name="Sources">What the correction is bound to (a recorded field of a run, a repository file); at least one.</param>
 /// <param name="Origin">Where the list came from: a consolidated folder's name, or the repository path of the list file.</param>
@@ -24,7 +24,7 @@ public sealed record BenchRunNote( IReadOnlyList<string> Runs, string Target, st
 /// "runPageNotes", or the repository file named in <see cref="DEFAULT_FILE"/> when the set has none), each entry bound to sources.
 /// An entry is an object with: "runs" (the run folders whose report holds the statement; "run" names one), "target" (the engine whose section of the
 /// report holds it; optional), "field" (the recorded field it comes from; optional), "statement" (its words exactly as the report holds them),
-/// "kind" ("false" or "misleading"), "note" (the correction) and "sources" (a list of { kind, ref, value } objects, at least one). The list file is an
+/// "kind" ("false", "misleading" or "unbacked"), "note" (the correction) and "sources" (a list of { kind, ref, value } objects, at least one). The list file is an
 /// object with a "notes" array of such entries, or the array itself.
 /// </summary>
 public static class BenchRunNotes
@@ -36,6 +36,9 @@ public static class BenchRunNotes
 
    /// <summary>The kind of a statement that is not contradicted but gives a reader a wrong picture.</summary>
    public const string KIND_MISLEADING = "misleading";
+
+   /// <summary>The kind of a statement that cites a figure or a reading that no saved source backs: it is not shown wrong, and the set that uses the run does not print it.</summary>
+   public const string KIND_UNBACKED = "unbacked";
 
    /// <summary>The repository path of the list file the page reads when a set carries no list of its own (relative to the repository root).</summary>
    public const string DEFAULT_FILE = "deploy/bench/run-page-notes.json";
@@ -201,7 +204,12 @@ public static class BenchRunNotes
    /// <returns>HTML fragment.</returns>
    private static string Item( BenchRunNote note, int number, int places )
    {
-      string label = note.Kind == KIND_FALSE ? BenchLegends.L_NOTE_FALSE : BenchLegends.L_NOTE_MISLEADING;
+      string label = note.Kind switch
+      {
+         KIND_FALSE => BenchLegends.L_NOTE_FALSE,
+         KIND_UNBACKED => BenchLegends.L_NOTE_UNBACKED,
+         _ => BenchLegends.L_NOTE_MISLEADING,
+      };
       string where = string.Join( ", ", new[] { note.Target.Length == 0 ? string.Empty : BenchNames.FriendlyName( note.Target ), note.Field }.Where( s => s.Length > 0 ).Select( BenchFormat.Enc ) );
       string origin = BenchFolderNames.IsSafe( note.Origin ) && BenchFolderNames.KindOf( note.Origin ) != BenchFolderKind.Run
          ? $"<a href=\"/bench-results/{BenchFormat.Enc( note.Origin )}\">{BenchFormat.Enc( note.Origin )}</a>"
@@ -242,9 +250,9 @@ public static class BenchRunNotes
       }
 
       string kind = BenchJson.RequireText( e, "kind", path );
-      if( kind is not ( KIND_FALSE or KIND_MISLEADING ) )
+      if( kind is not ( KIND_FALSE or KIND_MISLEADING or KIND_UNBACKED ) )
       {
-         throw new InvalidDataException( $"{path}.kind is \"{kind}\"; the page knows \"{KIND_FALSE}\" and \"{KIND_MISLEADING}\"." );
+         throw new InvalidDataException( $"{path}.kind is \"{kind}\"; the page knows \"{KIND_FALSE}\", \"{KIND_MISLEADING}\" and \"{KIND_UNBACKED}\"." );
       }
 
       var sources = BenchJson.Items( e, "sources", path ).Select( ( s, j ) => new BenchSource( BenchJson.RequireText( s, "kind", $"{path}.sources[{j}]" ),
@@ -274,7 +282,7 @@ public static class BenchRunNotes
       for( int at = line.IndexOf( statement, StringComparison.Ordinal ); at >= 0; at = line.IndexOf( statement, from, StringComparison.Ordinal ) )
       {
          int end = at + statement.Length;
-         bool whole = ( at == 0 || !IsPart( line[at - 1] ) || !IsPart( statement[0] ) ) && ( end == line.Length || !IsPart( line[end] ) || !IsPart( statement[^1] ) );
+         bool whole = ( at == 0 || !Continues( line, at - 1, -1 ) || !IsPart( statement[0] ) ) && ( end == line.Length || !Continues( line, end, 1 ) || !IsPart( statement[^1] ) );
          result.Append( line, from, end - from );
          if( whole )
          {
@@ -289,13 +297,27 @@ public static class BenchRunNotes
    }
 
    /// <summary>
-   /// True for a character that continues a word or a figure.
+   /// True for a character that continues a word or a figure on its own: a letter, a digit or an underscore.
    /// </summary>
    /// <param name="c">The character.</param>
-   /// <returns>True for a letter, a digit, a dot or an underscore.</returns>
+   /// <returns>True for a letter, a digit or an underscore.</returns>
    private static bool IsPart( char c )
    {
-      return char.IsLetterOrDigit( c ) || c is '.' or '_';
+      return char.IsLetterOrDigit( c ) || c == '_';
+   }
+
+   /// <summary>
+   /// Whether the character at a position continues a word or a figure on the side that faces a statement: a letter, a digit or an underscore always does; a dot does only when a letter or a
+   /// digit sits beyond it (the dot of 1.9). A full stop that ends a sentence does not hide the statement before it.
+   /// </summary>
+   /// <param name="line">The line.</param>
+   /// <param name="index">The position of the character next to the statement.</param>
+   /// <param name="step">+1 when the character follows the statement, -1 when it precedes it.</param>
+   /// <returns>True when the character is part of a longer word or figure.</returns>
+   private static bool Continues( string line, int index, int step )
+   {
+      int beyond = index + step;
+      return IsPart( line[index] ) || ( line[index] == '.' && beyond >= 0 && beyond < line.Length && char.IsLetterOrDigit( line[beyond] ) );
    }
 
    /// <summary>

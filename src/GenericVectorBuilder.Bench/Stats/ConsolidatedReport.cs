@@ -735,7 +735,10 @@ public sealed class SearchSettingsRow
    /// <summary>The settings as recorded, sorted by key.</summary>
    public List<SearchSettingEntry> Settings { get; set; } = new();
 
-   /// <summary>The recorded clause of the target's index text that states its per-query effort, when that clause carries more than a number; null otherwise.</summary>
+   /// <summary>
+   /// The recorded clause of the target's index text that states its per-query effort, when that clause carries more than a number; null otherwise. A statement the run-page notes list marks
+   /// is replaced by <see cref="ConsolidateSettings.WITHHELD"/> once the sentences are written.
+   /// </summary>
    public string? Clause { get; set; }
 
    #endregion Public Methods
@@ -1107,6 +1110,44 @@ public sealed class DriftInfo
 
    /// <summary>Each session's outside load: the median of a run's passes' outside load during the pass, per run.</summary>
    public List<SessionOutsideLoad> OutsideLoad { get; set; } = new();
+
+   /// <summary>
+   /// The cells the move figures leave out because their pass was recorded NOT HELD (the table shows them and does not rank them), each with the move of its session median.
+   /// Why listed: the largest move and the middle case are over ranked cells only, and a reader must see the move of the cell that was left out, which can be the largest of all.
+   /// </summary>
+   public List<DriftExcluded> Excluded { get; set; } = new();
+
+   #endregion Public Methods
+}
+
+/// <summary>A cell the drift figures leave out, with its move.</summary>
+public sealed class DriftExcluded
+{
+   #region Public Methods
+
+   /// <summary>Target.</summary>
+   public string Target { get; set; } = string.Empty;
+
+   /// <summary>Metric id.</summary>
+   public string Metric { get; set; } = string.Empty;
+
+   /// <summary>Move of the session median from the first session to the second, bp, rounded half away from zero (negative = smaller in the second session).</summary>
+   public int MoveBp { get; set; }
+
+   /// <summary>The move without its sign, bp.</summary>
+   public int AbsMoveBp { get; set; }
+
+   /// <summary>Lowest run figure of the first session.</summary>
+   public double FromMin { get; set; }
+
+   /// <summary>Highest run figure of the first session.</summary>
+   public double FromMax { get; set; }
+
+   /// <summary>Lowest run figure of the second session.</summary>
+   public double ToMin { get; set; }
+
+   /// <summary>Highest run figure of the second session.</summary>
+   public double ToMax { get; set; }
 
    #endregion Public Methods
 }
@@ -1765,6 +1806,9 @@ public sealed class AuditInfo
 
    /// <summary>SHA-256 of recorded-text-classes.json.</summary>
    public string ClassesSha256 { get; set; } = string.Empty;
+
+   /// <summary>SHA-256 of run-page-notes.json, the list of recorded statements marked as false, misleading or unbacked that no sentence of the report may print without its correction.</summary>
+   public string RunPageNotesSha256 { get; set; } = string.Empty;
 
    /// <summary>The recorded clauses the list did not classify and the report printed as unverified, each as "where: clause"; empty when every clause was classified.</summary>
    public List<string> UnlistedClauses { get; set; } = new();

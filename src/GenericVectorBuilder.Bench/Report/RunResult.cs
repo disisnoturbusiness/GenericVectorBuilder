@@ -332,6 +332,9 @@ public sealed class TargetResult
    /// <summary>The run's own words on why the target was or was not settled; null when not recorded.</summary>
    public string? SettleDetail { get; init; }
 
+   /// <summary>The passes the settle warning names as not settled before they were timed ("default@1", "default@8", "exact"); empty when the target settled, or when the warning names none (a run before the pass list), which means every pass of the target.</summary>
+   public IReadOnlyList<string> UnsettledPasses { get; init; } = Array.Empty<string>();
+
    /// <summary>The timed passes the settle warning records as NOT HELD (the engine was still changing when they were timed); empty when it records none or the run has no warning.</summary>
    public IReadOnlyList<NotHeldPass> NotHeldPasses { get; init; } = Array.Empty<NotHeldPass>();
 
@@ -376,7 +379,7 @@ public sealed class TargetResult
    /// (the pass with that many searchers); empty when the run did not record it. Read from the
    /// search section's "clientCpuMsPerSearch", an object keyed by level ("1", "8" or "default@8").
    /// Why carried: for the fastest engines it is about as large as the latency, so the speed order
-   /// partly reflects each engine's .NET client library, and a reader needs both numbers side by side.
+   /// partly reflects each engine's client library or, for an engine reached through the benchmark's own REST code, that code, and a reader needs both numbers side by side.
    /// </summary>
    public IReadOnlyDictionary<int, double> ClientCpuMsPerSearch { get; init; } = new Dictionary<int, double>();
 
@@ -423,6 +426,7 @@ public sealed class TargetResult
          SearchSettingsEntries = SettingsEntries( t, search ),
          Settled = ReadSettled( t, search ) ?? notedSettled,
          SettleDetail = ReadSettleDetail( t, search ) ?? notedDetail,
+         UnsettledPasses = SettleWarning.UnsettledPasses( ReadSettleDetail( t, search ) ?? notedDetail ),
          NotHeldPasses = SettleWarning.NotHeld( notedDetail ),
          PairHint = PairHintValue.Parse( ResultJson.Child( t, "pairHint" ) ),
          MeanMs = Search( search, "meanMs" ) ?? Search( search, "latencyMeanMs" ),

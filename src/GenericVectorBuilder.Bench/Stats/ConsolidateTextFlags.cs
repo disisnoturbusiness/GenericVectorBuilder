@@ -77,7 +77,7 @@ public static class ConsolidateTextFlags
          ConsolidateFlags.CLOCK_NOT_READ => T.Fill( T.FLAG_CLOCK_NOT_READ, e.Run, pass ),
          ConsolidateFlags.GOVERNOR => T.Fill( T.FLAG_GOVERNOR, e.Run, pass, V( 0 ) ),
          ConsolidateFlags.THROTTLE => T.Fill( T.FLAG_THROTTLE, e.Run, e.Target, V( 0 ), V( 1 ) ),
-         ConsolidateFlags.UNSETTLED => T.Fill( T.FLAG_UNSETTLED, e.Run, e.Target ),
+         ConsolidateFlags.UNSETTLED => e.Pass == null ? T.Fill( T.FLAG_UNSETTLED, e.Run, e.Target ) : T.Fill( T.FLAG_UNSETTLED_PASS, e.Run, e.Target, pass ),
          ConsolidateFlags.NOT_HELD => T.Fill( T.FLAG_NOT_HELD, e.Run, pass, e.Target, V( 1 ), V( 2 ), V( 3 ), V( 4 ) ),
          ConsolidateFlags.INDEX_NOT_READY => T.Fill( T.FLAG_INDEX, e.Run, e.Target, e.Pass == "afterLoad" ? T.AFTER_LOAD : T.AFTER_SEARCH, V( 0 ), V( 1 ) ),
          ConsolidateFlags.SEGMENT_LAYOUT => T.Fill( T.FLAG_LAYOUT, e.Run, e.Target, V( 0 ) ),

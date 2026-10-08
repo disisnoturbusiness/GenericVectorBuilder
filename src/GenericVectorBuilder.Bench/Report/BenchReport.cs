@@ -308,7 +308,7 @@ public sealed class SearchReport
    /// CPU time the benchmark client itself used per search, in milliseconds, by concurrency level
    /// (the pass with that many searchers); null when the run did not measure it, which leaves it
    /// out of results.json. Why: for the fastest engines it is about as large as the latency, so the
-   /// speed order partly reflects each engine's .NET client library.
+   /// speed order partly reflects each engine's client library or, for an engine reached through the benchmark's own REST code, that code.
    /// </summary>
    public Dictionary<int, double>? ClientCpuMsPerSearch { get; set; }
 

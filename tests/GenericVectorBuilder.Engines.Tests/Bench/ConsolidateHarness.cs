@@ -107,6 +107,8 @@ public static class Api
       }
    }
 
+   public static string[] UnsettledPasses( string? warning ) { return SettleWarning.UnsettledPasses( warning ).ToArray(); }
+
    public static string CommitOf( string version ) { return ConsolidateBuild.CommitOf( version ) ?? ""null""; }
 
    public static int Words( string text ) { return SentenceAudit.WordCount( text ); }
@@ -275,6 +277,7 @@ public sealed class SyntheticBench : IDisposable
 
       Directory.CreateDirectory( Path.Combine( Repo, "deploy", "bench" ) );
       File.WriteAllText( Path.Combine( Repo, "deploy", "bench", "recorded-text-classes.json" ), "{\"policy\":{\"durability\":\"label\",\"index\":\"label\",\"notes\":\"label\"}}" );
+      File.WriteAllText( Path.Combine( Repo, "deploy", "bench", "run-page-notes.json" ), "{\"format\":\"run-page-notes-1\",\"notes\":[]}" );
       Directory.CreateDirectory( Path.Combine( Repo, "design", "engine-docs" ) );
       File.WriteAllText( Path.Combine( Repo, "design", "engine-docs", "redis.html" ), $"<html><body><p>{MEMORY_QUOTE} with snapshots.</p></body></html>" );
    }

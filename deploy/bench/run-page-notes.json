@@ -2,6 +2,12 @@
  "format": "run-page-notes-1",
  "generatedBy": "deploy/bench/make-run-page-notes.py",
  "runs": [
+  "20261003-183955-eshoponweb",
+  "20261003-184207-eshoponweb",
+  "20261003-184445-eshoponweb",
+  "20261003-234838-eshoponweb",
+  "20261004-130858-eshoponweb",
+  "20261004-132735-eshoponweb",
   "20261005-023459-eshoponweb",
   "20261005-031556-eshoponweb",
   "20261005-035711-eshoponweb",
@@ -16,6 +22,87 @@
   "20261007-233551-eshoponweb"
  ],
  "notes": [
+  {
+   "runs": [
+    "20261003-184445-eshoponweb"
+   ],
+   "target": "clickhouse",
+   "field": "disk.text",
+   "statement": "210.16 MiB added by this load",
+   "kind": "misleading",
+   "note": "The figure is the growth of the whole data folder over the engine's turn, as the same line says (430.66 MiB at the end, 220.5 MiB before). The load itself is 524 vectors of 1024 dimensions, 2,146,304 bytes as 4-byte floats (2.05 MiB); the figure is 220,369,144 bytes.",
+   "sources": [
+    {
+     "kind": "results",
+     "ref": "results@20261003-184445-eshoponweb:targets[clickhouse].disk.text",
+     "value": "210.16 MiB added by this load (430.66 MiB (whole engine data folder), 220.5 MiB before)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261003-184445-eshoponweb:rows",
+     "value": "524"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261003-184445-eshoponweb:dimension",
+     "value": "1024"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261004-130858-eshoponweb"
+   ],
+   "target": "clickhouse",
+   "field": "disk.text",
+   "statement": "1018 MiB added by this load",
+   "kind": "misleading",
+   "note": "The figure is the growth of the whole data folder over the engine's turn, as the same line says (1.53 GiB at the end, 550.51 MiB before). The load itself is 524 vectors of 1024 dimensions, 2,146,304 bytes as 4-byte floats (2.05 MiB); the figure is 1,067,447,036 bytes.",
+   "sources": [
+    {
+     "kind": "results",
+     "ref": "results@20261004-130858-eshoponweb:targets[clickhouse].disk.text",
+     "value": "1018 MiB added by this load (1.53 GiB (whole engine data folder), 550.51 MiB before)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261004-130858-eshoponweb:rows",
+     "value": "524"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261004-130858-eshoponweb:dimension",
+     "value": "1024"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261004-132735-eshoponweb"
+   ],
+   "target": "clickhouse",
+   "field": "disk.text",
+   "statement": "0 B added by this load",
+   "kind": "misleading",
+   "note": "The figure is the growth of the whole data folder over the engine's turn, as the same line says (1.22 GiB at the end, 1.63 GiB before). The load itself is 524 vectors of 1024 dimensions, 2,146,304 bytes as 4-byte floats (2.05 MiB); the figure is 0 bytes.",
+   "sources": [
+    {
+     "kind": "results",
+     "ref": "results@20261004-132735-eshoponweb:targets[clickhouse].disk.text",
+     "value": "0 B added by this load (1.22 GiB (whole engine data folder), 1.63 GiB before)"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261004-132735-eshoponweb:rows",
+     "value": "524"
+    },
+    {
+     "kind": "results",
+     "ref": "results@20261004-132735-eshoponweb:dimension",
+     "value": "1024"
+    }
+   ]
+  },
   {
    "runs": [
     "20261005-023459-eshoponweb"
@@ -62,6 +149,105 @@
      "kind": "results",
      "ref": "results@20261005-023459-eshoponweb:dimension",
      "value": "1024"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261005-023459-eshoponweb"
+   ],
+   "target": "",
+   "field": "framing line",
+   "statement": "Measured end to end through each engine's .NET client",
+   "kind": "false",
+   "note": "The statement is false for 8 of the 19 engines of this run: chroma, clickhouse, elasticsearch, milvus, opensearch, typesense, vespa and weaviate are reached through the benchmark's own HttpClient REST code, not through a .NET client of the engine. For those engines the figure is the cost of the benchmark's own request code. A code line of each is cited.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ChromaSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSink.cs#new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\"",
+     "value": "new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\""
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ElasticsearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/MilvusSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/OpenSearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/TypesenseRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/VespaRest.cs#_data = new HttpClient( handler )",
+     "value": "_data = new HttpClient( handler )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/WeaviateSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261005-023459-eshoponweb"
+   ],
+   "target": "",
+   "field": "index",
+   "statement": "an earlier run gave about 0.09 at 100,000",
+   "kind": "unbacked",
+   "note": "No log was saved for this figure, and the summary does not print the clause. A saved re-run of the MariaDB effort test (10 repeats, 524 and 2,000 random 1024-dimension vectors) read recall@10 at ef 100 of 0.988 to 0.996 at 524 vectors and 0.894 to 0.932 at 2,000. The 100,000-row figure was not re-measured the same way and is dropped.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#for which no log was saved",
+     "value": "for which no log was saved"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#The 100,000-row figure was not re-measured the same way, so the report drops it.",
+     "value": "The 100,000-row figure was not re-measured the same way, so the report drops it."
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992"
+    },
+    {
+     "kind": "file",
+     "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"mariadb-recall\"",
+     "value": "\"drop\": \"mariadb-recall\""
     }
    ]
   },
@@ -116,6 +302,105 @@
   },
   {
    "runs": [
+    "20261005-031556-eshoponweb"
+   ],
+   "target": "",
+   "field": "framing line",
+   "statement": "Measured end to end through each engine's .NET client",
+   "kind": "false",
+   "note": "The statement is false for 8 of the 19 engines of this run: chroma, clickhouse, elasticsearch, milvus, opensearch, typesense, vespa and weaviate are reached through the benchmark's own HttpClient REST code, not through a .NET client of the engine. For those engines the figure is the cost of the benchmark's own request code. A code line of each is cited.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ChromaSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSink.cs#new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\"",
+     "value": "new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\""
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ElasticsearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/MilvusSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/OpenSearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/TypesenseRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/VespaRest.cs#_data = new HttpClient( handler )",
+     "value": "_data = new HttpClient( handler )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/WeaviateSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261005-031556-eshoponweb"
+   ],
+   "target": "",
+   "field": "index",
+   "statement": "an earlier run gave about 0.09 at 100,000",
+   "kind": "unbacked",
+   "note": "No log was saved for this figure, and the summary does not print the clause. A saved re-run of the MariaDB effort test (10 repeats, 524 and 2,000 random 1024-dimension vectors) read recall@10 at ef 100 of 0.988 to 0.996 at 524 vectors and 0.894 to 0.932 at 2,000. The 100,000-row figure was not re-measured the same way and is dropped.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#for which no log was saved",
+     "value": "for which no log was saved"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#The 100,000-row figure was not re-measured the same way, so the report drops it.",
+     "value": "The 100,000-row figure was not re-measured the same way, so the report drops it."
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992"
+    },
+    {
+     "kind": "file",
+     "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"mariadb-recall\"",
+     "value": "\"drop\": \"mariadb-recall\""
+    }
+   ]
+  },
+  {
+   "runs": [
     "20261005-035711-eshoponweb"
    ],
    "target": "weaviate",
@@ -165,6 +450,105 @@
   },
   {
    "runs": [
+    "20261005-035711-eshoponweb"
+   ],
+   "target": "",
+   "field": "framing line",
+   "statement": "Measured end to end through each engine's .NET client",
+   "kind": "false",
+   "note": "The statement is false for 8 of the 19 engines of this run: chroma, clickhouse, elasticsearch, milvus, opensearch, typesense, vespa and weaviate are reached through the benchmark's own HttpClient REST code, not through a .NET client of the engine. For those engines the figure is the cost of the benchmark's own request code. A code line of each is cited.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ChromaSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSink.cs#new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\"",
+     "value": "new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\""
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ElasticsearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/MilvusSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/OpenSearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/TypesenseRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/VespaRest.cs#_data = new HttpClient( handler )",
+     "value": "_data = new HttpClient( handler )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/WeaviateSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261005-035711-eshoponweb"
+   ],
+   "target": "",
+   "field": "index",
+   "statement": "an earlier run gave about 0.09 at 100,000",
+   "kind": "unbacked",
+   "note": "No log was saved for this figure, and the summary does not print the clause. A saved re-run of the MariaDB effort test (10 repeats, 524 and 2,000 random 1024-dimension vectors) read recall@10 at ef 100 of 0.988 to 0.996 at 524 vectors and 0.894 to 0.932 at 2,000. The 100,000-row figure was not re-measured the same way and is dropped.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#for which no log was saved",
+     "value": "for which no log was saved"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#The 100,000-row figure was not re-measured the same way, so the report drops it.",
+     "value": "The 100,000-row figure was not re-measured the same way, so the report drops it."
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992"
+    },
+    {
+     "kind": "file",
+     "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"mariadb-recall\"",
+     "value": "\"drop\": \"mariadb-recall\""
+    }
+   ]
+  },
+  {
+   "runs": [
     "20261005-073329-eshoponweb"
    ],
    "target": "weaviate",
@@ -182,6 +566,105 @@
      "kind": "results",
      "ref": "results@20261005-073329-eshoponweb:targets[weaviate].durability#sets no persistence variable",
      "value": "sets no persistence variable"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261005-073329-eshoponweb"
+   ],
+   "target": "",
+   "field": "framing line",
+   "statement": "Measured end to end through each engine's .NET client",
+   "kind": "false",
+   "note": "The statement is false for 8 of the 19 engines of this run: chroma, clickhouse, elasticsearch, milvus, opensearch, typesense, vespa and weaviate are reached through the benchmark's own HttpClient REST code, not through a .NET client of the engine. For those engines the figure is the cost of the benchmark's own request code. A code line of each is cited.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ChromaSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSink.cs#new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\"",
+     "value": "new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\""
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ElasticsearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/MilvusSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/OpenSearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/TypesenseRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/VespaRest.cs#_data = new HttpClient( handler )",
+     "value": "_data = new HttpClient( handler )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/WeaviateSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261005-073329-eshoponweb"
+   ],
+   "target": "",
+   "field": "index",
+   "statement": "an earlier run gave about 0.09 at 100,000",
+   "kind": "unbacked",
+   "note": "No log was saved for this figure, and the summary does not print the clause. A saved re-run of the MariaDB effort test (10 repeats, 524 and 2,000 random 1024-dimension vectors) read recall@10 at ef 100 of 0.988 to 0.996 at 524 vectors and 0.894 to 0.932 at 2,000. The 100,000-row figure was not re-measured the same way and is dropped.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#for which no log was saved",
+     "value": "for which no log was saved"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#The 100,000-row figure was not re-measured the same way, so the report drops it.",
+     "value": "The 100,000-row figure was not re-measured the same way, so the report drops it."
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992"
+    },
+    {
+     "kind": "file",
+     "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"mariadb-recall\"",
+     "value": "\"drop\": \"mariadb-recall\""
     }
    ]
   },
@@ -209,6 +692,105 @@
   },
   {
    "runs": [
+    "20261005-085448-eshoponweb"
+   ],
+   "target": "",
+   "field": "framing line",
+   "statement": "Measured end to end through each engine's .NET client",
+   "kind": "false",
+   "note": "The statement is false for 8 of the 19 engines of this run: chroma, clickhouse, elasticsearch, milvus, opensearch, typesense, vespa and weaviate are reached through the benchmark's own HttpClient REST code, not through a .NET client of the engine. For those engines the figure is the cost of the benchmark's own request code. A code line of each is cited.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ChromaSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSink.cs#new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\"",
+     "value": "new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\""
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ElasticsearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/MilvusSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/OpenSearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/TypesenseRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/VespaRest.cs#_data = new HttpClient( handler )",
+     "value": "_data = new HttpClient( handler )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/WeaviateSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261005-085448-eshoponweb"
+   ],
+   "target": "",
+   "field": "index",
+   "statement": "an earlier run gave about 0.09 at 100,000",
+   "kind": "unbacked",
+   "note": "No log was saved for this figure, and the summary does not print the clause. A saved re-run of the MariaDB effort test (10 repeats, 524 and 2,000 random 1024-dimension vectors) read recall@10 at ef 100 of 0.988 to 0.996 at 524 vectors and 0.894 to 0.932 at 2,000. The 100,000-row figure was not re-measured the same way and is dropped.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#for which no log was saved",
+     "value": "for which no log was saved"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#The 100,000-row figure was not re-measured the same way, so the report drops it.",
+     "value": "The 100,000-row figure was not re-measured the same way, so the report drops it."
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992"
+    },
+    {
+     "kind": "file",
+     "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"mariadb-recall\"",
+     "value": "\"drop\": \"mariadb-recall\""
+    }
+   ]
+  },
+  {
+   "runs": [
     "20261005-101815-eshoponweb"
    ],
    "target": "weaviate",
@@ -226,6 +808,105 @@
      "kind": "results",
      "ref": "results@20261005-101815-eshoponweb:targets[weaviate].durability#sets no persistence variable",
      "value": "sets no persistence variable"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261005-101815-eshoponweb"
+   ],
+   "target": "",
+   "field": "framing line",
+   "statement": "Measured end to end through each engine's .NET client",
+   "kind": "false",
+   "note": "The statement is false for 8 of the 19 engines of this run: chroma, clickhouse, elasticsearch, milvus, opensearch, typesense, vespa and weaviate are reached through the benchmark's own HttpClient REST code, not through a .NET client of the engine. For those engines the figure is the cost of the benchmark's own request code. A code line of each is cited.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ChromaSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSink.cs#new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\"",
+     "value": "new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\""
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ElasticsearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/MilvusSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/OpenSearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/TypesenseRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/VespaRest.cs#_data = new HttpClient( handler )",
+     "value": "_data = new HttpClient( handler )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/WeaviateSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261005-101815-eshoponweb"
+   ],
+   "target": "",
+   "field": "index",
+   "statement": "an earlier run gave about 0.09 at 100,000",
+   "kind": "unbacked",
+   "note": "No log was saved for this figure, and the summary does not print the clause. A saved re-run of the MariaDB effort test (10 repeats, 524 and 2,000 random 1024-dimension vectors) read recall@10 at ef 100 of 0.988 to 0.996 at 524 vectors and 0.894 to 0.932 at 2,000. The 100,000-row figure was not re-measured the same way and is dropped.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#for which no log was saved",
+     "value": "for which no log was saved"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#The 100,000-row figure was not re-measured the same way, so the report drops it.",
+     "value": "The 100,000-row figure was not re-measured the same way, so the report drops it."
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992"
+    },
+    {
+     "kind": "file",
+     "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"mariadb-recall\"",
+     "value": "\"drop\": \"mariadb-recall\""
     }
    ]
   },
@@ -280,6 +961,105 @@
   },
   {
    "runs": [
+    "20261006-130619-eshoponweb"
+   ],
+   "target": "",
+   "field": "framing line",
+   "statement": "Measured end to end through each engine's .NET client",
+   "kind": "false",
+   "note": "The statement is false for 8 of the 19 engines of this run: chroma, clickhouse, elasticsearch, milvus, opensearch, typesense, vespa and weaviate are reached through the benchmark's own HttpClient REST code, not through a .NET client of the engine. For those engines the figure is the cost of the benchmark's own request code. A code line of each is cited.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ChromaSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSink.cs#new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\"",
+     "value": "new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\""
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ElasticsearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/MilvusSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/OpenSearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/TypesenseRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/VespaRest.cs#_data = new HttpClient( handler )",
+     "value": "_data = new HttpClient( handler )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/WeaviateSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261006-130619-eshoponweb"
+   ],
+   "target": "",
+   "field": "index",
+   "statement": "an earlier run gave about 0.09 at 100,000",
+   "kind": "unbacked",
+   "note": "No log was saved for this figure, and the summary does not print the clause. A saved re-run of the MariaDB effort test (10 repeats, 524 and 2,000 random 1024-dimension vectors) read recall@10 at ef 100 of 0.988 to 0.996 at 524 vectors and 0.894 to 0.932 at 2,000. The 100,000-row figure was not re-measured the same way and is dropped.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#for which no log was saved",
+     "value": "for which no log was saved"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#The 100,000-row figure was not re-measured the same way, so the report drops it.",
+     "value": "The 100,000-row figure was not re-measured the same way, so the report drops it."
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992"
+    },
+    {
+     "kind": "file",
+     "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"mariadb-recall\"",
+     "value": "\"drop\": \"mariadb-recall\""
+    }
+   ]
+  },
+  {
+   "runs": [
     "20261006-142724-eshoponweb"
    ],
    "target": "weaviate",
@@ -329,6 +1109,105 @@
   },
   {
    "runs": [
+    "20261006-142724-eshoponweb"
+   ],
+   "target": "",
+   "field": "framing line",
+   "statement": "Measured end to end through each engine's .NET client",
+   "kind": "false",
+   "note": "The statement is false for 8 of the 19 engines of this run: chroma, clickhouse, elasticsearch, milvus, opensearch, typesense, vespa and weaviate are reached through the benchmark's own HttpClient REST code, not through a .NET client of the engine. For those engines the figure is the cost of the benchmark's own request code. A code line of each is cited.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ChromaSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSink.cs#new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\"",
+     "value": "new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\""
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ElasticsearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/MilvusSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/OpenSearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/TypesenseRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/VespaRest.cs#_data = new HttpClient( handler )",
+     "value": "_data = new HttpClient( handler )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/WeaviateSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261006-142724-eshoponweb"
+   ],
+   "target": "",
+   "field": "index",
+   "statement": "an earlier run gave about 0.09 at 100,000",
+   "kind": "unbacked",
+   "note": "No log was saved for this figure, and the summary does not print the clause. A saved re-run of the MariaDB effort test (10 repeats, 524 and 2,000 random 1024-dimension vectors) read recall@10 at ef 100 of 0.988 to 0.996 at 524 vectors and 0.894 to 0.932 at 2,000. The 100,000-row figure was not re-measured the same way and is dropped.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#for which no log was saved",
+     "value": "for which no log was saved"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#The 100,000-row figure was not re-measured the same way, so the report drops it.",
+     "value": "The 100,000-row figure was not re-measured the same way, so the report drops it."
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992"
+    },
+    {
+     "kind": "file",
+     "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"mariadb-recall\"",
+     "value": "\"drop\": \"mariadb-recall\""
+    }
+   ]
+  },
+  {
+   "runs": [
     "20261006-154837-eshoponweb"
    ],
    "target": "weaviate",
@@ -373,6 +1252,105 @@
      "kind": "results",
      "ref": "results@20261006-154837-eshoponweb:dimension",
      "value": "1024"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261006-154837-eshoponweb"
+   ],
+   "target": "",
+   "field": "framing line",
+   "statement": "Measured end to end through each engine's .NET client",
+   "kind": "false",
+   "note": "The statement is false for 8 of the 19 engines of this run: chroma, clickhouse, elasticsearch, milvus, opensearch, typesense, vespa and weaviate are reached through the benchmark's own HttpClient REST code, not through a .NET client of the engine. For those engines the figure is the cost of the benchmark's own request code. A code line of each is cited.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ChromaSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSink.cs#new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\"",
+     "value": "new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\""
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ElasticsearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/MilvusSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/OpenSearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/TypesenseRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/VespaRest.cs#_data = new HttpClient( handler )",
+     "value": "_data = new HttpClient( handler )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/WeaviateSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261006-154837-eshoponweb"
+   ],
+   "target": "",
+   "field": "index",
+   "statement": "an earlier run gave about 0.09 at 100,000",
+   "kind": "unbacked",
+   "note": "No log was saved for this figure, and the summary does not print the clause. A saved re-run of the MariaDB effort test (10 repeats, 524 and 2,000 random 1024-dimension vectors) read recall@10 at ef 100 of 0.988 to 0.996 at 524 vectors and 0.894 to 0.932 at 2,000. The 100,000-row figure was not re-measured the same way and is dropped.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#for which no log was saved",
+     "value": "for which no log was saved"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#The 100,000-row figure was not re-measured the same way, so the report drops it.",
+     "value": "The 100,000-row figure was not re-measured the same way, so the report drops it."
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992"
+    },
+    {
+     "kind": "file",
+     "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"mariadb-recall\"",
+     "value": "\"drop\": \"mariadb-recall\""
     }
    ]
   },
@@ -564,6 +1542,105 @@
   },
   {
    "runs": [
+    "20261007-205106-eshoponweb"
+   ],
+   "target": "",
+   "field": "framing line",
+   "statement": "Measured end to end through each engine's .NET client",
+   "kind": "false",
+   "note": "The statement is false for 8 of the 19 engines of this run: chroma, clickhouse, elasticsearch, milvus, opensearch, typesense, vespa and weaviate are reached through the benchmark's own HttpClient REST code, not through a .NET client of the engine. For those engines the figure is the cost of the benchmark's own request code. A code line of each is cited.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ChromaSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSink.cs#new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\"",
+     "value": "new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\""
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ElasticsearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/MilvusSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/OpenSearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/TypesenseRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/VespaRest.cs#_data = new HttpClient( handler )",
+     "value": "_data = new HttpClient( handler )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/WeaviateSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-205106-eshoponweb"
+   ],
+   "target": "",
+   "field": "index",
+   "statement": "an earlier run gave about 0.09 at 100,000",
+   "kind": "unbacked",
+   "note": "No log was saved for this figure, and the summary does not print the clause. A saved re-run of the MariaDB effort test (10 repeats, 524 and 2,000 random 1024-dimension vectors) read recall@10 at ef 100 of 0.988 to 0.996 at 524 vectors and 0.894 to 0.932 at 2,000. The 100,000-row figure was not re-measured the same way and is dropped.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#for which no log was saved",
+     "value": "for which no log was saved"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#The 100,000-row figure was not re-measured the same way, so the report drops it.",
+     "value": "The 100,000-row figure was not re-measured the same way, so the report drops it."
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992"
+    },
+    {
+     "kind": "file",
+     "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"mariadb-recall\"",
+     "value": "\"drop\": \"mariadb-recall\""
+    }
+   ]
+  },
+  {
+   "runs": [
     "20261007-221429-eshoponweb"
    ],
    "target": "weaviate",
@@ -745,6 +1822,105 @@
      "kind": "results",
      "ref": "results@20261007-221429-eshoponweb:targets[typesense].dataFolder.bytesAtStart",
      "value": "898253504"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-221429-eshoponweb"
+   ],
+   "target": "",
+   "field": "framing line",
+   "statement": "Measured end to end through each engine's .NET client",
+   "kind": "false",
+   "note": "The statement is false for 8 of the 19 engines of this run: chroma, clickhouse, elasticsearch, milvus, opensearch, typesense, vespa and weaviate are reached through the benchmark's own HttpClient REST code, not through a .NET client of the engine. For those engines the figure is the cost of the benchmark's own request code. A code line of each is cited.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ChromaSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSink.cs#new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\"",
+     "value": "new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\""
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ElasticsearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/MilvusSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/OpenSearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/TypesenseRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/VespaRest.cs#_data = new HttpClient( handler )",
+     "value": "_data = new HttpClient( handler )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/WeaviateSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-221429-eshoponweb"
+   ],
+   "target": "",
+   "field": "index",
+   "statement": "an earlier run gave about 0.09 at 100,000",
+   "kind": "unbacked",
+   "note": "No log was saved for this figure, and the summary does not print the clause. A saved re-run of the MariaDB effort test (10 repeats, 524 and 2,000 random 1024-dimension vectors) read recall@10 at ef 100 of 0.988 to 0.996 at 524 vectors and 0.894 to 0.932 at 2,000. The 100,000-row figure was not re-measured the same way and is dropped.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#for which no log was saved",
+     "value": "for which no log was saved"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#The 100,000-row figure was not re-measured the same way, so the report drops it.",
+     "value": "The 100,000-row figure was not re-measured the same way, so the report drops it."
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992"
+    },
+    {
+     "kind": "file",
+     "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"mariadb-recall\"",
+     "value": "\"drop\": \"mariadb-recall\""
     }
    ]
   },
@@ -980,6 +2156,105 @@
      "kind": "results",
      "ref": "results@20261007-233551-eshoponweb:targets[vespa].dataFolder.bytesAtEnd",
      "value": "2291891892"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-233551-eshoponweb"
+   ],
+   "target": "",
+   "field": "framing line",
+   "statement": "Measured end to end through each engine's .NET client",
+   "kind": "false",
+   "note": "The statement is false for 8 of the 19 engines of this run: chroma, clickhouse, elasticsearch, milvus, opensearch, typesense, vespa and weaviate are reached through the benchmark's own HttpClient REST code, not through a .NET client of the engine. For those engines the figure is the cost of the benchmark's own request code. A code line of each is cited.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ChromaSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ClickHouseSink.cs#new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\"",
+     "value": "new HttpClient { BaseAddress = new Uri( $\"http://{options.Host}:{options.Port}/\""
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/ElasticsearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/MilvusSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/OpenSearchRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/TypesenseRest.cs#new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )",
+     "value": "new HttpClient { BaseAddress = new Uri( _baseUrl + \"/\" )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/VespaRest.cs#_data = new HttpClient( handler )",
+     "value": "_data = new HttpClient( handler )"
+    },
+    {
+     "kind": "file",
+     "ref": "src/GenericVectorBuilder.Engines/Sinks/WeaviateSink.cs#new HttpClient { BaseAddress = new Uri( options.BaseUrl",
+     "value": "new HttpClient { BaseAddress = new Uri( options.BaseUrl"
+    }
+   ]
+  },
+  {
+   "runs": [
+    "20261007-233551-eshoponweb"
+   ],
+   "target": "",
+   "field": "index",
+   "statement": "an earlier run gave about 0.09 at 100,000",
+   "kind": "unbacked",
+   "note": "No log was saved for this figure, and the summary does not print the clause. A saved re-run of the MariaDB effort test (10 repeats, 524 and 2,000 random 1024-dimension vectors) read recall@10 at ef 100 of 0.988 to 0.996 at 524 vectors and 0.894 to 0.932 at 2,000. The 100,000-row figure was not re-measured the same way and is dropped.",
+   "sources": [
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#for which no log was saved",
+     "value": "for which no log was saved"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/SOURCES.txt#The 100,000-row figure was not re-measured the same way, so the report drops it.",
+     "value": "The 100,000-row figure was not re-measured the same way, so the report drops it."
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.872, ef 100 0.988, ef 3200 0.988"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996",
+     "value": "RECALL@10 on 524 random 1024-dim vectors, 50 queries: ef 20 0.886, ef 100 0.996, ef 3200 0.996"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.468, ef 100 0.894, ef 3200 0.994"
+    },
+    {
+     "kind": "file",
+     "ref": "design/bench-inputs/mariadb-effort-2026-10-07/run.log#RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992",
+     "value": "RECALL@10 on 2000 random 1024-dim vectors, 50 queries: ef 20 0.482, ef 100 0.932, ef 3200 0.992"
+    },
+    {
+     "kind": "file",
+     "ref": "deploy/bench/recorded-text-classes.json#\"drop\": \"mariadb-recall\"",
+     "value": "\"drop\": \"mariadb-recall\""
     }
    ]
   }

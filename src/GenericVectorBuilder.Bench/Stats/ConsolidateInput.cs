@@ -55,6 +55,9 @@ public sealed class ConsolidateInput
    /// <summary>SHA-256 of the classes file.</summary>
    public string ClassesSha256 { get; init; } = string.Empty;
 
+   /// <summary>The recorded statements the repository marks as false, misleading or unbacked (deploy/bench/run-page-notes.json of the repository); no sentence of the report may print one without its correction.</summary>
+   public RunPageNoteList RunPageNotes { get; init; } = RunPageNoteList.Empty;
+
    /// <summary>The build that makes the report.</summary>
    public ConsolidatingBuild Build { get; init; } = new();
 

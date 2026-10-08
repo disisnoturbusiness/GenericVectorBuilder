@@ -10,6 +10,9 @@ namespace GenericVectorBuilder.Bench.Stats;
 /// over a few hundred rows), not how an index scales, and a figure shown without that is read as an
 /// index ranking. The consolidated report no longer prints these lines: its prose comes from
 /// <see cref="ConsolidateText"/>, audited sentence by sentence.
+/// Why the lines name the client code and not "each engine's .NET client": eight of the 19 engines (elasticsearch, vespa, opensearch, chroma, milvus, typesense, clickhouse, weaviate) are
+/// reached through the benchmark's own HttpClient REST code, not a .NET client package of the engine, so the older wording ("through each engine's .NET client") was false for them. The results.md of
+/// the runs already written keep that line, and the run-page notes list (deploy/bench/run-page-notes.json) marks it on each of their pages.
 /// Why <see cref="RETIRED"/>: the v5 to v7 results.md files carry a client-CPU line that read client
 /// CPU per search as a part of the latency, which client CPU above the time per search (Redis, DuckDB,
 /// sqlite-vec) shows it is not; the runs are read in place, so the consolidation lists the lines that
@@ -32,13 +35,13 @@ public static class ConsolidateFraming
    public const string TITLE_UNKNOWN = "Request speed (collection size not recorded)";
 
    /// <summary>The one line under a small-collection title.</summary>
-   public const string LINE_SMALL = "Measured end to end through each engine's .NET client; at this size it reflects per-request cost including the client library, not index scaling.";
+   public const string LINE_SMALL = "Measured end to end through the client code the benchmark uses for each engine (a vendor library for some engines, the benchmark's own HttpClient REST code for others); at this size it reflects per-request cost including that client code, not index scaling.";
 
    /// <summary>The one line under a larger-collection title; {0} is the vector count.</summary>
-   public const string LINE_LARGE = "Measured end to end through each engine's .NET client at {0} vectors; the order applies to this size only.";
+   public const string LINE_LARGE = "Measured end to end through the client code the benchmark uses for each engine (a vendor library for some engines, the benchmark's own HttpClient REST code for others) at {0} vectors; the order applies to this size only.";
 
    /// <summary>The one line when the collection size is unknown.</summary>
-   public const string LINE_UNKNOWN = "The collection size was not recorded in these results. Measured end to end through each engine's .NET client.";
+   public const string LINE_UNKNOWN = "The collection size was not recorded in these results. Measured end to end through the client code the benchmark uses for each engine (a vendor library for some engines, the benchmark's own HttpClient REST code for others).";
 
    /// <summary>
    /// What the client CPU per search column is; printed under a run's table that shows it. It says what

@@ -70,12 +70,13 @@ public static class ConsolidateAudit
    /// <param name="sentences">Every sentence the report prints.</param>
    /// <param name="raw">The raw runs.</param>
    /// <param name="repoRoot">Repository root.</param>
+   /// <param name="notes">The run-page notes list: a sentence that prints a statement it marks, without the correction, fails the audit.</param>
    /// <exception cref="ConsolidateRefusal">A sentence failed; the message lists every failure.</exception>
-   public static void CheckSentences( ConsolidatedReport report, IReadOnlyList<Sentence> sentences, RawRuns raw, string repoRoot )
+   public static void CheckSentences( ConsolidatedReport report, IReadOnlyList<Sentence> sentences, RawRuns raw, string repoRoot, RunPageNoteList notes )
    {
       using JsonDocument doc = JsonDocument.Parse( JsonSerializer.Serialize( report, JSON ) );
       var resolver = new ReportResolver( repoRoot, raw, doc.RootElement );
-      IReadOnlyList<AuditFailure> failures = SentenceAudit.Check( sentences, resolver );
+      IReadOnlyList<AuditFailure> failures = SentenceAudit.Check( sentences, resolver ).Concat( Marked( sentences, notes ) ).ToList();
       if( failures.Count > 0 )
       {
          throw new ConsolidateRefusal( $"{failures.Count} sentence audit failure(s); nothing was written:{Environment.NewLine}{SentenceAudit.Format( failures )}" );
@@ -91,6 +92,24 @@ public static class ConsolidateAudit
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// The sentences that print a statement the run-page notes list marks as false, misleading or unbacked without carrying the correction.
+   /// Why every sentence, quotes included: a verbatim quote of a recorded field is exactly where a marked statement comes from, and the run page that corrects it must not be contradicted by the summary.
+   /// </summary>
+   /// <param name="sentences">Every sentence the report prints.</param>
+   /// <param name="notes">The list.</param>
+   /// <returns>One failure per sentence and statement.</returns>
+   private static IEnumerable<AuditFailure> Marked( IReadOnlyList<Sentence> sentences, RunPageNoteList notes )
+   {
+      foreach( Sentence sentence in sentences )
+      {
+         foreach( RunPageNote note in notes.MarkedIn( sentence.Text ).Where( n => !sentence.Text.Contains( n.Text, StringComparison.Ordinal ) ) )
+         {
+            yield return new AuditFailure( sentence.Slot, "marked", $"the sentence prints \"{note.Statement}\", which the run-page notes list marks as {note.Kind} ({RunPageNoteList.FILE}); the report may not print it without the correction: {sentence.Text}" );
+         }
+      }
+   }
 
    /// <summary>
    /// Puts the audited row notes and flag texts, with their sources, on their rows: "row.&lt;metric&gt;.&lt;target&gt;.note" and

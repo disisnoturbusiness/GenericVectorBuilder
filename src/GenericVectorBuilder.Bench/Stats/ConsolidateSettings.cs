@@ -32,6 +32,9 @@ public static class ConsolidateSettings
       [("chroma", "chroma_version")] = "chroma_version (API version reported)",
    };
 
+   /// <summary>What replaces a statement the run-page notes list marks, in the clause the file keeps.</summary>
+   public const string WITHHELD = "[a statement the run-page notes list marks]";
+
    /// <summary>A value that is only a number.</summary>
    private static readonly Regex PLAIN_NUMBER = new( @"^\d+$", RegexOptions.Compiled, TimeSpan.FromSeconds( 5 ) );
 
@@ -103,6 +106,24 @@ public static class ConsolidateSettings
       }
 
       return null;
+   }
+
+   /// <summary>
+   /// Replaces, in the recorded effort clause each row carries, every statement the run-page notes list marks, so the consolidated file does not hold a marked statement as plain data either.
+   /// Why after the sentences: <see cref="Write"/> finds the clause in the recorded text by its words, and the clause printed is the part of the text the classes allow; this only changes the copy
+   /// the file keeps, which the page leaves out on purpose.
+   /// </summary>
+   /// <param name="rows">The settings rows of the report.</param>
+   /// <param name="notes">The run-page notes list.</param>
+   public static void WithholdMarked( IEnumerable<SearchSettingsRow> rows, RunPageNoteList notes )
+   {
+      foreach( SearchSettingsRow row in rows.Where( r => r.Clause != null ) )
+      {
+         foreach( RunPageNote note in notes.MarkedIn( row.Clause! ).ToList() )
+         {
+            row.Clause = row.Clause!.Replace( note.Statement, WITHHELD, StringComparison.Ordinal );
+         }
+      }
    }
 
    /// <summary>

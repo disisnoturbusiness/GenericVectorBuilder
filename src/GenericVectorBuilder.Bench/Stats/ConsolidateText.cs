@@ -277,8 +277,11 @@ public static class ConsolidateText
    /// <summary>Flag: throttle counters rose.</summary>
    public const string FLAG_THROTTLE = "Run {0}: the thermal throttle counters rose during {1}, by {2} on the cores and {3} on the package.";
 
-   /// <summary>Flag: unsettled.</summary>
+   /// <summary>Flag: unsettled, when the run's warning names no pass (an older run), so every pass of the target carries it.</summary>
    public const string FLAG_UNSETTLED = "Run {0}: {1} was recorded as not settled before its timed passes.";
+
+   /// <summary>Flag: unsettled, for the pass the run's warning names.</summary>
+   public const string FLAG_UNSETTLED_PASS = "Run {0}: {1} was recorded as not settled before its timed {2} pass.";
 
    /// <summary>Flag: the timed pass itself was recorded NOT HELD.</summary>
    public const string FLAG_NOT_HELD = "Run {0}: the timed {1} pass of {2} read {3}, {4}% from the settled {5} (limit {6}%), and the run recorded it as NOT HELD.";
@@ -337,7 +340,10 @@ public static class ConsolidateText
    public const string WHY_EMBEDDED = "Hosting {1} is recorded for {0}: each runs inside the test's own process, so its client CPU per search includes the engine's own work.";
 
    /// <summary>Drift: medians.</summary>
-   public const string DRIFT_MEDIAN = "From {0} to {1}, a ranked engine's session median moved {2}% in the middle case and {3}% at most ({4}, {5}).";
+   public const string DRIFT_MEDIAN = "From {0} to {1}, a ranked figure's session median moved {2}% in the middle case and {3}% at most ({4}, {5}).";
+
+   /// <summary>Drift: a cell the figures above leave out because its pass was recorded NOT HELD, with the move of its session median.</summary>
+   public const string DRIFT_EXCLUDED = "The NOT HELD {0} {1} cell is left out of these figures; its session median moved {2}%, with {3} runs at {4} to {5} and {6} runs at {7} to {8}.";
 
    /// <summary>Drift: unconfirmed orders.</summary>
    public const string DRIFT_UNCONFIRMED = "{0} orders held in {1} and not in {2}, and {3} the other way; they are listed and not published.";
@@ -435,6 +441,15 @@ public static class ConsolidateText
    /// <summary>A group of clauses a saved log or measurement backs.</summary>
    public const string CLAUSE_DOC_LOG = "Backed by a saved log or measurement, not read back from the engine in these runs:";
 
+   /// <summary>A clause backed by a saved log whose setting the newest session's engine settings also read from the running engine; {0} is the session and {1} the settings.</summary>
+   public const string CLAUSE_DOC_LOG_AND_SETTINGS = "Backed by a saved log or measurement; the {0} engine settings also list {1}, read from the running engine:";
+
+   /// <summary>The same for a clause set by a line of code or a compose file.</summary>
+   public const string CLAUSE_DOC_CODE_AND_SETTINGS = "Set by a line of code or a compose file saved in this repository; the {0} engine settings also list {1}, read from the running engine:";
+
+   /// <summary>The same for a clause documented on a saved page.</summary>
+   public const string CLAUSE_DOC_PAGE_AND_SETTINGS = "Documented on a saved page; the {0} engine settings also list {1}, read from the running engine:";
+
    /// <summary>A group of clauses a code or compose line saved in the repository backs.</summary>
    public const string CLAUSE_DOC_CODE = "Set by a line of code or a compose file saved in this repository, not read back from the engine:";
 
@@ -455,6 +470,12 @@ public static class ConsolidateText
 
    /// <summary>A clause whose figures nothing saved backs.</summary>
    public const string DROPPED_UNBACKED = "A clause of the {0} text is not printed: it cites figures that no saved source backs.";
+
+   /// <summary>A run note's clock claim the observer's readings contradict; {0} is the target, {1} the pass and {2} and {3} how far under the pin the observer found it.</summary>
+   public const string DROPPED_CLOCK_HELD = "A clause of the machine control note, that every CPU's clock is held at its ceiling for any engine, is not printed: the observer found {0}'s {1} pass {2}% to {3}% under the pin.";
+
+   /// <summary>The same when no observer reading was given to check the claim.</summary>
+   public const string DROPPED_CLOCK_HELD_UNCHECKED = "A clause of the machine control note, that every CPU's clock is held at its ceiling for any engine, is not printed: no clock reading by APERF and MPERF was given to check it.";
 
    /// <summary>The recall of one collection size in the saved re-run of the effort test.</summary>
    public const string RECALL_LOG = "In the saved re-run of the {0} effort test, recall@{1} at ef {2} on {3} random {4}-dim vectors read {5} to {6}.";
@@ -504,11 +525,17 @@ public static class ConsolidateText
    /// <summary>Data folder without a reset.</summary>
    public const string DISCLOSURE_DATA_FOLDER_PLAIN = "Run {0}: {1}'s data folder held {2} bytes at its start and {3} bytes at its end.";
 
+   /// <summary>The recorded disk note of a run (no structured data-folder fields) that the run-page notes list marks: the sizes the line records, and the pointer to the run page's correction.</summary>
+   public const string DISCLOSURE_DISK_CORRECTED = "Run {0}: {1}'s whole engine data folder was recorded as {2}, against {3} before; the run's page prints a correction to its recorded \"added by this load\" figure.";
+
+   /// <summary>The same when the note is not in the form that gives the two sizes.</summary>
+   public const string DISCLOSURE_DISK_WITHHELD = "Run {0}: {1}'s recorded disk note is not printed here; the run's page prints a correction to its \"added by this load\" figure.";
+
    /// <summary>Segment layouts.</summary>
    public const string DISCLOSURE_LAYOUTS = "Segment layouts differed between runs for {0}; each run's layout is in its row flags.";
 
    /// <summary>Observer present.</summary>
-   public const string DISCLOSURE_OBSERVER = "An observer process ran beside the {0} runs; its own CPU, at most {1} CPUs in a pass, counts as outside load, and its summary is {2} beside this report.";
+   public const string DISCLOSURE_OBSERVER = "An observer process ran beside the {0} runs; its own CPU, at most {1} CPUs in any one pass, counts as outside load, and its summary is {2} beside this report.";
 
    /// <summary>Observer clock check, when the summary holds no per-CPU figures: the figure is the largest of a CPU group's mean.</summary>
    public const string DISCLOSURE_OBSERVER_CLOCK = "By APERF and MPERF, the largest deviation of a CPU group's mean in a pass was {0}%, and the observer read MSR {1} as {2}.";
@@ -532,13 +559,19 @@ public static class ConsolidateText
    public const string DISCLOSURE_MEAN_DIP_AS = "Run {0}: {1}'s {2} pass averaged {3} MHz on the engine CPUs and {4} MHz on the client CPUs, as in {5}; a mean rule flags it and the median rule does not.";
 
    /// <summary>The observer was not pinned; where its threads ran and what it used.</summary>
-   public const string DISCLOSURE_OBSERVER_PLACEMENT = "The observer was not pinned: in the {0} runs {1} percent of its resident-thread ticks were seen on engine CPUs {2}, and it used at most {3} CPUs by cgroup.";
+   public const string DISCLOSURE_OBSERVER_PLACEMENT = "The observer was not pinned: in the {0} runs {1} percent of its resident-thread ticks were seen on engine CPUs {2}.";
+
+   /// <summary>The observer's CPU by cgroup: the largest of the runs' averages over a whole run, not a pass maximum.</summary>
+   public const string DISCLOSURE_OBSERVER_CGROUP = "Averaged over a whole run, the observer's CPU by cgroup was at most {1} CPUs in any of the {0} runs.";
 
    /// <summary>Timers.</summary>
    public const string DISCLOSURE_TIMERS = "The observer saw a systemd timer fire during {0} timed passes of the {1} runs.";
 
    /// <summary>Timers not covered.</summary>
    public const string DISCLOSURE_TIMERS_NOT_COVERED = "The observer summary does not cover systemd timers for every {0} run.";
+
+   /// <summary>When no run of the session is covered.</summary>
+   public const string DISCLOSURE_TIMERS_NONE = "The observer summary covers systemd timers for no {0} run.";
 
    /// <summary>No observer.</summary>
    public const string DISCLOSURE_NO_OBSERVER = "No observer summary was given, so this report holds no APERF and MPERF check of the clock.";

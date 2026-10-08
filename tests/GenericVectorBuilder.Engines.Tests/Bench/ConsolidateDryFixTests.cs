@@ -337,6 +337,8 @@ public sealed class ConsolidateDryFixTests : IClassFixture<DryFixFixture>
 
    /// <summary>
    /// Reason 3, the other way: a compose file that sets no PERSISTENCE variable makes the recorded clause true, so it is printed and nothing is corrected.
+   /// The repository's run-page notes list marks the clause false because the compose file sets the variable, so the copy's list loses those entries, as a regenerated list would (the generator stops
+   /// when the compose file has no such line); the other way, a list that still marks the clause is refused (see ConsolidateV8iFixTests).
    /// </summary>
    /// <returns>A task.</returns>
    [Fact]
@@ -348,11 +350,29 @@ public sealed class ConsolidateDryFixTests : IClassFixture<DryFixFixture>
          CopyRepo( repo );
          string compose = Path.Combine( repo, "deploy", "engines", "weaviate.compose.yaml" );
          File.WriteAllLines( compose, File.ReadAllLines( compose ).Where( l => !l.Contains( "PERSISTENCE_DATA_PATH", StringComparison.Ordinal ) ) );
+         DropWeaviateNotes( repo );
          ConsolidateOutcome outcome = DryFixFixture.RunIn( _fixture.Results, Path.Combine( _fixture.Scratch, "out-no-persistence" ), repo, "--session", "v7=" + string.Join( ",", ConsolidateRealRunsTests.V7 ) );
          Assert.Equal( 0, outcome.Exit );
          Assert.Contains( outcome.Under( "disclosure.durability.weaviate" ), s => s.Text.StartsWith( "Weaviate 1.39.8 defaults, weaviate.compose.yaml sets no persistence variable", StringComparison.Ordinal ) );
          Assert.Null( outcome.Text( "disclosure.durability.weaviate.correction" ) );
       } );
+   }
+
+   /// <summary>
+   /// Removes the entries that mark Weaviate's persistence clause from the run-page notes list of a repository copy.
+   /// </summary>
+   /// <param name="repo">The copy's root.</param>
+   private static void DropWeaviateNotes( string repo )
+   {
+      string file = Path.Combine( repo, "deploy", "bench", "run-page-notes.json" );
+      JsonNode root = JsonNode.Parse( File.ReadAllText( file ) )!;
+      JsonArray notes = root["notes"]!.AsArray();
+      foreach( JsonNode? note in notes.Where( n => ( (string)n!["statement"]! ).Contains( "sets no persistence variable", StringComparison.Ordinal ) ).ToList() )
+      {
+         notes.Remove( note );
+      }
+
+      File.WriteAllText( file, root.ToJsonString() );
    }
 
    /// <summary>

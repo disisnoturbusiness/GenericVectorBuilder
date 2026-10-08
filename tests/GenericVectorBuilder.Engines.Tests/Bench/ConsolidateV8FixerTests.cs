@@ -374,7 +374,8 @@ public sealed class ConsolidateV8FixerTests : IClassFixture<RealV8Fixture>
    [Fact]
    public void TheObserverSentence_SaysItWasNotPinned_WithTheSavedAnalysisFigures()
    {
-      Assert.Equal( "The observer was not pinned: in the v8 runs 34.8, 33.8 and 33.5 percent of its resident-thread ticks were seen on engine CPUs 2-3,6-7, and it used at most 0.0755 CPUs by cgroup.", _fixture.Both.Text( "disclosure.observer.placement" ) );
+      Assert.Equal( "The observer was not pinned: in the v8 runs 34.8, 33.8 and 33.5 percent of its resident-thread ticks were seen on engine CPUs 2-3,6-7.", _fixture.Both.Text( "disclosure.observer.placement" ) );
+      Assert.Equal( "Averaged over a whole run, the observer's CPU by cgroup was at most 0.0755 CPUs in any of the v8 runs.", _fixture.Both.Text( "disclosure.observer.cgroup" ) );
       JsonElement[] sources = _fixture.Both.Root.GetProperty( "sentences" ).EnumerateArray().First( s => s.GetProperty( "slot" ).GetString() == "disclosure.observer.placement" ).GetProperty( "sources" ).EnumerateArray().ToArray();
       Assert.Contains( sources, x => x.GetProperty( "kind" ).GetString() == "doc" && x.GetProperty( "ref" ).GetString()!.StartsWith( "doc:design/bench-inputs/observer-placement/analysis-801.txt#", StringComparison.Ordinal ) );
       Assert.Null( _fixture.Both.Text( "disclosure.observer.placement.v7" ) );

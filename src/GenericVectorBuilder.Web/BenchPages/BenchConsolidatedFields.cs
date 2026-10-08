@@ -40,7 +40,7 @@ public static class BenchConsolidatedFields
       ["basis.setupSplits[].oneEngine"] = ( new[] { "metric", "moveBp", "target", "pair", "runs", "values", "differences" }, new[] { "move", "runsWithBoth", "differenceNames", "seeds", "moveBpExact" } ),
       ["basis.setupSplits[].pair"] = ( new[] { "metric", "moveBp", "target", "pair", "runs", "values", "differences" }, new[] { "move", "runsWithBoth", "differenceNames", "seeds", "moveBpExact" } ),
       ["drift"] = ( new[] { "from", "to", "perTarget", "medianAbsMoveBp", "largest", "unconfirmedOrders", "closeToLine", "onLine" },
-         new[] { "largestAbsMoveBp", "closeFromBp", "closeCount", "onLineBp", "onLineCount", "unconfirmedFromFirst", "unconfirmedFromSecond", "sessionDifferences", "outsideLoad" } ),
+         new[] { "largestAbsMoveBp", "closeFromBp", "closeCount", "onLineBp", "onLineCount", "unconfirmedFromFirst", "unconfirmedFromSecond", "sessionDifferences", "outsideLoad", "excluded" } ),
       ["drift.perTarget[]"] = ( new[] { "target", "metric", "moveBp" }, Array.Empty<string>() ),
       ["drift.unconfirmedOrders[]"] = ( new[] { "metric", "a", "b", "session" }, Array.Empty<string>() ),
       ["drift.closeToLine[]"] = ( new[] { "metric", "a", "b", "minRatioBp" }, Array.Empty<string>() ),
@@ -61,7 +61,7 @@ public static class BenchConsolidatedFields
       ["runPageNotes[].sources[]"] = ( new[] { "kind", "ref", "value" }, Array.Empty<string>() ),
       ["sentences[]"] = ( new[] { "slot", "text", "sources", "quote", "kind" }, Array.Empty<string>() ),
       ["sentences[].sources[]"] = ( new[] { "kind", "ref", "value" }, Array.Empty<string>() ),
-      ["audit"] = ( new[] { "sentencesChecked", "failures", "factsSha256", "exclusionsSha256", "observerSha256", "factsChecked", "rowSentencesChecked" }, new[] { "observerSha256Others", "classesSha256", "unlistedClauses" } ),
+      ["audit"] = ( new[] { "sentencesChecked", "failures", "factsSha256", "exclusionsSha256", "observerSha256", "factsChecked", "rowSentencesChecked" }, new[] { "observerSha256Others", "classesSha256", "runPageNotesSha256", "unlistedClauses" } ),
    };
 
    #endregion Data Members

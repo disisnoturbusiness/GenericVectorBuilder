@@ -29,6 +29,8 @@ public static class SettleWarning
 
    private static readonly TimeSpan MATCH_TIMEOUT = TimeSpan.FromSeconds( 5 );
    private static readonly Regex PASS_START = new( @"(?<![A-Za-z0-9@])(?<pass>default@\d+|exact): warm-up", RegexOptions.Compiled | RegexOptions.CultureInvariant, MATCH_TIMEOUT );
+   private static readonly Regex UNSETTLED_LIST = new(
+      @"latency had NOT settled when timing began for (?<list>(?:default@\d+|exact)(?:, (?:default@\d+|exact))*)(?![A-Za-z0-9@])", RegexOptions.Compiled | RegexOptions.CultureInvariant, MATCH_TIMEOUT );
    private static readonly Regex CLAUSE = new(
       @"^the timed pass (?<timed>(?<p50>p50 )?[\d,]+(?:\.\d+)? (?:QPS|ms)), (?<off>\d+)% from the settled (?<settled>(?:p50 )?[\d,]+(?:\.\d+)? (?:QPS|ms)) \(limit (?<limit>\d+)%[^)]*\), NOT HELD$",
       RegexOptions.Compiled | RegexOptions.CultureInvariant, MATCH_TIMEOUT );
@@ -36,6 +38,23 @@ public static class SettleWarning
    #endregion Data Members
 
    #region Public Methods
+
+   /// <summary>
+   /// The passes a settle warning names as not settled before they were timed ("latency had NOT settled when timing began for default@1, default@8 (...)"), in the order it names them.
+   /// Why: the warning is one note for the whole target, and a table row of another pass of that target was settled; the flag belongs on the passes the warning names.
+   /// </summary>
+   /// <param name="warning">The warning text, or null when the target has none.</param>
+   /// <returns>The pass names; empty when the warning is null or names no pass (a run before the pass list, whose warning is about the whole target).</returns>
+   public static IReadOnlyList<string> UnsettledPasses( string? warning )
+   {
+      if( string.IsNullOrEmpty( warning ) )
+      {
+         return Array.Empty<string>();
+      }
+
+      Match found = UNSETTLED_LIST.Match( warning );
+      return found.Success ? found.Groups["list"].Value.Split( ", ", StringSplitOptions.RemoveEmptyEntries ) : Array.Empty<string>();
+   }
 
    /// <summary>
    /// The passes a settle warning records as NOT HELD, in the order the warning lists them.

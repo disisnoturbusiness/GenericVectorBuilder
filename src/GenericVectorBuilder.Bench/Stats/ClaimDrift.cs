@@ -76,6 +76,11 @@ public static class ClaimDrift
             drift.PerTarget.Add( new DriftMove { Target = row.Target, Metric = outcome.Metric, MoveBp = (int)Math.Round( ( to / from - 1 ) * 10000, MidpointRounding.AwayFromZero ) } );
          }
 
+         foreach( MetricRow row in outcome.Table.Rows.Where( r => r.Status == ClaimRule.NOT_HELD && r.PerSession.ContainsKey( drift.From ) && r.PerSession.ContainsKey( drift.To ) ) )
+         {
+            drift.Excluded.Add( Excluded( row, outcome.Metric, drift.From, drift.To ) );
+         }
+
          drift.UnconfirmedOrders.AddRange( Unconfirmed( outcome, sessions, tBp ) );
          drift.CloseToLine.AddRange( Close( outcome, tBp ) );
          drift.OnLine.AddRange( OnTheLine( outcome, tBp ) );
@@ -159,6 +164,25 @@ public static class ClaimDrift
    #endregion Public Methods
 
    #region Private Methods
+
+   /// <summary>
+   /// A cell the drift figures leave out because its pass was recorded NOT HELD, with the move of its session median.
+   /// Why computed anyway: the cell is shown in the table and not ranked, so the move figures over ranked cells do not include it, and a reader must see how far it moved.
+   /// </summary>
+   /// <param name="row">The not-held row.</param>
+   /// <param name="metric">Metric id.</param>
+   /// <param name="from">First session.</param>
+   /// <param name="to">Second session.</param>
+   /// <returns>The cell.</returns>
+   private static DriftExcluded Excluded( MetricRow row, string metric, string from, string to )
+   {
+      SessionFigures a = row.PerSession[from];
+      SessionFigures b = row.PerSession[to];
+      double before = ClaimRule.Median( a.Runs );
+      double after = ClaimRule.Median( b.Runs );
+      int move = (int)Math.Round( ( after / before - 1 ) * 10000, MidpointRounding.AwayFromZero );
+      return new DriftExcluded { Target = row.Target, Metric = metric, MoveBp = move, AbsMoveBp = Math.Abs( move ), FromMin = a.Min, FromMax = a.Max, ToMin = b.Min, ToMax = b.Max };
+   }
 
    /// <summary>
    /// Orders held in exactly one session.

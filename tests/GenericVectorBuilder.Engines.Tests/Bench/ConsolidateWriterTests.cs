@@ -7,7 +7,7 @@ namespace GenericVectorBuilder.Engines.Tests.Bench;
 
 /// <summary>
 /// The run's own results.md and results.json (ResultsWriter): the exact-mode line counts searches
-/// (the older text said "queries"), the framing bullet carries the end-to-end .NET client wording,
+/// (the older text said "queries"), the framing bullet carries the end-to-end client wording,
 /// and the client's CPU per search is written and shown only when a run recorded it.
 /// Why the sources are compiled here with Roslyn: the benchmark is a console project this test
 /// project does not reference. Only the report writer, the report types and the framing strings are
@@ -73,16 +73,18 @@ namespace GenericVectorBuilder.Bench.Targets
 
    /// <summary>
    /// The framing bullet under the run's header says it is request speed on a small collection,
-   /// measured end to end through each engine's .NET client, reflecting per-request cost including
-   /// the client library and not index scaling: the same words the consolidated report and the web
-   /// page use.
+   /// measured end to end through the client code the benchmark uses for each engine (a vendor library
+   /// for some, its own HttpClient REST code for others), reflecting per-request cost including that
+   /// client code and not index scaling. It does not call every client a .NET client: eight of the
+   /// 19 engines are reached through the benchmark's own REST code (verdict v8i, B2).
    /// </summary>
    [Fact]
    public void Markdown_CarriesTheFramingLine()
    {
       string md = Markdown( Report( withClientCpu: false ) );
 
-      Assert.Contains( "- Request speed on a small collection (524 vectors): Measured end to end through each engine's .NET client; at this size it reflects per-request cost including the client library, not index scaling.", md );
+      Assert.Contains( "- Request speed on a small collection (524 vectors): Measured end to end through the client code the benchmark uses for each engine (a vendor library for some engines, the benchmark's own HttpClient REST code for others); at this size it reflects per-request cost including that client code, not index scaling.", md );
+      Assert.DoesNotContain( ".NET client; at this size", md );
       Assert.DoesNotContain( "\u2014", md );
    }
 

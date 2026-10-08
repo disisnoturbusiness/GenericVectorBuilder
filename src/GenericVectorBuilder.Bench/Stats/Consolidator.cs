@@ -57,13 +57,14 @@ public static class Consolidator
       ConsolidatedReport report = Figures( input, sessions );
       using var raw = RawRuns.Load( sessions, input );
       IReadOnlyList<ResolvedFact> facts = ConsolidateAudit.ValidateFacts( input, raw.Claim, report.Targets );
-      report.Audit = new AuditInfo { FactsSha256 = input.FactsSha256, ExclusionsSha256 = input.ExclusionsSha256, ObserverSha256 = report.Observer?.Sha256, ObserverSha256Others = report.ObserverOthers.ToDictionary( o => o.Session, o => o.Sha256, StringComparer.Ordinal ), ClassesSha256 = input.ClassesSha256, FactsChecked = facts.Count };
+      report.Audit = new AuditInfo { FactsSha256 = input.FactsSha256, ExclusionsSha256 = input.ExclusionsSha256, ObserverSha256 = report.Observer?.Sha256, ObserverSha256Others = report.ObserverOthers.ToDictionary( o => o.Session, o => o.Sha256, StringComparer.Ordinal ), ClassesSha256 = input.ClassesSha256, RunPageNotesSha256 = input.RunPageNotes.Sha256, FactsChecked = facts.Count };
       ConsolidateClasses.Validate( input, sessions, raw.Claim, report );
       report.Why = ConsolidateWhy.Build( sessions, report, facts, input );
       report.HttpClientCount = ConsolidateTextParts.HttpClientTargets( report ).Count;
       ConsolidateWhy.MarkSearchModes( report );
       List<Sentence> sentences = ConsolidateText.Write( report, sessions, input );
-      ConsolidateAudit.CheckSentences( report, sentences, raw, input.RepoRoot );
+      ConsolidateSettings.WithholdMarked( report.SearchSettings, input.RunPageNotes );
+      ConsolidateAudit.CheckSentences( report, sentences, raw, input.RepoRoot, input.RunPageNotes );
       return report;
    }
 

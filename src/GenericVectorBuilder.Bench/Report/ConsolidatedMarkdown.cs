@@ -14,6 +14,19 @@ namespace GenericVectorBuilder.Bench.Report;
 /// </summary>
 public static class ConsolidatedMarkdown
 {
+   #region Data Members
+
+   /// <summary>The cell of a ranked row that is separated from every other ranked row.</summary>
+   public const string NONE_CELL = "none";
+
+   /// <summary>The cell of a row whose timed pass the run recorded as not held; the page's own words.</summary>
+   public const string NOT_HELD_CELL = "not held, not ranked";
+
+   /// <summary>The cell of a row that has figures from one session only.</summary>
+   public const string ONE_SESSION_CELL = "one session";
+
+   #endregion Data Members
+
    #region Public Methods
 
    /// <summary>
@@ -196,6 +209,28 @@ public static class ConsolidatedMarkdown
    }
 
    /// <summary>
+   /// The "not separated from" cell of a row: the ranked engines the row is not separated from, "none" for a ranked row that is separated from every other ranked row, "not held, not ranked" for a
+   /// row the tool recorded as not held, "one session" for a row that is not ranked for lack of a second session.
+   /// Why words and not an empty cell: an empty cell reads as "not computed" as well as "separated from all", and the page draws the same three cases in words.
+   /// </summary>
+   /// <param name="row">The row.</param>
+   /// <returns>The cell text.</returns>
+   private static string Separation( MetricRow row )
+   {
+      if( row.Status == ClaimRule.NOT_HELD )
+      {
+         return NOT_HELD_CELL;
+      }
+
+      if( row.Status == ClaimRule.ONE_SESSION )
+      {
+         return ONE_SESSION_CELL;
+      }
+
+      return row.NotSeparatedFrom.Count == 0 ? NONE_CELL : string.Join( ", ", row.NotSeparatedFrom );
+   }
+
+   /// <summary>
    /// One metric table with its captions, row notes and flags.
    /// </summary>
    /// <param name="md">Output.</param>
@@ -220,7 +255,7 @@ public static class ConsolidatedMarkdown
             cells = cells.Append( row.SearchMode == null ? string.Empty : $"{row.SearchMode}; {row.SearchConfidence}" );
          }
 
-         md.AppendLine( Row( cells.Append( string.Join( ", ", row.NotSeparatedFrom ) ).Append( string.Join( ", ", row.Flags.Select( f => f.Code ).Distinct( StringComparer.Ordinal ) ) ).ToArray() ) );
+         md.AppendLine( Row( cells.Append( Separation( row ) ).Append( string.Join( ", ", row.Flags.Select( f => f.Code ).Distinct( StringComparer.Ordinal ) ) ).ToArray() ) );
       }
 
       md.AppendLine();

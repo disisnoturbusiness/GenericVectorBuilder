@@ -436,8 +436,8 @@ public sealed class ConsolidateSweepTests : IClassFixture<DryFixFixture>, IDispo
          string output = Path.Combine( _scratch, "out-observer" );
          ConsolidateOutcome both = DryFixFixture.Run( _fixture.Results, output, "--session", "v7=" + string.Join( ",", ConsolidateRealRunsTests.V7 ), "--session", "v8=" + string.Join( ",", DryFixFixture.STAND_IN ), "--observer", v8, "--observer", v7 );
          Assert.Equal( 0, both.Exit );
-         Assert.Equal( "An observer process ran beside the v8 runs; its own CPU, at most 0.123 CPUs in a pass, counts as outside load, and its summary is observer/summary.json beside this report.", both.Text( "disclosure.observer" ) );
-         Assert.Equal( "An observer process ran beside the v7 runs; its own CPU, at most 0.081 CPUs in a pass, counts as outside load, and its summary is observer/summary-v7.json beside this report.", both.Text( "disclosure.observer.v7" ) );
+         Assert.Equal( "An observer process ran beside the v8 runs; its own CPU, at most 0.123 CPUs in any one pass, counts as outside load, and its summary is observer/summary.json beside this report.", both.Text( "disclosure.observer" ) );
+         Assert.Equal( "An observer process ran beside the v7 runs; its own CPU, at most 0.081 CPUs in any one pass, counts as outside load, and its summary is observer/summary-v7.json beside this report.", both.Text( "disclosure.observer.v7" ) );
          Assert.NotNull( both.Text( "disclosure.observer.clock.v7" ) );
          Assert.NotNull( both.Text( "disclosure.timers.v7" ) );
          Assert.Equal( File.ReadAllText( v8 ), File.ReadAllText( Path.Combine( output, "observer", "summary.json" ) ) );
@@ -521,8 +521,9 @@ public sealed class ConsolidateSweepTests : IClassFixture<DryFixFixture>, IDispo
          int tie = Array.IndexOf( texts, two.Text( "method.tie" ) );
          Assert.Contains( "(within 1e-5) also counts", texts[tie - 1] );
          Assert.DoesNotContain( texts, t => t.Contains( "native comparison targets", StringComparison.Ordinal ) );
-         Assert.Equal( 2, two.Under( "method" ).Count( s => s.Slot.Contains( ".dropped.", StringComparison.Ordinal ) ) );
-         Assert.All( two.Under( "method" ).Where( s => s.Slot.Contains( ".dropped.", StringComparison.Ordinal ) ), s => Assert.Equal( "A clause of this note names sql-native and qdrant-native, which are not targets of this report, so it is not printed.", s.Text ) );
+         List<( string Slot, string Text )> absent = two.Under( "method" ).Where( s => s.Slot.Contains( ".dropped.", StringComparison.Ordinal ) && s.Text.StartsWith( "A clause of this note names", StringComparison.Ordinal ) ).ToList();
+         Assert.Equal( 2, absent.Count );
+         Assert.All( absent, s => Assert.Equal( "A clause of this note names sql-native and qdrant-native, which are not targets of this report, so it is not printed.", s.Text ) );
 
          string repo = CopyRepo( "repo-tie" );
          string file = Path.Combine( repo, "design", "bench-inputs", "tie-check-eshoponweb-2026-10-07.json" );

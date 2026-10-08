@@ -373,7 +373,11 @@ NOTES = [
     ]},
     {'match': r'^Engines: ', 'spans': [(REST, 'UN', [], {})]},
     {'match': r'^Machine control on: ', 'spans': [
-        (r'Machine control on: .*?(?= Busy box: )', 'RB', ['results:conditions.governor#performance', 'results:conditions.clientCpus#0-1,4-5', 'results:conditions.engineCpus#2-3,6-7'], {}),
+        # the clause "so every CPU's clock is held at its ceiling of N MHz whatever the engine runs;" is the tool's own claim about every engine: the observer's APERF and MPERF readings put one
+        # engine's pass under the pin in every run, so the report does not print it (drop code clock-held, with a sentence that says why); the rest of the note is read back as before
+        (r"Machine control on: .*?(?=, so every CPU's clock is held at its ceiling of \d+ MHz whatever the engine runs;)", 'RB', ['results:conditions.governor#performance', 'results:conditions.clientCpus#0-1,4-5', 'results:conditions.engineCpus#2-3,6-7'], {}),
+        (r", so every CPU's clock is held at its ceiling of \d+ MHz whatever the engine runs;", 'UN', [], {'drop': 'clock-held'}),
+        (r'.*?(?= Busy box: )', 'RB', ['results:conditions.governor#performance', 'results:conditions.clientCpus#0-1,4-5', 'results:conditions.engineCpus#2-3,6-7'], {}),
         (REST, 'UN', [], {}),
     ]},
     {'match': r'^\S+ is embedded: it ran inside the client process on the client CPUs ', 'spans': [

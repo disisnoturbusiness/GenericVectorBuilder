@@ -83,7 +83,7 @@ public static class ConsolidateFlags
             PassPart( items, run, run.Conditions.Passes[index], index );
          }
 
-         TargetPart( items, run, run.Find( target )! );
+         TargetPart( items, run, run.Find( target )!, passName );
       }
 
       Layout( items, target, runs );
@@ -157,7 +157,8 @@ public static class ConsolidateFlags
    /// <param name="items">Receives the evidence.</param>
    /// <param name="run">The run.</param>
    /// <param name="t">The target's result.</param>
-   private static void TargetPart( List<FlagEvidence> items, RunResult run, TargetResult t )
+   /// <param name="passName">The pass of the metric the flags are for: the unsettled flag belongs to the passes the run's warning names, and to every pass when it names none.</param>
+   private static void TargetPart( List<FlagEvidence> items, RunResult run, TargetResult t, string passName )
    {
       string at = $"targets[{t.Name}]";
       if( run.Conditions.ThrottleByTarget.TryGetValue( t.Name, out RecordedThrottle? rise ) && ( rise.CoreRise > 0 || rise.PackageRise > 0 ) )
@@ -166,9 +167,9 @@ public static class ConsolidateFlags
          items.Add( new FlagEvidence( THROTTLE, run.Name, t.Name, null, null, new[] { ( by + ".coreRise", Num( rise.CoreRise ) ), ( by + ".packageRise", Num( rise.PackageRise ) ) } ) );
       }
 
-      if( t.Settled == false )
+      if( t.Settled == false && ( t.UnsettledPasses.Count == 0 || t.UnsettledPasses.Contains( passName ) ) )
       {
-         items.Add( new FlagEvidence( UNSETTLED, run.Name, t.Name, null, null, Array.Empty<(string, string)>() ) );
+         items.Add( new FlagEvidence( UNSETTLED, run.Name, t.Name, t.UnsettledPasses.Count == 0 ? null : passName, null, Array.Empty<(string, string)>() ) );
       }
 
       foreach( (string name, IndexStateValue? state) in new[] { ( "afterLoad", t.AfterLoad ), ( "afterSearch", t.AfterSearch ) } )

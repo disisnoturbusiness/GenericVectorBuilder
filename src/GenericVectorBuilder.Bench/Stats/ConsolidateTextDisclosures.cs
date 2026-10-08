@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using GenericVectorBuilder.Bench.Report;
 using S = GenericVectorBuilder.Bench.Stats.ConsolidateSources;
 using T = GenericVectorBuilder.Bench.Stats.ConsolidateText;
@@ -36,6 +37,9 @@ public static class ConsolidateTextDisclosures
 
    /// <summary>That line.</summary>
    private const string OUTSIDE_TOKEN = "double outside = ( reading.Busy - _last.Busy ) - ( reading.Self - _last.Self ) - engine;";
+
+   /// <summary>The two sizes of a recorded disk note "N added by this load (SIZE (whole engine data folder), SIZE before)".</summary>
+   private static readonly Regex DISK_SIZES = new( @"^.+? added by this load \((?<after>.+?) \(whole engine data folder\), (?<before>.+?) before\)$", RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromSeconds( 5 ) );
 
    #endregion Data Members
 
@@ -256,10 +260,46 @@ public static class ConsolidateTextDisclosures
             }
             else if( t.DiskText != null )
             {
-               w.Add( $"disclosure.disk.{target}.{run.Name}", t.DiskText, S.Quote( run.Name, $"targets[{target}].disk.text", t.DiskText ) );
+               DiskNote( w, run.Name, target, t.DiskText );
             }
          }
       }
+   }
+
+   /// <summary>
+   /// The recorded disk note of one run whose data folder has no structured fields: the note itself, quoted, when the run-page notes list marks nothing in it; otherwise the two sizes the line
+   /// records and a pointer to the correction the run's page prints.
+   /// Why not the quote: the list marks "N added by this load" as misleading (the figure is the growth of the whole data folder, not what the load wrote), and a summary that printed it bare would
+   /// contradict the page of the run that corrects it. The list entry is cited by the reference it holds to this run's disk note, never by its statement, so the page's list of sources does not print
+   /// the marked words either.
+   /// </summary>
+   /// <param name="w">The writer.</param>
+   /// <param name="run">Run folder.</param>
+   /// <param name="target">Target.</param>
+   /// <param name="text">The recorded disk note.</param>
+   private static void DiskNote( Writer w, string run, string target, string text )
+   {
+      string slot = $"disclosure.disk.{target}.{run}";
+      string path = $"targets[{target}].disk.text";
+      RunPageNote? marked = w.Input.RunPageNotes.Marking( run, target, text );
+      if( marked == null )
+      {
+         w.Add( slot, text, S.Quote( run, path, text ) );
+         return;
+      }
+
+      var sources = new List<SentenceSource> { S.File( RunPageNoteList.FILE, $"results@{run}:targets[{target}].disk.text" ), w.RunSource( run ) };
+      Match sizes = DISK_SIZES.Match( text );
+      if( !sizes.Success )
+      {
+         w.Add( slot, T.Fill( T.DISCLOSURE_DISK_WITHHELD, run, target ), sources );
+         return;
+      }
+
+      string after = sizes.Groups["after"].Value;
+      string before = sizes.Groups["before"].Value;
+      sources.Add( S.Token( run, path, $"{after} (whole engine data folder), {before} before" ) );
+      w.Add( slot, T.Fill( T.DISCLOSURE_DISK_CORRECTED, run, target, after, before ), sources );
    }
 
    /// <summary>
@@ -360,6 +400,10 @@ public static class ConsolidateTextDisclosures
       {
          string fired = S.Whole( o.PassesWithTimerFired );
          w.Add( $"disclosure.timers{suffix}", T.Fill( T.DISCLOSURE_TIMERS, fired, o.Session ), S.Consolidated( at + ".passesWithTimerFired", fired ) );
+      }
+      else if( o.Runs.All( r => r.TimersCovered != true ) )
+      {
+         w.Add( $"disclosure.timers{suffix}", T.Fill( T.DISCLOSURE_TIMERS_NONE, o.Session ), o.Runs.Select( ( r, i ) => ( r, i ) ).Where( x => x.r.TimersCovered == false ).Select( x => S.Consolidated( $"{at}.runs[{x.i}].timersCovered", "false" ) ) );
       }
       else
       {
@@ -467,7 +511,7 @@ public static class ConsolidateTextDisclosures
    }
 
    /// <summary>
-   /// The sentence that says the observer was not pinned, with where its threads ran and the most CPU it used, each figure a quote of the saved analysis of its run.
+   /// The sentence that says the observer was not pinned, with where its threads ran, and the sentence that says the most CPU it used by cgroup averaged over a run, each figure a quote of the saved analysis of its run.
    /// </summary>
    /// <param name="w">The writer.</param>
    /// <param name="o">The observer block.</param>
@@ -479,13 +523,15 @@ public static class ConsolidateTextDisclosures
    {
       string cpus = S.List( placement.Runs.Select( r => r.Cpus ).Distinct( StringComparer.Ordinal ).ToList() );
       var sources = new List<SentenceSource> { S.Consolidated( at + ".session", o.Session ), S.Doc( placement.Runs[0].File, placement.NotPinnedQuote ) };
+      var cgroup = new List<SentenceSource> { S.Consolidated( at + ".session", o.Session ) };
       foreach( ObserverPlacementRun run in placement.Runs )
       {
          sources.Add( S.Doc( run.File, run.PlacementQuote ) );
-         sources.Add( S.Doc( run.File, run.CgroupQuote ) );
+         cgroup.Add( S.Doc( run.File, run.CgroupQuote ) );
       }
 
-      w.Add( $"disclosure.{slotName}.placement{suffix}", T.Fill( T.DISCLOSURE_OBSERVER_PLACEMENT, o.Session, S.List( placement.Runs.Select( r => r.Percent ).ToList() ), cpus, placement.MaxCgroupCpu ), sources );
+      w.Add( $"disclosure.{slotName}.placement{suffix}", T.Fill( T.DISCLOSURE_OBSERVER_PLACEMENT, o.Session, S.List( placement.Runs.Select( r => r.Percent ).ToList() ), cpus ), sources );
+      w.Add( $"disclosure.{slotName}.cgroup{suffix}", T.Fill( T.DISCLOSURE_OBSERVER_CGROUP, o.Session, placement.MaxCgroupCpu ), cgroup );
    }
 
    /// <summary>

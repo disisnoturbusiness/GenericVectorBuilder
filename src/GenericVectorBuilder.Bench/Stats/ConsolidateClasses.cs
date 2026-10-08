@@ -19,6 +19,9 @@ public static class ConsolidateClasses
    /// <summary>The recorded fact sheet's label for a fact the engine reported about itself that this tool did not check.</summary>
    public const string RECORDED = "recorded";
 
+   /// <summary>The drop code of a clause that says every CPU's clock is held at its ceiling whatever the engine runs: no run or observer reading backs it for every engine, and the observer's readings contradict it.</summary>
+   public const string DROP_CLOCK_HELD = "clock-held";
+
    /// <summary>How many characters of a clause the report does not print its table row shows.</summary>
    private const int ABBREVIATED_CHARS = 24;
 

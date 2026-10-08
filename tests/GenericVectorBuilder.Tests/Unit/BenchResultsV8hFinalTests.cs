@@ -150,6 +150,7 @@ public class BenchResultsV8hFinalTests : IDisposable
    /// <summary>
    /// The run page of a real run, served from a folder holding the command's output next to that run's real report, carries the corrections of the
    /// repository's list file (when it is on this machine) and marks each statement in the report text; the page of a published set is the summary.
+   /// The count is the 8 witness and ClickHouse corrections of the run, the weaviate correction, the framing line (one place, v8i B2) and the MariaDB clause (two places, v8i B3).
    /// </summary>
    [FactIfRepositoryFileExists( BenchRunNotes.DEFAULT_FILE, REAL_RUN )]
    public void TheRunPageOfARealRun_CarriesTheRepositoryCorrections()
@@ -166,8 +167,9 @@ public class BenchResultsV8hFinalTests : IDisposable
 
       string html = BenchResultsEndpoints.RunPageHtml( _root, RUN, list )!;
 
-      Assert.Equal( 10, Regex.Matches( html, @"<li data-note=""\d+"" data-kind=""\w+"" data-places=""1""" ).Count );
-      Assert.Equal( 10, Regex.Matches( html, @"<strong>\[Correction \d+\]</strong>" ).Count );
+      Assert.Equal( 11, Regex.Matches( html, @"<li data-note=""\d+"" data-kind=""\w+"" data-places=""1""" ).Count );
+      Assert.Single( Regex.Matches( html, @"<li data-note=""\d+"" data-kind=""unbacked"" data-places=""2""" ) );
+      Assert.Equal( 13, Regex.Matches( html, @"<strong>\[Correction \d+\]</strong>" ).Count );
       Assert.Contains( "weaviate.compose.yaml sets no persistence variable <strong>[Correction 1]</strong>", html );
       Assert.Contains( "4.67 GiB added by this load <strong>[Correction", html );
       Assert.Contains( "235.33 MiB added by this load <strong>[Correction", html );

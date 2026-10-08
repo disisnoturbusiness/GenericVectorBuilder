@@ -1660,7 +1660,22 @@
    "match": "^Machine control on: ",
    "spans": [
     {
-     "pattern": "Machine control on: .*?(?= Busy box: )",
+     "pattern": "Machine control on: .*?(?=, so every CPU's clock is held at its ceiling of \\d+ MHz whatever the engine runs;)",
+     "class": "read-back",
+     "basis": [
+      "results:conditions.governor#performance",
+      "results:conditions.clientCpus#0-1,4-5",
+      "results:conditions.engineCpus#2-3,6-7"
+     ]
+    },
+    {
+     "pattern": ", so every CPU's clock is held at its ceiling of \\d+ MHz whatever the engine runs;",
+     "class": "unverified",
+     "basis": [],
+     "drop": "clock-held"
+    },
+    {
+     "pattern": ".*?(?= Busy box: )",
      "class": "read-back",
      "basis": [
       "results:conditions.governor#performance",

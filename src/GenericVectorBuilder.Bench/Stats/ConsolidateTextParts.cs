@@ -185,6 +185,17 @@ public static class ConsolidateTextParts
             S.Consolidated( "drift.largest.target", d.Largest.Target ) );
       }
 
+      for( int i = 0; i < d.Excluded.Count; i++ )
+      {
+         DriftExcluded x = d.Excluded[i];
+         string at = $"drift.excluded[{i}]";
+         string move = S.Percent( x.AbsMoveBp );
+         string[] figures = { S.Number( x.FromMin, 0 ), S.Number( x.FromMax, 0 ), S.Number( x.ToMin, 0 ), S.Number( x.ToMax, 0 ) };
+         w.Add( $"drift.excluded.{x.Target}.{x.Metric}", T.Fill( T.DRIFT_EXCLUDED, x.Target, T.Label( x.Metric ), move, d.From, figures[0], figures[1], d.To, figures[2], figures[3] ),
+            S.Consolidated( at + ".target", x.Target ), S.Consolidated( at + ".absMoveBp", move, "bp-pct" ), S.Consolidated( at + ".fromMin", figures[0] ), S.Consolidated( at + ".fromMax", figures[1] ),
+            S.Consolidated( at + ".toMin", figures[2] ), S.Consolidated( at + ".toMax", figures[3] ) );
+      }
+
       w.Add( "drift.unconfirmed", T.Fill( T.DRIFT_UNCONFIRMED, S.Whole( d.UnconfirmedFromFirst ), d.From, d.To, S.Whole( d.UnconfirmedFromSecond ) ),
          S.Consolidated( "drift.unconfirmedFromFirst", S.Whole( d.UnconfirmedFromFirst ) ), S.Consolidated( "drift.unconfirmedFromSecond", S.Whole( d.UnconfirmedFromSecond ) ) );
       string from = S.Ratio( d.CloseFromBp );
