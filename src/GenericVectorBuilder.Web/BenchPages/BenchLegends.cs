@@ -313,7 +313,7 @@ public static class BenchLegends
    /// <summary>Text of the separation cell of a row that is not ranked because its pass was not held.</summary>
    public const string L_NOT_HELD = "not held, not ranked";
 
-   /// <summary>First words of the header at the top of the summary page; the data set's name follows.</summary>
+   /// <summary>First words of the header of the Vector search benchmark page; the data set's name follows.</summary>
    public const string L_HEADER_FROM = "These benchmarks were taken from the";
 
    /// <summary>Word after the data set's name in the header.</summary>
@@ -395,10 +395,10 @@ public static class BenchLegends
    public const string L_HEADER_ONE_SESSION = "one session, not ranked";
 
    /// <summary>Where the figures of the rows that are not ranked are.</summary>
-   public const string L_HEADER_FIGURES_BELOW = "The figures of a row that is not ranked are in the full results below.";
+   public const string L_HEADER_FIGURES_IN_FULL = "The figures of a row that is not ranked are in the full results.";
 
-   /// <summary>Text of the link from the header down to the full results.</summary>
-   public const string L_HEADER_FULL = "Full results below: every table, the flags and every run";
+   /// <summary>Text of the link from the header to the full results page.</summary>
+   public const string L_HEADER_FULL = "Full results: every table, the flags and every run";
 
    /// <summary>Words before the builds that measured the runs, in the small text of the header.</summary>
    public const string L_HEADER_BUILD = "Build that measured the runs:";
@@ -413,7 +413,7 @@ public static class BenchLegends
    public const string L_HEADER_SET = "Set:";
 
    /// <summary>Printed in the header of a set that is marked stopped.</summary>
-   public const string L_HEADER_STOPPED = "This set is marked stopped, so no order is shown. The stopped block below gives the reason.";
+   public const string L_HEADER_STOPPED = "This set is marked stopped, so no order is shown. The stopped block in the full results gives the reason.";
 
    /// <summary>Words before the name of the table the header needs and the file does not hold.</summary>
    public const string L_HEADER_NO_TABLE_A = "The file holds no table named";
@@ -425,7 +425,10 @@ public static class BenchLegends
    public const string L_HEADER_NO_RANKED = "The table holds no ranked row, so no order is shown.";
 
    /// <summary>Words before the reason the header could not be built.</summary>
-   public const string L_HEADER_ERROR = "The order at the top could not be built";
+   public const string L_HEADER_ERROR = "The order of the engines could not be built";
+
+   /// <summary>Printed on the Vector search benchmark page when no set has been published.</summary>
+   public const string L_BENCHMARK_NONE = "No published benchmark results yet.";
 
    /// <summary>Summary line of the block that lists the clauses of the engine texts that no sentence of the page prints.</summary>
    public const string H_RECORDED_TEXTS = "Recorded engine texts, clause by clause";

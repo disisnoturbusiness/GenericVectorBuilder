@@ -16,12 +16,12 @@ namespace GenericVectorBuilder.Web.BenchPages;
 internal sealed record BenchHeaderLine( BenchRow Row, double Qps, double Ms, double? DifferenceMs, bool WithinMargin );
 
 /// <summary>
-/// The header at the top of the /bench-results page: what the numbers are of, then the database engines in order of searches per second with eight searchers
+/// The header of the Vector search benchmark page: what the numbers are of, then the database engines in order of searches per second with eight searchers
 /// at once, each with the ms per search worked out from that figure and its difference from the row above, a bold label on a row the file gives a note
 /// (Redis holds its data in memory), a marker on a row the report's test does not separate from the row above, and the rows the tool recorded as not held
 /// last and without a figure.
-/// Why a header and not a replacement: the full results (four tables, the flags, the drift, the runs) stay on the page below it, unchanged; the header is the
-/// answer a reader wants first, drawn from the same consolidated.json, and it links down to the rest.
+/// Why a page of its own and not a block on the full results page: the full results (four tables, the flags, the drift, the runs) stay on the /bench-results
+/// page exactly as they were; the header is the answer a reader wants first, drawn from the same consolidated.json, and it links to the rest.
 /// Why every figure is the file's or worked out from it: the page states no fact of its own. The data set, its size and the query count are the values the
 /// file's data line is bound to, the query source is the file's recorded one, the order and the figures are the qps8 table's medians, the ms per search is one
 /// second over the median (and the header says it is worked out and is not a timed latency), and the marker is the file's notSeparatedFrom. The words the
@@ -35,9 +35,6 @@ public static class BenchHeader
 
    /// <summary>The table the header orders the engines by: searches per second with eight searchers at once.</summary>
    public const string METRIC = "qps8";
-
-   /// <summary>The id of the anchor the header's link points at: the end of the header, where the page's own heading and the full results begin.</summary>
-   public const string ANCHOR = "bench-full-results";
 
    private const string SEARCHERS_PREFIX = "qps";
    private const string RANKED = "ranked";
@@ -76,12 +73,22 @@ public static class BenchHeader
 
          BenchConsolidated model = BenchConsolidatedReader.Read( json );
          using JsonDocument doc = JsonDocument.Parse( json );
-         return model.Stopped ? Section( "stopped", $"<p class=\"errors\">{BenchFormat.Enc( BenchLegends.L_HEADER_STOPPED )}</p>" ) : Build( model, doc.RootElement, folder );
+         return model.Stopped ? Section( "stopped", $"<p class=\"errors\">{BenchFormat.Enc( BenchLegends.L_HEADER_STOPPED )}</p>{FullResultsLink()}" ) : Build( model, doc.RootElement, folder );
       }
       catch( Exception ex ) when( ex is InvalidDataException or JsonException )
       {
-         return Section( "error", $"<p class=\"errors\">{BenchFormat.Enc( BenchLegends.L_HEADER_ERROR )}: {BenchFormat.Enc( ex.Message )}</p>" );
+         return Section( "error", $"<p class=\"errors\">{BenchFormat.Enc( BenchLegends.L_HEADER_ERROR )}: {BenchFormat.Enc( ex.Message )}</p>{FullResultsLink()}" );
       }
+   }
+
+   /// <summary>
+   /// The line that links to the full results page: every table, the flags and every run. Part of the header, and printed by the Vector search benchmark page
+   /// by itself when it has no header to print.
+   /// </summary>
+   /// <returns>HTML fragment: one paragraph.</returns>
+   public static string FullResultsLink()
+   {
+      return $"<p class=\"bench-header-link\"><a href=\"{BenchRoutes.FULL_RESULTS}\">{BenchFormat.Enc( BenchLegends.L_HEADER_FULL )}</a></p>";
    }
 
    #endregion Public Methods
@@ -89,7 +96,7 @@ public static class BenchHeader
    #region Private Methods
 
    /// <summary>
-   /// The whole section for a set that is not stopped: the first sentence, the order of the engines, the link down, and the small text.
+   /// The whole section for a set that is not stopped: the first sentence, the order of the engines, the link to the full results, and the small text.
    /// </summary>
    /// <param name="model">The file, read and checked.</param>
    /// <param name="root">The file's root, for the fields the model does not keep (the recorded queries, the builds).</param>
@@ -108,8 +115,7 @@ public static class BenchHeader
          html.Append( Order( metric, model.Sessions.Sum( s => s.Runs.Count ) ) );
       }
 
-      html.Append( $"<p class=\"bench-header-link\"><a href=\"#{ANCHOR}\">{BenchFormat.Enc( BenchLegends.L_HEADER_FULL )}</a></p>" );
-      html.Append( BuildLine( root, folder ) ).Append( $"<a id=\"{ANCHOR}\"></a>" );
+      html.Append( FullResultsLink() ).Append( BuildLine( root, folder ) );
       return Section( null, html.ToString() );
    }
 
@@ -310,7 +316,7 @@ public static class BenchHeader
 
       if( unranked.Count > 0 )
       {
-         html.Append( $"<p class=\"bench-header-legend muted\">{BenchFormat.Enc( BenchLegends.L_HEADER_FIGURES_BELOW )}</p>" );
+         html.Append( $"<p class=\"bench-header-legend muted\">{BenchFormat.Enc( BenchLegends.L_HEADER_FIGURES_IN_FULL )}</p>" );
       }
 
       return html.ToString();

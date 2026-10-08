@@ -7,7 +7,8 @@ using GenericVectorBuilder.Web.BenchPages;
 namespace GenericVectorBuilder.Web.Endpoints;
 
 /// <summary>
-/// Read-only pages for the benchmark results the Bench tool writes to disk: a summary at
+/// Read-only pages for the benchmark results the Bench tool writes to disk: the Vector search benchmark page at
+/// /benchmark (what the numbers are of, then the engines in order of searches per second with eight at once; see <see cref="BenchHeader"/>), a summary at
 /// /bench-results (the newest published consolidated set, then every run), each folder at
 /// /bench-results/{folder} (a consolidated set drawn from its consolidated.json, a run drawn from its
 /// results.json, then the folder's report with the per-engine detail folded), and the raw .md and .json
@@ -43,6 +44,15 @@ public static class BenchResultsEndpoints
    private static readonly HashSet<string> RAW_EXTENSIONS = new( StringComparer.OrdinalIgnoreCase ) { ".md", ".json" };
    private static readonly string[] REPORTS = { "results.md", "consolidated.md" };
 
+   /// <summary>
+   /// The newest published set that could be read, as both pages that draw it need it.
+   /// </summary>
+   /// <param name="Folder">The published folder's name.</param>
+   /// <param name="Json">The text of the folder's consolidated.json.</param>
+   /// <param name="Block">The page block drawn from the file (the whole page for a v8 file, the older-format notice for any other).</param>
+   /// <param name="Fallback">The notice that a newer folder could not be read, or an empty string when the newest folder was read.</param>
+   private sealed record PublishedSet( string Folder, string Json, string Block, string Fallback );
+
    #endregion Data Members
 
    #region Public Methods
@@ -55,6 +65,7 @@ public static class BenchResultsEndpoints
    {
       string root = Path.GetFullPath( app.Configuration[CONFIG_KEY] ?? DEFAULT_ROOT );
       string notesFile = NotesFilePath( root, app.Configuration[NOTES_CONFIG_KEY] );
+      app.MapGet( BenchRoutes.BENCHMARK, () => Results.Content( BenchmarkPageHtml( root ), HTML ) );
       app.MapGet( "/bench-results", () => Results.Content( ListPageHtml( root, notesFile ), HTML ) );
       app.MapGet( "/bench-results/{run}", ( string run ) => RunPageHtml( root, run, notesFile ) is string page ? Results.Content( page, HTML ) : Results.NotFound( new { error = "No such benchmark run." } ) );
       app.MapGet( "/bench-results/{run}/{file}", ( string run, string file ) => RawFile( root, run, file ) );
@@ -134,11 +145,12 @@ public static class BenchResultsEndpoints
    }
 
    /// <summary>
-   /// Builds the /bench-results page: the header (what the numbers are of, then the engines in order of searches per second with eight at once; see
-   /// <see cref="BenchHeader"/>), then the summary from the newest published consolidated.json that can be read (see <see cref="PublishedFolders"/>), then
-   /// every run. With no published folder it falls back to the run list alone.
-   /// Why the header is above the page's own heading: it is the page's first answer, "what is this and what came out", and everything that was on the page
-   /// before it stays below it unchanged.
+   /// Builds the /bench-results page: the summary from the newest published consolidated.json that
+   /// can be read (see <see cref="PublishedFolders"/>), then every run. With no published folder it
+   /// falls back to the run list alone.
+   /// The page's heading, "Vector search benchmark", is a link to the Vector search benchmark page (see <see cref="BenchmarkPageHtml"/>); nothing else on
+   /// the page changes for it. Why a link and not the header in place: the header (what the numbers are of, the engines in order) is a page of its own, and
+   /// this page stays the full results.
    /// Internal so tests can render it against a folder of their own.
    /// </summary>
    /// <param name="root">Results root.</param>
@@ -155,8 +167,7 @@ public static class BenchResultsEndpoints
       IReadOnlyList<string> published = PublishedFolders( root );
       if( published.Count > 0 )
       {
-         ( string header, string summary ) = PublishedSummary( root, published, notesFile );
-         body.Append( header ).Append( "<h1>Vector search benchmark</h1>" ).Append( summary ).Append( "<h2>All runs</h2>" );
+         body.Append( $"<h1><a href=\"{BenchRoutes.BENCHMARK}\">{BenchRoutes.BENCHMARK_NAME}</a></h1>" ).Append( PublishedSummary( root, published, notesFile ) ).Append( "<h2>All runs</h2>" );
       }
       else
       {
@@ -164,7 +175,43 @@ public static class BenchResultsEndpoints
       }
 
       body.Append( RunTable( root ) );
-      return Page( "Vector search benchmark", body.ToString() );
+      return Page( BenchRoutes.BENCHMARK_NAME, body.ToString() );
+   }
+
+   /// <summary>
+   /// Builds the Vector search benchmark page: its heading, then the header drawn from the newest published consolidated.json that can be read (the same
+   /// file, by the same rule, as the summary on the /bench-results page; see <see cref="BenchHeader"/>), which ends with the link to the full results.
+   /// A newer folder that could not be read is named in a notice above the header, as the full results page names it. With no published folder, with no
+   /// file that can be read, or with a file that is not in the v8 shape, the page says so (the older-format notice for the last) and still links to the
+   /// full results.
+   /// Why a page of its own: the header is the answer a reader wants first, and the full results (four tables, the flags, the drift, every run) are long;
+   /// the two are linked, and neither holds the other.
+   /// Internal so tests can render it against a folder of their own.
+   /// </summary>
+   /// <param name="root">Results root.</param>
+   /// <returns>Full HTML page.</returns>
+   internal static string BenchmarkPageHtml( string root )
+   {
+      var body = new StringBuilder( $"<h1>{BenchRoutes.BENCHMARK_NAME}</h1>" );
+      IReadOnlyList<string> published = PublishedFolders( root );
+      if( published.Count == 0 )
+      {
+         body.Append( $"<p class=\"muted\">{Enc( BenchLegends.L_BENCHMARK_NONE )}</p>" ).Append( BenchHeader.FullResultsLink() );
+         return Page( BenchRoutes.BENCHMARK_NAME, body.ToString() );
+      }
+
+      ( PublishedSet? set, string failure ) = ReadNewestPublished( root, published );
+      if( set == null )
+      {
+         body.Append( $"<p class=\"errors\">{Enc( BenchLegends.UNREADABLE )}: {Enc( failure )}</p>" ).Append( BenchHeader.FullResultsLink() );
+      }
+      else
+      {
+         string header = BenchHeader.Html( set.Json, set.Folder );
+         body.Append( set.Fallback ).Append( header.Length > 0 ? header : set.Block + BenchHeader.FullResultsLink() );
+      }
+
+      return Page( BenchRoutes.BENCHMARK_NAME, body.ToString() );
    }
 
    /// <summary>
@@ -512,13 +559,33 @@ public static class BenchResultsEndpoints
    /// none can be read, the error stands where the tables would be.
    /// Why fall back at all: a publish that is half written (or one bad file) must not take the
    /// whole page's numbers away; why say so: the older numbers are not the newest ones.
-   /// The header is built from the same file as the summary under it, so the two always agree on which set they show.
    /// </summary>
    /// <param name="root">Results root.</param>
    /// <param name="folders">Published folder names, newest first (not empty).</param>
    /// <param name="notesFile">The list file of corrections the run pages read, or null when the caller does not check for it.</param>
-   /// <returns>The header (empty when no file could be read or the file is not in the v8 shape) and the summary, both HTML fragments.</returns>
-   private static ( string Header, string Summary ) PublishedSummary( string root, IReadOnlyList<string> folders, string? notesFile )
+   /// <returns>HTML fragment.</returns>
+   private static string PublishedSummary( string root, IReadOnlyList<string> folders, string? notesFile )
+   {
+      ( PublishedSet? set, string failure ) = ReadNewestPublished( root, folders );
+      if( set == null )
+      {
+         return $"<p class=\"errors\">{Enc( BenchLegends.UNREADABLE )}: {Enc( failure )}</p>";
+      }
+
+      string source = $"<p class=\"bench-source muted\">Numbers from <a href=\"/bench-results/{Enc( set.Folder )}\">{Enc( set.Folder )}</a>.</p>";
+      return set.Fallback + source + NoListNotice( set.Json, notesFile ) + set.Block;
+   }
+
+   /// <summary>
+   /// Reads the newest published folder that can be read, newest first, and draws its page block. A folder whose file cannot be read, or whose block cannot
+   /// be drawn, is passed over, and the notice of the first one passed over names it and the reason.
+   /// Why one reader for both pages: the Vector search benchmark page and the full results page must show the same set, so the rule that picks it is written
+   /// once.
+   /// </summary>
+   /// <param name="root">Results root.</param>
+   /// <param name="folders">Published folder names, newest first (not empty).</param>
+   /// <returns>The set that was read, or null when none could be read; and, when none could be read, the reason the first folder failed ("no reason given" when it gave none), otherwise an empty string.</returns>
+   private static ( PublishedSet? Set, string Failure ) ReadNewestPublished( string root, IReadOnlyList<string> folders )
    {
       string? failedFolder = null;
       string? failure = null;
@@ -528,9 +595,8 @@ public static class BenchResultsEndpoints
          {
             string json = BenchRunList.ReadCapped( Path.Combine( root, folder, CONSOLIDATED_JSON ) );
             string block = ConsolidatedHtml( json, folder );
-            string source = $"<p class=\"bench-source muted\">Numbers from <a href=\"/bench-results/{Enc( folder )}\">{Enc( folder )}</a>.</p>";
             string fallback = failedFolder == null ? string.Empty : $"<p class=\"errors\">The newest published results, {Enc( failedFolder )}, could not be read ({Enc( failure ?? "no reason given" )}), so the page shows the older {Enc( folder )}.</p>";
-            return ( BenchHeader.Html( json, folder ), fallback + source + NoListNotice( json, notesFile ) + block );
+            return ( new PublishedSet( folder, json, block, fallback ), string.Empty );
          }
          catch( Exception ex ) when( IsReadError( ex ) )
          {
@@ -539,7 +605,7 @@ public static class BenchResultsEndpoints
          }
       }
 
-      return ( string.Empty, $"<p class=\"errors\">{Enc( BenchLegends.UNREADABLE )}: {Enc( failure ?? "no reason given" )}</p>" );
+      return ( null, failure ?? "no reason given" );
    }
 
    /// <summary>

@@ -1,0 +1,1826 @@
+{
+  "sessions": [
+    {
+      "name": "v7",
+      "runs": [
+        {
+          "folder": "20261006-130619-eshoponweb",
+          "seed": 701,
+          "startedUtc": "20261006T130619Z"
+        },
+        {
+          "folder": "20261006-142724-eshoponweb",
+          "seed": 702,
+          "startedUtc": "20261006T142724Z"
+        },
+        {
+          "folder": "20261006-154837-eshoponweb",
+          "seed": 703,
+          "startedUtc": "20261006T154837Z"
+        }
+      ]
+    },
+    {
+      "name": "v8",
+      "runs": [
+        {
+          "folder": "20261008-130000-eshoponweb",
+          "seed": 801,
+          "startedUtc": "20261008T130000Z"
+        },
+        {
+          "folder": "20261008-143000-eshoponweb",
+          "seed": 802,
+          "startedUtc": "20261008T143000Z"
+        },
+        {
+          "folder": "20261008-160000-eshoponweb",
+          "seed": 803,
+          "startedUtc": "20261008T160000Z"
+        }
+      ]
+    }
+  ],
+  "threshold": {
+    "tBp": 3500,
+    "ratio": 1.35
+  },
+  "basis": {
+    "runs": [
+      {
+        "folder": "20261005-023459-eshoponweb",
+        "seed": 501,
+        "session": "v5",
+        "conditions": {
+          "turbo": "on",
+          "uncore": "not pinned"
+        }
+      },
+      {
+        "folder": "20261006-130619-eshoponweb",
+        "seed": 701,
+        "session": "v7",
+        "conditions": {
+          "turbo": "off",
+          "uncore": "0x1e1e"
+        }
+      }
+    ],
+    "leftOut": [
+      {
+        "folder": "20261003-183955-eshoponweb",
+        "reason": "machine control off"
+      }
+    ],
+    "exclusions": [
+      {
+        "target": "clickhouse",
+        "seeds": [
+          501,
+          502,
+          503
+        ],
+        "metric": "*",
+        "kind": "unrecorded config change",
+        "why": "log tables switched off",
+        "source": "design/verdicts/v6-verdict.md"
+      }
+    ],
+    "perMetric": {
+      "p50Ms": {
+        "oneEngine": {
+          "moveBp": 2908,
+          "target": "mongodb",
+          "runs": [
+            "20261005-023459-eshoponweb",
+            "20261006-130619-eshoponweb"
+          ],
+          "values": [
+            2066,
+            2668.9
+          ],
+          "differences": [
+            "turbo: on, off",
+            "uncore: not pinned, 0x1e1e"
+          ]
+        },
+        "pair": {
+          "moveBp": 2908,
+          "target": "mongodb",
+          "runs": [
+            "20261005-023459-eshoponweb",
+            "20261006-130619-eshoponweb"
+          ],
+          "values": [
+            2066,
+            2668.9
+          ],
+          "differences": [
+            "turbo: on, off",
+            "uncore: not pinned, 0x1e1e"
+          ]
+        }
+      }
+    },
+    "noMachineControl": {
+      "oneEngine": {
+        "moveBp": 11280,
+        "target": "redis",
+        "runs": [
+          "a",
+          "b"
+        ],
+        "values": [
+          1,
+          2
+        ],
+        "differences": []
+      }
+    },
+    "setupSplitCount": 2,
+    "setupSplits": [
+      {
+        "target": "mariadb",
+        "fields": [
+          "durability"
+        ],
+        "changes": [
+          {
+            "field": "durability",
+            "before": "innodb_flush_log_at_trx_commit=2 (mariadb.compose.yaml)",
+            "after": "innodb_flush_log_at_trx_commit=2 (set in mariadb-bench.compose.yaml)"
+          }
+        ],
+        "before": {
+          "sessions": [
+            "v6"
+          ],
+          "runs": [
+            "20261005-073329-eshoponweb",
+            "20261005-085448-eshoponweb",
+            "20261005-101815-eshoponweb"
+          ]
+        },
+        "after": {
+          "sessions": [
+            "v7",
+            "v8"
+          ],
+          "runs": [
+            "20261006-130619-eshoponweb",
+            "20261006-142724-eshoponweb",
+            "20261006-154837-eshoponweb",
+            "20261008-130000-eshoponweb",
+            "20261008-143000-eshoponweb",
+            "20261008-160000-eshoponweb"
+          ]
+        },
+        "oneEngine": {
+          "metric": "qps8",
+          "moveBp": 409,
+          "move": 0.0409,
+          "target": "mariadb",
+          "pair": null,
+          "runs": [
+            "20261005-073329-eshoponweb",
+            "20261006-130619-eshoponweb"
+          ],
+          "values": [
+            495.78,
+            374.79
+          ],
+          "differences": [
+            "turbo: turbo not pinned vs turbo off",
+            "build: v6-final vs v7-final"
+          ]
+        },
+        "pair": {
+          "metric": "qps8",
+          "moveBp": 1785,
+          "move": 0.1785,
+          "target": null,
+          "pair": "mariadb/mongodb",
+          "runs": [
+            "20261005-073329-eshoponweb",
+            "20261006-130619-eshoponweb"
+          ],
+          "values": [
+            495.78,
+            374.79
+          ],
+          "differences": [
+            "turbo: turbo not pinned vs turbo off",
+            "build: v6-final vs v7-final"
+          ]
+        },
+        "perMetric": {},
+        "tBpIfCounted": 3500
+      },
+      {
+        "target": "sqlitevec",
+        "fields": [
+          "index"
+        ],
+        "changes": [
+          {
+            "field": "index",
+            "before": "vec0 brute-force scan, default chunk",
+            "after": "vec0 brute-force scan, chunk_size=1024"
+          }
+        ],
+        "before": {
+          "sessions": [
+            "v6"
+          ],
+          "runs": [
+            "20261005-073329-eshoponweb",
+            "20261005-085448-eshoponweb",
+            "20261005-101815-eshoponweb"
+          ]
+        },
+        "after": {
+          "sessions": [
+            "v7",
+            "v8"
+          ],
+          "runs": [
+            "20261006-130619-eshoponweb",
+            "20261006-142724-eshoponweb",
+            "20261006-154837-eshoponweb",
+            "20261008-130000-eshoponweb",
+            "20261008-143000-eshoponweb",
+            "20261008-160000-eshoponweb"
+          ]
+        },
+        "oneEngine": {
+          "metric": "qps8",
+          "moveBp": 11936,
+          "move": 1.1936,
+          "target": "sqlitevec",
+          "pair": null,
+          "runs": [
+            "20261005-073329-eshoponweb",
+            "20261006-130619-eshoponweb"
+          ],
+          "values": [
+            495.78,
+            374.79
+          ],
+          "differences": [
+            "turbo: turbo not pinned vs turbo off",
+            "build: v6-final vs v7-final"
+          ]
+        },
+        "pair": {
+          "metric": "qps8",
+          "moveBp": 15508,
+          "move": 1.5508,
+          "target": null,
+          "pair": "sqlitevec/mongodb",
+          "runs": [
+            "20261005-073329-eshoponweb",
+            "20261006-130619-eshoponweb"
+          ],
+          "values": [
+            495.78,
+            374.79
+          ],
+          "differences": [
+            "turbo: turbo not pinned vs turbo off",
+            "build: v6-final vs v7-final"
+          ]
+        },
+        "perMetric": {},
+        "tBpIfCounted": 16500
+      }
+    ],
+    "maxBp": 2908,
+    "tBp": 3500
+  },
+  "metrics": [
+    {
+      "metric": "p50Ms",
+      "lowerIsBetter": true,
+      "rows": [
+        {
+          "target": "redis",
+          "display": "Redis",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 0.396,
+              "max": 0.404,
+              "runs": [
+                0.396,
+                0.4,
+                0.404
+              ]
+            },
+            "v8": {
+              "min": 0.4,
+              "max": 0.408,
+              "runs": [
+                0.4,
+                0.408,
+                0.404
+              ]
+            }
+          },
+          "median": 0.402,
+          "notSeparatedFrom": [],
+          "flags": [],
+          "searchMode": "approximate",
+          "note": "Holds its data in memory.",
+          "noteSources": [
+            {
+              "kind": "doc",
+              "ref": "doc:design/engine-docs/redis-faq.html#in-memory",
+              "value": "in-memory"
+            },
+            {
+              "kind": "file",
+              "ref": "deploy/engines/redis.compose.yaml#--appendonly no",
+              "value": "--appendonly no"
+            }
+          ]
+        },
+        {
+          "target": "mariadb",
+          "display": "MariaDB",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 0.6336,
+              "max": 0.6464,
+              "runs": [
+                0.6336,
+                0.64,
+                0.6464
+              ]
+            },
+            "v8": {
+              "min": 0.64,
+              "max": 0.6528,
+              "runs": [
+                0.64,
+                0.6528,
+                0.6464
+              ]
+            }
+          },
+          "median": 0.6432,
+          "notSeparatedFrom": [
+            "pgvector"
+          ],
+          "flags": [],
+          "searchMode": "approximate"
+        },
+        {
+          "target": "pgvector",
+          "display": "pgvector",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 0.8712,
+              "max": 0.8888,
+              "runs": [
+                0.8712,
+                0.88,
+                0.8888
+              ]
+            },
+            "v8": {
+              "min": 0.88,
+              "max": 0.8976,
+              "runs": [
+                0.88,
+                0.8976,
+                0.8888
+              ]
+            }
+          },
+          "median": 0.8844000000000001,
+          "notSeparatedFrom": [
+            "mariadb",
+            "qdrant"
+          ],
+          "flags": [],
+          "searchMode": "approximate"
+        },
+        {
+          "target": "qdrant",
+          "display": "Qdrant (exact)",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 0.8811,
+              "max": 0.8989,
+              "runs": [
+                0.8811,
+                0.89,
+                0.8989
+              ]
+            },
+            "v8": {
+              "min": 0.89,
+              "max": 0.9078,
+              "runs": [
+                0.89,
+                0.9078,
+                0.8989
+              ]
+            }
+          },
+          "median": 0.89445,
+          "notSeparatedFrom": [
+            "pgvector"
+          ],
+          "flags": [],
+          "searchMode": "exact"
+        },
+        {
+          "target": "sqlitevec",
+          "display": "sqlite-vec",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 1.9008,
+              "max": 1.9392,
+              "runs": [
+                1.9008,
+                1.92,
+                1.9392
+              ]
+            },
+            "v8": {
+              "min": 1.92,
+              "max": 1.9584,
+              "runs": [
+                1.92,
+                1.9584,
+                1.9392
+              ]
+            }
+          },
+          "median": 1.9296,
+          "notSeparatedFrom": [],
+          "flags": [],
+          "searchMode": "exact"
+        },
+        {
+          "target": "sql",
+          "display": "SQL Server 2025",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 4.0194,
+              "max": 4.1006,
+              "runs": [
+                4.0194,
+                4.06,
+                4.1006
+              ]
+            },
+            "v8": {
+              "min": 4.06,
+              "max": 4.1412,
+              "runs": [
+                4.06,
+                4.1412,
+                4.1006
+              ]
+            }
+          },
+          "median": 4.080299999999999,
+          "notSeparatedFrom": [],
+          "flags": [],
+          "searchMode": "exact"
+        }
+      ]
+    },
+    {
+      "metric": "qps1",
+      "lowerIsBetter": false,
+      "rows": [
+        {
+          "target": "redis",
+          "display": "Redis",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 2501.73,
+              "max": 2552.27,
+              "runs": [
+                2501.73,
+                2527,
+                2552.27
+              ]
+            },
+            "v8": {
+              "min": 2527,
+              "max": 2577.54,
+              "runs": [
+                2527,
+                2577.54,
+                2552.27
+              ]
+            }
+          },
+          "median": 2539.635,
+          "notSeparatedFrom": [],
+          "flags": [],
+          "searchMode": "approximate",
+          "note": "Holds its data in memory.",
+          "noteSources": [
+            {
+              "kind": "doc",
+              "ref": "doc:design/engine-docs/redis-faq.html#in-memory",
+              "value": "in-memory"
+            },
+            {
+              "kind": "file",
+              "ref": "deploy/engines/redis.compose.yaml#--appendonly no",
+              "value": "--appendonly no"
+            }
+          ]
+        },
+        {
+          "target": "mariadb",
+          "display": "MariaDB",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 1530.54,
+              "max": 1561.46,
+              "runs": [
+                1530.54,
+                1546,
+                1561.46
+              ]
+            },
+            "v8": {
+              "min": 1546,
+              "max": 1576.92,
+              "runs": [
+                1546,
+                1576.92,
+                1561.46
+              ]
+            }
+          },
+          "median": 1553.73,
+          "notSeparatedFrom": [],
+          "flags": [],
+          "searchMode": "approximate"
+        },
+        {
+          "target": "qdrant",
+          "display": "Qdrant (exact)",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 1099.89,
+              "max": 1122.11,
+              "runs": [
+                1099.89,
+                1111,
+                1122.11
+              ]
+            },
+            "v8": {
+              "min": 1111,
+              "max": 1133.22,
+              "runs": [
+                1111,
+                1133.22,
+                1122.11
+              ]
+            }
+          },
+          "median": 1116.5549999999998,
+          "notSeparatedFrom": [
+            "pgvector"
+          ],
+          "flags": [],
+          "searchMode": "exact"
+        },
+        {
+          "target": "pgvector",
+          "display": "pgvector",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 1095.93,
+              "max": 1118.07,
+              "runs": [
+                1095.93,
+                1107,
+                1118.07
+              ]
+            },
+            "v8": {
+              "min": 1107,
+              "max": 1129.14,
+              "runs": [
+                1107,
+                1129.14,
+                1118.07
+              ]
+            }
+          },
+          "median": 1112.5349999999999,
+          "notSeparatedFrom": [
+            "qdrant"
+          ],
+          "flags": [],
+          "searchMode": "approximate"
+        },
+        {
+          "target": "sqlitevec",
+          "display": "sqlite-vec",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 504.9,
+              "max": 515.1,
+              "runs": [
+                504.9,
+                510,
+                515.1
+              ]
+            },
+            "v8": {
+              "min": 510,
+              "max": 520.2,
+              "runs": [
+                510,
+                520.2,
+                515.1
+              ]
+            }
+          },
+          "median": 512.55,
+          "notSeparatedFrom": [],
+          "flags": [],
+          "searchMode": "exact"
+        },
+        {
+          "target": "sql",
+          "display": "SQL Server 2025",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 238.59,
+              "max": 243.41,
+              "runs": [
+                238.59,
+                241,
+                243.41
+              ]
+            },
+            "v8": {
+              "min": 241,
+              "max": 245.82,
+              "runs": [
+                241,
+                245.82,
+                243.41
+              ]
+            }
+          },
+          "median": 242.20499999999998,
+          "notSeparatedFrom": [],
+          "flags": [],
+          "searchMode": "exact"
+        }
+      ]
+    },
+    {
+      "metric": "qps8",
+      "lowerIsBetter": false,
+      "rows": [
+        {
+          "target": "mariadb",
+          "display": "MariaDB",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 5851.89,
+              "max": 5970.11,
+              "runs": [
+                5851.89,
+                5911,
+                5970.11
+              ]
+            },
+            "v8": {
+              "min": 5911,
+              "max": 6029.22,
+              "runs": [
+                5911,
+                6029.22,
+                5970.11
+              ]
+            }
+          },
+          "median": 5940.555,
+          "notSeparatedFrom": [
+            "redis"
+          ],
+          "flags": [],
+          "searchMode": "approximate"
+        },
+        {
+          "target": "redis",
+          "display": "Redis",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 5068.8,
+              "max": 5171.2,
+              "runs": [
+                5068.8,
+                5120,
+                5171.2
+              ]
+            },
+            "v8": {
+              "min": 5120,
+              "max": 5222.4,
+              "runs": [
+                5120,
+                5222.4,
+                5171.2
+              ]
+            }
+          },
+          "median": 5145.6,
+          "notSeparatedFrom": [
+            "mariadb",
+            "pgvector"
+          ],
+          "flags": [],
+          "searchMode": "approximate",
+          "note": "redis holds its data in memory: its saved docs page says \u0027Redis is an in-memory but persistent on disk database\u0027, and its compose file sets save \u0022300 1\u0022 and appendonly no.",
+          "noteSources": [
+            {
+              "kind": "doc",
+              "ref": "doc:design/engine-docs/redis-faq.html#in-memory",
+              "value": "in-memory"
+            },
+            {
+              "kind": "file",
+              "ref": "deploy/engines/redis.compose.yaml#--appendonly no",
+              "value": "--appendonly no"
+            }
+          ]
+        },
+        {
+          "target": "pgvector",
+          "display": "pgvector",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 3894.66,
+              "max": 3973.34,
+              "runs": [
+                3894.66,
+                3934,
+                3973.34
+              ]
+            },
+            "v8": {
+              "min": 3934,
+              "max": 4012.68,
+              "runs": [
+                3934,
+                4012.68,
+                3973.34
+              ]
+            }
+          },
+          "median": 3953.67,
+          "notSeparatedFrom": [
+            "redis",
+            "qdrant"
+          ],
+          "flags": [],
+          "searchMode": "approximate"
+        },
+        {
+          "target": "qdrant",
+          "display": "Qdrant (exact)",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 3241.26,
+              "max": 3306.74,
+              "runs": [
+                3241.26,
+                3274,
+                3306.74
+              ]
+            },
+            "v8": {
+              "min": 3274,
+              "max": 3339.48,
+              "runs": [
+                3274,
+                3339.48,
+                3306.74
+              ]
+            }
+          },
+          "median": 3290.37,
+          "notSeparatedFrom": [
+            "pgvector"
+          ],
+          "flags": [],
+          "searchMode": "exact"
+        },
+        {
+          "target": "sqlitevec",
+          "display": "sqlite-vec",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 1130.58,
+              "max": 1153.42,
+              "runs": [
+                1130.58,
+                1142,
+                1153.42
+              ]
+            },
+            "v8": {
+              "min": 1142,
+              "max": 1164.84,
+              "runs": [
+                1142,
+                1164.84,
+                1153.42
+              ]
+            }
+          },
+          "median": 1147.71,
+          "notSeparatedFrom": [],
+          "flags": [],
+          "searchMode": "exact"
+        },
+        {
+          "target": "sql",
+          "display": "SQL Server 2025",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 605.88,
+              "max": 618.12,
+              "runs": [
+                605.88,
+                612,
+                618.12
+              ]
+            },
+            "v8": {
+              "min": 612,
+              "max": 624.24,
+              "runs": [
+                612,
+                624.24,
+                618.12
+              ]
+            }
+          },
+          "median": 615.06,
+          "notSeparatedFrom": [],
+          "flags": [],
+          "searchMode": "exact"
+        },
+        {
+          "target": "clickhouse",
+          "display": "clickhouse",
+          "status": "not-held",
+          "perSession": {
+            "v7": {
+              "min": 339.7913840737084,
+              "max": 415.3005805345325,
+              "runs": [
+                339.7913840737084,
+                377.54598230412046,
+                415.3005805345325
+              ]
+            },
+            "v8": {
+              "min": 339.7913840737084,
+              "max": 415.3005805345325,
+              "runs": [
+                339.7913840737084,
+                377.54598230412046,
+                415.3005805345325
+              ]
+            }
+          },
+          "median": 377.54598230412046,
+          "notSeparatedFrom": [],
+          "flags": [
+            {
+              "code": "not-held",
+              "text": "Run x: the timed eight-searcher pass of clickhouse read 336 QPS and the run recorded it as NOT HELD."
+            }
+          ],
+          "searchMode": "approximate"
+        }
+      ]
+    },
+    {
+      "metric": "exactP50Ms",
+      "lowerIsBetter": true,
+      "rows": [
+        {
+          "target": "redis",
+          "display": "Redis",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 1.188,
+              "max": 1.212,
+              "runs": [
+                1.188,
+                1.2,
+                1.212
+              ]
+            },
+            "v8": {
+              "min": 1.2,
+              "max": 1.224,
+              "runs": [
+                1.2,
+                1.224,
+                1.212
+              ]
+            }
+          },
+          "median": 1.206,
+          "notSeparatedFrom": [],
+          "flags": [],
+          "note": "Holds its data in memory.",
+          "noteSources": [
+            {
+              "kind": "doc",
+              "ref": "doc:design/engine-docs/redis-faq.html#in-memory",
+              "value": "in-memory"
+            },
+            {
+              "kind": "file",
+              "ref": "deploy/engines/redis.compose.yaml#--appendonly no",
+              "value": "--appendonly no"
+            }
+          ]
+        },
+        {
+          "target": "sqlitevec",
+          "display": "sqlite-vec",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 1.881,
+              "max": 1.919,
+              "runs": [
+                1.881,
+                1.9,
+                1.919
+              ]
+            },
+            "v8": {
+              "min": 1.9,
+              "max": 1.938,
+              "runs": [
+                1.9,
+                1.938,
+                1.919
+              ]
+            }
+          },
+          "median": 1.9095,
+          "notSeparatedFrom": [
+            "mariadb"
+          ],
+          "flags": []
+        },
+        {
+          "target": "mariadb",
+          "display": "MariaDB",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 1.98,
+              "max": 2.02,
+              "runs": [
+                1.98,
+                2,
+                2.02
+              ]
+            },
+            "v8": {
+              "min": 2,
+              "max": 2.04,
+              "runs": [
+                2,
+                2.04,
+                2.02
+              ]
+            }
+          },
+          "median": 2.01,
+          "notSeparatedFrom": [
+            "sqlitevec"
+          ],
+          "flags": []
+        },
+        {
+          "target": "pgvector",
+          "display": "pgvector",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 2.97,
+              "max": 3.03,
+              "runs": [
+                2.97,
+                3,
+                3.03
+              ]
+            },
+            "v8": {
+              "min": 3,
+              "max": 3.06,
+              "runs": [
+                3,
+                3.06,
+                3.03
+              ]
+            }
+          },
+          "median": 3.0149999999999997,
+          "notSeparatedFrom": [
+            "sql"
+          ],
+          "flags": []
+        },
+        {
+          "target": "sql",
+          "display": "SQL Server 2025",
+          "status": "ranked",
+          "perSession": {
+            "v7": {
+              "min": 3.96,
+              "max": 4.04,
+              "runs": [
+                3.96,
+                4,
+                4.04
+              ]
+            },
+            "v8": {
+              "min": 4,
+              "max": 4.08,
+              "runs": [
+                4,
+                4.08,
+                4.04
+              ]
+            }
+          },
+          "median": 4.02,
+          "notSeparatedFrom": [
+            "pgvector"
+          ],
+          "flags": []
+        }
+      ]
+    }
+  ],
+  "guards": {
+    "g2": {
+      "stopped": false,
+      "pairs": []
+    },
+    "g3": {
+      "targets": []
+    }
+  },
+  "drift": {
+    "from": "v7",
+    "to": "v8",
+    "perTarget": [
+      {
+        "target": "redis",
+        "metric": "p50Ms",
+        "moveBp": 150
+      },
+      {
+        "target": "redis",
+        "metric": "qps1",
+        "moveBp": 150
+      },
+      {
+        "target": "redis",
+        "metric": "qps8",
+        "moveBp": 150
+      },
+      {
+        "target": "mariadb",
+        "metric": "p50Ms",
+        "moveBp": 150
+      },
+      {
+        "target": "mariadb",
+        "metric": "qps1",
+        "moveBp": 150
+      },
+      {
+        "target": "mariadb",
+        "metric": "qps8",
+        "moveBp": 150
+      },
+      {
+        "target": "pgvector",
+        "metric": "p50Ms",
+        "moveBp": 150
+      },
+      {
+        "target": "pgvector",
+        "metric": "qps1",
+        "moveBp": 150
+      },
+      {
+        "target": "pgvector",
+        "metric": "qps8",
+        "moveBp": 150
+      },
+      {
+        "target": "qdrant",
+        "metric": "p50Ms",
+        "moveBp": 150
+      },
+      {
+        "target": "qdrant",
+        "metric": "qps1",
+        "moveBp": 150
+      },
+      {
+        "target": "qdrant",
+        "metric": "qps8",
+        "moveBp": 150
+      },
+      {
+        "target": "sqlitevec",
+        "metric": "p50Ms",
+        "moveBp": 150
+      },
+      {
+        "target": "sqlitevec",
+        "metric": "qps1",
+        "moveBp": 150
+      },
+      {
+        "target": "sqlitevec",
+        "metric": "qps8",
+        "moveBp": 150
+      },
+      {
+        "target": "sql",
+        "metric": "p50Ms",
+        "moveBp": 150
+      },
+      {
+        "target": "sql",
+        "metric": "qps1",
+        "moveBp": 150
+      },
+      {
+        "target": "sql",
+        "metric": "qps8",
+        "moveBp": 150
+      }
+    ],
+    "medianAbsMoveBp": 150,
+    "largest": {
+      "target": "sqlitevec",
+      "metric": "qps8",
+      "moveBp": 390
+    },
+    "unconfirmedOrders": [
+      {
+        "metric": "p50Ms",
+        "a": "mariadb",
+        "b": "pgvector",
+        "session": "v7"
+      }
+    ],
+    "closeToLine": [
+      {
+        "metric": "qps8",
+        "a": "redis",
+        "b": "mariadb",
+        "minRatioBp": 13100
+      }
+    ],
+    "onLine": [
+      {
+        "metric": "p50Ms",
+        "a": "mariadb",
+        "b": "sqlitevec",
+        "minRatioBp": 13513
+      }
+    ]
+  },
+  "recall": [
+    {
+      "target": "redis",
+      "hits": {
+        "v7": [
+          200,
+          200,
+          200
+        ],
+        "v8": [
+          200,
+          200,
+          200
+        ]
+      },
+      "of": 200,
+      "differs": false
+    },
+    {
+      "target": "mariadb",
+      "hits": {
+        "v7": [
+          200,
+          200,
+          200
+        ],
+        "v8": [
+          200,
+          200,
+          200
+        ]
+      },
+      "of": 200,
+      "differs": false
+    },
+    {
+      "target": "pgvector",
+      "hits": {
+        "v7": [
+          200,
+          200,
+          200
+        ],
+        "v8": [
+          200,
+          200,
+          200
+        ]
+      },
+      "of": 200,
+      "differs": false
+    },
+    {
+      "target": "qdrant",
+      "hits": {
+        "v7": [
+          198,
+          198,
+          198
+        ],
+        "v8": [
+          198,
+          198,
+          197
+        ]
+      },
+      "of": 200,
+      "differs": true
+    },
+    {
+      "target": "sqlitevec",
+      "hits": {
+        "v7": [
+          200,
+          200,
+          200
+        ],
+        "v8": [
+          200,
+          200,
+          200
+        ]
+      },
+      "of": 200,
+      "differs": false
+    },
+    {
+      "target": "sql",
+      "hits": {
+        "v7": [
+          200,
+          200,
+          200
+        ],
+        "v8": [
+          200,
+          200,
+          200
+        ]
+      },
+      "of": 200,
+      "differs": false
+    }
+  ],
+  "clock": {
+    "perSession": {
+      "v7": {
+        "pinned": true,
+        "pinnedMhz": 3500,
+        "noTurbo": 1,
+        "uncore": "0x1e1e",
+        "clockOffPasses": 0,
+        "clockUnreadPasses": 0,
+        "legacyParsed": true
+      },
+      "v8": {
+        "pinned": true,
+        "pinnedMhz": 3500,
+        "noTurbo": 1,
+        "uncore": "0x1e1e",
+        "clockOffPasses": 0,
+        "clockUnreadPasses": 0,
+        "legacyParsed": false
+      }
+    },
+    "droppedWarnings": [
+      {
+        "run": "20261006-130619-eshoponweb",
+        "text": "clock off its pinned value during oracle default@8: the engine CPUs averaged 3121 MHz",
+        "target": "oracle",
+        "pass": "default@8",
+        "engineMedianMhz": 3492,
+        "clientMedianMhz": 3492
+      }
+    ]
+  },
+  "machine": {
+    "cpu": "Intel(R) Xeon(R) CPU E5-1620 v3 @ 3.50GHz",
+    "logicalCpus": 8,
+    "ramGiB": 62.7,
+    "os": "Ubuntu 24.04.5 LTS",
+    "governor": "performance",
+    "partition": "client 0-1,4-5; engines 2-3,6-7"
+  },
+  "images": [
+    {
+      "target": "redis",
+      "id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "lastTagTimeUtc": "2026-09-30T10:00:00Z",
+      "beforeFirstV7Start": true
+    },
+    {
+      "target": "mariadb",
+      "id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "lastTagTimeUtc": "2026-09-30T10:00:00Z",
+      "beforeFirstV7Start": true
+    },
+    {
+      "target": "pgvector",
+      "id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "lastTagTimeUtc": "2026-09-30T10:00:00Z",
+      "beforeFirstV7Start": true
+    },
+    {
+      "target": "qdrant",
+      "id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "lastTagTimeUtc": "2026-09-30T10:00:00Z",
+      "beforeFirstV7Start": true
+    },
+    {
+      "target": "sqlitevec",
+      "id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "lastTagTimeUtc": "2026-09-30T10:00:00Z",
+      "beforeFirstV7Start": true
+    },
+    {
+      "target": "sql",
+      "id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "lastTagTimeUtc": "2026-09-30T10:00:00Z",
+      "beforeFirstV7Start": true
+    }
+  ],
+  "why": [
+    {
+      "target": "redis",
+      "facts": [
+        {
+          "kind": "index",
+          "text": "HNSW graph, approximate search",
+          "source": "results:targets[redis].index#HNSW",
+          "confidence": "recorded"
+        },
+        {
+          "kind": "search",
+          "text": "the search walked the graph",
+          "source": "results:targets[redis].indexState.afterLoad.detail#graph",
+          "confidence": "measured",
+          "mode": "approximate",
+          "where": "in all 6 run(s) selected, at targets[redis].indexState.afterLoad.detail"
+        }
+      ],
+      "costs": {
+        "engineCpuMsPerSearch": {
+          "1": 0.31,
+          "8": 0.29
+        },
+        "clientCpuMsPerSearch": {
+          "1": 0.57,
+          "8": 0.36
+        },
+        "engineCpusBusyAt8": 1.7
+      }
+    },
+    {
+      "target": "mariadb",
+      "facts": [
+        {
+          "kind": "index",
+          "text": "HNSW graph, approximate search",
+          "source": "results:targets[mariadb].index#HNSW",
+          "confidence": "recorded"
+        },
+        {
+          "kind": "search",
+          "text": "the search walked the graph",
+          "source": "results:targets[mariadb].indexState.afterLoad.detail#graph",
+          "confidence": "measured",
+          "mode": "approximate",
+          "where": "in all 6 run(s) selected, at targets[mariadb].indexState.afterLoad.detail"
+        }
+      ],
+      "costs": {
+        "engineCpuMsPerSearch": {
+          "1": 0.31,
+          "8": 0.29
+        },
+        "clientCpuMsPerSearch": {
+          "1": 0.57,
+          "8": 0.36
+        },
+        "engineCpusBusyAt8": 1.7
+      }
+    },
+    {
+      "target": "pgvector",
+      "facts": [
+        {
+          "kind": "index",
+          "text": "HNSW graph, approximate search",
+          "source": "results:targets[pgvector].index#HNSW",
+          "confidence": "recorded"
+        },
+        {
+          "kind": "search",
+          "text": "the search walked the graph",
+          "source": "results:targets[pgvector].indexState.afterLoad.detail#graph",
+          "confidence": "recorded (engine\u0027s own report)",
+          "mode": "approximate",
+          "where": "in all 6 run(s) selected, at targets[pgvector].indexState.afterLoad.detail"
+        }
+      ],
+      "costs": {
+        "engineCpuMsPerSearch": {
+          "1": 0.31,
+          "8": 0.29
+        },
+        "clientCpuMsPerSearch": {
+          "1": 0.57,
+          "8": 0.36
+        },
+        "engineCpusBusyAt8": 1.7
+      }
+    },
+    {
+      "target": "qdrant",
+      "facts": [
+        {
+          "kind": "index",
+          "text": "HNSW graph, approximate search",
+          "source": "results:targets[qdrant].index#HNSW",
+          "confidence": "recorded"
+        },
+        {
+          "kind": "search",
+          "text": "no index used, exact scan by design",
+          "source": "results:targets[qdrant].indexState.afterLoad.detail#graph",
+          "confidence": "measured",
+          "mode": "exact",
+          "where": "in all 6 run(s) selected, at targets[qdrant].indexState.afterLoad.detail"
+        }
+      ],
+      "costs": {
+        "engineCpuMsPerSearch": {
+          "1": 0.31,
+          "8": 0.29
+        },
+        "clientCpuMsPerSearch": {
+          "1": 0.57,
+          "8": 0.36
+        },
+        "engineCpusBusyAt8": 1.7
+      }
+    },
+    {
+      "target": "sqlitevec",
+      "facts": [
+        {
+          "kind": "index",
+          "text": "HNSW graph, approximate search",
+          "source": "results:targets[sqlitevec].index#HNSW",
+          "confidence": "recorded"
+        },
+        {
+          "kind": "search",
+          "text": "no index used, exact scan by design",
+          "source": "results:targets[sqlitevec].indexState.afterLoad.detail#graph",
+          "confidence": "measured",
+          "mode": "exact",
+          "where": "in all 6 run(s) selected, at targets[sqlitevec].indexState.afterLoad.detail"
+        }
+      ],
+      "costs": {
+        "engineCpuMsPerSearch": {
+          "1": null,
+          "8": null
+        },
+        "clientCpuMsPerSearch": {
+          "1": 0.57,
+          "8": 0.36
+        },
+        "engineCpusBusyAt8": 1.7
+      }
+    },
+    {
+      "target": "sql",
+      "facts": [
+        {
+          "kind": "index",
+          "text": "HNSW graph, approximate search",
+          "source": "results:targets[sql].index#HNSW",
+          "confidence": "recorded"
+        },
+        {
+          "kind": "search",
+          "text": "no index used, exact scan by design",
+          "source": "results:targets[sql].indexState.afterLoad.detail#graph",
+          "confidence": "measured",
+          "mode": "exact",
+          "where": "in all 6 run(s) selected, at targets[sql].indexState.afterLoad.detail"
+        }
+      ],
+      "costs": {
+        "engineCpuMsPerSearch": {
+          "1": 0.31,
+          "8": 0.29
+        },
+        "clientCpuMsPerSearch": {
+          "1": 0.57,
+          "8": 0.36
+        },
+        "engineCpusBusyAt8": 1.7
+      }
+    }
+  ],
+  "sentences": [
+    {
+      "slot": "headline",
+      "text": "Every engine below Redis, which holds its data in memory, took at least 1.35 times as long per search in each session.",
+      "sources": [
+        {
+          "kind": "results",
+          "ref": "targets[redis].index#HNSW",
+          "value": "HNSW"
+        }
+      ]
+    },
+    {
+      "slot": "subtitle",
+      "text": "Six engines on 524 vectors of 1024 dimensions, 20 questions, one machine.",
+      "sources": [
+        {
+          "kind": "results",
+          "ref": "targets[redis].index#HNSW",
+          "value": "HNSW"
+        }
+      ]
+    },
+    {
+      "slot": "table.p50Ms",
+      "text": "p50 is the median over every search of one pass.",
+      "sources": [
+        {
+          "kind": "results",
+          "ref": "targets[redis].index#HNSW",
+          "value": "HNSW"
+        }
+      ]
+    },
+    {
+      "slot": "table.qps1",
+      "text": "Same one-searcher pass as p50.",
+      "sources": [
+        {
+          "kind": "results",
+          "ref": "targets[redis].index#HNSW",
+          "value": "HNSW"
+        }
+      ]
+    },
+    {
+      "slot": "table.exactP50Ms",
+      "text": "Exact mode differs per engine.",
+      "sources": [
+        {
+          "kind": "results",
+          "ref": "targets[redis].index#HNSW",
+          "value": "HNSW"
+        }
+      ]
+    },
+    {
+      "slot": "rule.threshold",
+      "text": "A is ahead of B when every run of A beats every run of B by the threshold in each session.",
+      "sources": [
+        {
+          "kind": "results",
+          "ref": "targets[redis].index#HNSW",
+          "value": "HNSW"
+        }
+      ]
+    },
+    {
+      "slot": "basis.largest",
+      "text": "The largest move seen between two runs of one engine was 29.08 percent.",
+      "sources": [
+        {
+          "kind": "results",
+          "ref": "targets[redis].index#HNSW",
+          "value": "HNSW"
+        }
+      ]
+    },
+    {
+      "slot": "recall.note",
+      "text": "Recall is counted in hits.",
+      "sources": [
+        {
+          "kind": "results",
+          "ref": "targets[redis].index#HNSW",
+          "value": "HNSW"
+        }
+      ]
+    },
+    {
+      "slot": "why.framing",
+      "text": "CPU per search is cost summed over every thread. It can exceed the time per search. This test did not isolate causes.",
+      "sources": [
+        {
+          "kind": "results",
+          "ref": "targets[redis].index#HNSW",
+          "value": "HNSW"
+        }
+      ]
+    },
+    {
+      "slot": "drift.summary",
+      "text": "Figures moved by a median of 1.5 percent between the sessions.",
+      "sources": [
+        {
+          "kind": "results",
+          "ref": "targets[redis].index#HNSW",
+          "value": "HNSW"
+        }
+      ]
+    },
+    {
+      "slot": "disclosure.clock",
+      "text": "The clock was held at the pinned value.",
+      "sources": [
+        {
+          "kind": "results",
+          "ref": "targets[redis].index#HNSW",
+          "value": "HNSW"
+        }
+      ]
+    },
+    {
+      "slot": "disclosure.durability.redis",
+      "text": "Redis: save \u0022300 1\u0022 and appendonly no: a crash can lose the writes since the last snapshot, plus the time a snapshot takes.",
+      "sources": [
+        {
+          "kind": "results",
+          "ref": "targets[redis].index#HNSW",
+          "value": "HNSW"
+        }
+      ],
+      "quote": true
+    },
+    {
+      "slot": "notinreport.targets",
+      "text": "Qdrant (HNSW) is not in this report.",
+      "sources": [
+        {
+          "kind": "results",
+          "ref": "targets[redis].index#HNSW",
+          "value": "HNSW"
+        }
+      ]
+    },
+    {
+      "slot": "runs.reuse.v7",
+      "text": "The runs of the first session were measured before this set was built and are read where they were written.",
+      "sources": [
+        {
+          "kind": "results",
+          "ref": "targets[redis].index#HNSW",
+          "value": "HNSW"
+        }
+      ]
+    },
+    {
+      "slot": "method.notes",
+      "text": "Order: targets ran one at a time in a random order.",
+      "sources": [
+        {
+          "kind": "results",
+          "ref": "targets[redis].index#HNSW",
+          "value": "HNSW"
+        }
+      ],
+      "quote": true
+    },
+    {
+      "slot": "subtitle.data",
+      "text": "Data: eshoponweb, 524 vectors of 1024 dimensions; 20 queries, top 10 hits each.",
+      "sources": [
+        {
+          "kind": "results",
+          "ref": "results:pipeline",
+          "value": "eshoponweb"
+        },
+        {
+          "kind": "results",
+          "ref": "results:rows",
+          "value": "524"
+        },
+        {
+          "kind": "results",
+          "ref": "results:dimension",
+          "value": "1024"
+        },
+        {
+          "kind": "results",
+          "ref": "results:queryCount",
+          "value": "20"
+        },
+        {
+          "kind": "results",
+          "ref": "results:top",
+          "value": "10"
+        }
+      ]
+    }
+  ],
+  "audit": {
+    "sentencesChecked": 20,
+    "failures": [],
+    "factsSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "exclusionsSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "queries": {
+    "recorded": "golden: 20 labelled questions from /home/dan/ForClaude/evalkit/questions_golden.json, embedded with qwen3-emb-0.6b (cached in /home/dan/gvb-data/bench-cache/golden-eshoponweb-68df42ca69efa079.json, no embedding calls)",
+    "copyPath": "design/bench-inputs/questions_golden.json"
+  },
+  "build": {
+    "measured": [
+      {
+        "session": "v7",
+        "commit": null,
+        "commitShort": null
+      },
+      {
+        "session": "v8",
+        "commit": "9b924200abc30000000000000000000000000000",
+        "commitShort": "9b924200abc3"
+      }
+    ]
+  }
+}

@@ -44,7 +44,7 @@ public static class BenchRunList
 
    /// <summary>
    /// The name a reader sees for a pipeline (data set) name as a results file records it, for example "eShopOnWeb" for "eshoponweb"; the name itself
-   /// when this table does not know it. One table for the run list and the header at the top of the summary page, so the data set is spelled one way.
+   /// when this table does not know it. One table for the run list and the header of the Vector search benchmark page, so the data set is spelled one way.
    /// </summary>
    /// <param name="pipeline">The pipeline name as recorded.</param>
    /// <returns>The name to print.</returns>

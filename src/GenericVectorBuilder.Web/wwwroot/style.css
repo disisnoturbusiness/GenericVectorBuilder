@@ -264,7 +264,7 @@ input[type="text"], input[type="password"], select {
 /* Long paths in the run notes wrap instead of pushing the page sideways at phone width. */
 .bench li, .bench p { overflow-wrap: anywhere; }
 
-/* Benchmark header (top of /bench-results): what the numbers are of, then the engines in order of searches per second with eight at once. */
+/* Benchmark header (the Vector search benchmark page, /benchmark): what the numbers are of, then the engines in order of searches per second with eight at once. */
 .bench-header { margin: 0 0 24px; padding: 14px 16px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; }
 .bench .bench-header-lead { font-size: 21px; line-height: 1.35; font-weight: 600; margin: 0 0 6px; }
 .bench-header-from, .bench-header-nodata { margin: 0 0 6px; font-size: 14px; }

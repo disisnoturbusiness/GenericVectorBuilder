@@ -11,13 +11,15 @@ using GenericVectorBuilder.Web.Endpoints;
 namespace GenericVectorBuilder.Tests.Unit;
 
 /// <summary>
-/// The header at the top of the /bench-results page: what the numbers are of (the data set, its size, the queries), then the engines in order of searches
-/// per second with eight searchers at once, each with its ms per search worked out from that figure and its difference from the row above.
+/// The header of the Vector search benchmark page (/benchmark): what the numbers are of (the data set, its size, the queries), then the engines in order of
+/// searches per second with eight searchers at once, each with its ms per search worked out from that figure and its difference from the row above.
+/// Every test here reads the header out of the page the route serves, so it holds the page and not only the class that draws it.
 /// What these tests hold the header to: the order is the order of the file's qps8 medians, every figure is the file's or worked out from it (ms is one second
 /// over the searches per second; a difference is from the row above), a row the report's test does not separate from the row above carries a marker exactly
 /// where the file's notSeparatedFrom names that row, an engine row the file gives a note (Redis holds its data in memory) carries that note as a bold
 /// label, a row the tool recorded as not held is last, labelled and given no figure, no sentence is typed into the header that a legend or the file does not
-/// hold, and the header sits above everything the page printed before.
+/// hold, and the header links to the full results page. That the full results page holds no header, and links back to this one, is held in
+/// <see cref="BenchmarkPageTests"/>.
 /// Why built from the v8 fixture and a copy of the real set: the fixture lets a test change one field and see the header follow; the real set (when this
 /// machine holds it) shows the header reads what the consolidate command actually wrote.
 /// </summary>
@@ -189,7 +191,7 @@ public sealed class BenchHeaderTests : IDisposable
       Assert.Equal( RankedOf( json ).Select( e => e.Target ), all.Take( all.Count - 1 ).Select( s => s.Engine ) );
       Assert.True( header.IndexOf( BenchLegends.H_NOT_RANKED, StringComparison.Ordinal ) > header.IndexOf( "data-engine=\"sql\"", StringComparison.Ordinal ) );
       Assert.Contains( BenchLegends.NOT_HELD, WebUtility.HtmlDecode( header ) );
-      Assert.Contains( BenchLegends.L_HEADER_FIGURES_BELOW, header );
+      Assert.Contains( BenchLegends.L_HEADER_FIGURES_IN_FULL, header );
    }
 
    /// <summary>
@@ -411,53 +413,55 @@ public sealed class BenchHeaderTests : IDisposable
    }
 
    /// <summary>
-   /// One line links down to the full results that are already on the page, and the anchor it points at is on the page once, after the header and before the
-   /// page's own heading.
+   /// One line links to the full results page, at /bench-results, and it is the only link of the header: the full results are not below the header on this
+   /// page, so there is no anchor to jump to and no "below" in the link's words.
    /// </summary>
    [Fact]
-   public void OneLink_GoesDownToTheFullResults()
+   public void OneLink_GoesToTheFullResultsPage()
    {
       string json = Json();
       string page = Page( json );
       string header = HeaderOf( page );
 
-      Assert.Single( Regex.Matches( header, "<a href=\"#bench-full-results\">" ) );
-      Assert.Contains( $"<a href=\"#bench-full-results\">{BenchLegends.L_HEADER_FULL}</a>", header );
-      Assert.Single( Regex.Matches( page, "id=\"bench-full-results\"" ) );
-      Assert.True( page.IndexOf( "id=\"bench-full-results\"", StringComparison.Ordinal ) < page.IndexOf( "<h1>Vector search benchmark</h1>", StringComparison.Ordinal ) );
+      Assert.Single( Regex.Matches( header, "<a href=" ) );
+      Assert.Single( Regex.Matches( header, "<a href=\"/bench-results\">" ) );
+      Assert.Contains( $"<a href=\"/bench-results\">{BenchLegends.L_HEADER_FULL}</a>", header );
+      Assert.DoesNotContain( "bench-full-results", page );
+      Assert.DoesNotContain( "below", Visible( header ) );
    }
 
    /// <summary>
-   /// The header is the first thing in the page's main block, above the page's own heading, and what was on the page before it follows unchanged: the heading,
-   /// the line naming the folder, the headline, the first table and the list of all runs, in that order.
+   /// The header is the first thing in the page's main block after the page's heading, and nothing but the header follows: the page holds no summary line, no
+   /// headline, no table of the full results and no list of runs.
    /// </summary>
    [Fact]
-   public void TheHeader_IsAboveEverythingTheSummaryPageHad_AndTheRestFollowsUnchanged()
+   public void TheHeader_FollowsTheHeading_AndNothingOfTheFullResultsIsOnThePage()
    {
-      WriteSet( FOLDER, Json() );
-      string page = BenchResultsEndpoints.ListPageHtml( _root );
+      string page = Page( Json() );
       string header = HeaderOf( page );
-      string rest = page.Replace( header, string.Empty );
 
-      Assert.Contains( "<main class=\"card bench\"><h1>Vector search benchmark</h1><p class=\"bench-source muted\">Numbers from <a href=\"/bench-results/published-2026-10-08\">published-2026-10-08</a>.</p>", rest );
-      Assert.True( page.IndexOf( "<main class=\"card bench\"><section class=\"bench-header\"", StringComparison.Ordinal ) > 0 );
-      int lead = rest.IndexOf( "<p class=\"bench-lead\">", StringComparison.Ordinal );
-      int table = rest.IndexOf( "<table class=\"bench-table\">", StringComparison.Ordinal );
-      int runs = rest.IndexOf( "<h2>All runs</h2>", StringComparison.Ordinal );
-      Assert.True( lead > 0 && table > lead && runs > table );
+      Assert.Contains( "<main class=\"card bench\"><h1>Vector search benchmark</h1><section class=\"bench-header\"", page );
+      Assert.EndsWith( header + "</main></body></html>", page );
+      Assert.DoesNotContain( "<p class=\"bench-lead\">", page );
+      Assert.DoesNotContain( "<table class=\"bench-table\">", page );
+      Assert.DoesNotContain( "<h2>All runs</h2>", page );
    }
 
    /// <summary>
-   /// A page with no published folder has no header.
+   /// A page with no published folder has no header: it says so, and still links to the full results.
    /// </summary>
    [Fact]
    public void ThereIsNoHeader_WithoutAPublishedFolder()
    {
-      Assert.DoesNotContain( "bench-header", BenchResultsEndpoints.ListPageHtml( _root ) );
+      string page = BenchResultsEndpoints.BenchmarkPageHtml( _root );
+
+      Assert.DoesNotContain( "<section class=\"bench-header\"", page );
+      Assert.Contains( BenchLegends.L_BENCHMARK_NONE, page );
+      Assert.Contains( $"<a href=\"/bench-results\">{BenchLegends.L_HEADER_FULL}</a>", page );
    }
 
    /// <summary>
-   /// A published file that cannot be read shows the error where the tables would be, and no header: bad JSON, a file the reader refuses, and a shape nobody
+   /// A published file that cannot be read shows the error where the header would be, and no header: bad JSON, a file the reader refuses, and a shape nobody
    /// knows.
    /// </summary>
    [Theory]
@@ -467,10 +471,11 @@ public sealed class BenchHeaderTests : IDisposable
    public void ThereIsNoHeader_WhenTheFileCannotBeRead( string json )
    {
       WriteSet( FOLDER, json );
-      string page = BenchResultsEndpoints.ListPageHtml( _root );
+      string page = BenchResultsEndpoints.BenchmarkPageHtml( _root );
 
       Assert.Contains( $"<p class=\"errors\">{BenchLegends.UNREADABLE}:", page );
-      Assert.DoesNotContain( "bench-header", page );
+      Assert.DoesNotContain( "<section class=\"bench-header\"", page );
+      Assert.Contains( $"<a href=\"/bench-results\">{BenchLegends.L_HEADER_FULL}</a>", page );
    }
 
    /// <summary>
@@ -551,7 +556,7 @@ public sealed class BenchHeaderTests : IDisposable
    public void ANonPositiveMedian_IsReportedLoudly_NotPrintedAsInfinity()
    {
       string json = Json( root => RowOf( root, "qps8", "sql" )["median"] = 0 );
-      string header = BenchHeader.Html( json, FOLDER );
+      string header = Header( json );
 
       Assert.Contains( BenchLegends.L_HEADER_ERROR, header );
       Assert.Contains( "sql", header );
@@ -602,7 +607,7 @@ public sealed class BenchHeaderTests : IDisposable
    {
       string json = File.ReadAllText( REAL_SET );
       List<Expected> expected = RankedOf( json );
-      string header = BenchHeader.Html( json, FOLDER );
+      string header = Header( json );
       List<Shown> shown = RankedRows( header );
       List<Shown> all = AllRows( header );
 
@@ -732,20 +737,20 @@ public sealed class BenchHeaderTests : IDisposable
    }
 
    /// <summary>
-   /// The header for a file, as the page builds it.
+   /// The header for a file, as the Vector search benchmark page prints it: the header section of the page, found in the page.
    /// </summary>
-   private static string Header( string json )
+   private string Header( string json )
    {
-      return BenchHeader.Html( json, FOLDER );
+      return HeaderOf( Page( json ) );
    }
 
    /// <summary>
-   /// The page for a file, served as the summary of a published folder.
+   /// The Vector search benchmark page for a file, served as the page of a published folder.
    /// </summary>
    private string Page( string json )
    {
       WriteSet( FOLDER, json );
-      return BenchResultsEndpoints.ListPageHtml( _root );
+      return BenchResultsEndpoints.BenchmarkPageHtml( _root );
    }
 
    /// <summary>

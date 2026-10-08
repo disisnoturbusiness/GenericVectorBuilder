@@ -1,0 +1,14 @@
+{ "startedUtc": "2026-10-06T13:06:19Z", "pipeline": "eshoponweb", "rows": 524, "queries": "golden: 20 labelled", "queryCount": 20, "top": 10,
+  "machine": { "cpu": "Intel Xeon E5-1620 v3", "logicalCpus": 8, "ramGiB": 62.7, "os": "Ubuntu 24.04.5 LTS" },
+  "conditions": { "buildConfiguration": "Release", "governor": "performance", "clientCpus": "0-1,4-5", "engineCpus": "2-3,6-7", "warmupSearches": 20, "exactSeconds": 60,
+    "clock": { "pinned": true, "pinnedMhz": 3500, "noTurbo": { "before": 1, "during": 1 }, "uncoreMsr620": { "before": "0xc1e", "during": "0x1e1e" } },
+    "passes": [ { "target": "oracle", "pass": "default@8", "clockRead": true, "clockOff": true, "engineMhzMedian": 3121, "clientMhzMedian": 3141 },
+                { "target": "redis", "pass": "default@1", "clockRead": false },
+                { "target": "sql", "pass": "exact", "busyBox": true, "outsideLoadDuring": 0.31 },
+                { "target": "sql", "pass": "default@1", "busyBox": false } ] },
+  "targets": [
+    { "name": "sql", "search": { "qps": { "1": 241.0, "8": 611.6 }, "p50Ms": 4.06, "exactP50Ms": 4.2, "recall": 1, "recallHits": 200, "clientCpuMsPerSearch": { "1": 1.22, "8": 1.18 } } },
+    { "name": "redis", "search": { "qps": { "1": 2527.0, "8": 5120.1 }, "p50Ms": 0.40, "exactP50Ms": 0.9, "recall": 0.995, "clientCpuMsPerSearch": { "1": 0.57, "8": 0.36 } } },
+    { "name": "oracle", "search": { "qps": { "1": 1050.9, "8": 2802.2 }, "p50Ms": 0.93, "recall": 1, "clientCpuMsPerSearch": { "default@1": 0.88 } } },
+    { "name": "weaviate", "search": { "p50Ms": 5.36 } }
+  ] }

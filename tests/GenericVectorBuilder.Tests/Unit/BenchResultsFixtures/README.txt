@@ -15,3 +15,12 @@ v8h.consolidated.json  byte for byte the consolidated.json that the consolidate 
 v8h.consolidated.md  byte for byte the consolidated.md the same command wrote beside the JSON file above
 
 The tests find this folder from their own source path (see BenchResultsFixtureFiles), so they need no change to Tests.csproj.
+
+The bench-split files are for the tests of the split of the summary page into the Vector search benchmark page (/benchmark) and the full results page (/bench-results).
+bench-split.consolidated.json  the v8 test fixture (BenchResultsV8Fixture) with a data line, the recorded queries, the builds, a not-held ClickHouse row and the Redis note added, written with indentation; the input of the pages below
+bench-split.consolidated.md  the fixture's report (BenchResultsV8Fixture.REPORT_MD), the second input of the set page
+bench-split.results.json  the shared run fixture (BenchResultsFixtures.RUN_RESULTS_V8_JSON), the input of the run page
+bench-split.list-page.pre-6865c80.html  the /bench-results page for those inputs, rendered by the code of commit 3f16f85 (the parent of 6865c80, the commit that put a header on that page), with the run folder 20261006-130619-eshoponweb beside the set published-2026-10-08
+bench-split.set-page.pre-6865c80.html  the page of the folder published-2026-10-08, rendered by the code of 3f16f85 (byte for byte the page 6865c80 rendered)
+bench-split.run-page.pre-6865c80.html  the page of the folder 20261006-130619-eshoponweb, rendered by the code of 3f16f85 (byte for byte the page 6865c80 rendered)
+bench-split.header.at-6865c80.html  the header section the /bench-results page had at 6865c80 for those inputs, with the link and the three places that said "below" as they were then
