@@ -134,9 +134,11 @@ public static class BenchResultsEndpoints
    }
 
    /// <summary>
-   /// Builds the /bench-results page: the summary from the newest published consolidated.json that
-   /// can be read (see <see cref="PublishedFolders"/>), then every run. With no published folder it
-   /// falls back to the run list alone.
+   /// Builds the /bench-results page: the header (what the numbers are of, then the engines in order of searches per second with eight at once; see
+   /// <see cref="BenchHeader"/>), then the summary from the newest published consolidated.json that can be read (see <see cref="PublishedFolders"/>), then
+   /// every run. With no published folder it falls back to the run list alone.
+   /// Why the header is above the page's own heading: it is the page's first answer, "what is this and what came out", and everything that was on the page
+   /// before it stays below it unchanged.
    /// Internal so tests can render it against a folder of their own.
    /// </summary>
    /// <param name="root">Results root.</param>
@@ -153,7 +155,8 @@ public static class BenchResultsEndpoints
       IReadOnlyList<string> published = PublishedFolders( root );
       if( published.Count > 0 )
       {
-         body.Append( "<h1>Vector search benchmark</h1>" ).Append( PublishedSummary( root, published, notesFile ) ).Append( "<h2>All runs</h2>" );
+         ( string header, string summary ) = PublishedSummary( root, published, notesFile );
+         body.Append( header ).Append( "<h1>Vector search benchmark</h1>" ).Append( summary ).Append( "<h2>All runs</h2>" );
       }
       else
       {
@@ -509,12 +512,13 @@ public static class BenchResultsEndpoints
    /// none can be read, the error stands where the tables would be.
    /// Why fall back at all: a publish that is half written (or one bad file) must not take the
    /// whole page's numbers away; why say so: the older numbers are not the newest ones.
+   /// The header is built from the same file as the summary under it, so the two always agree on which set they show.
    /// </summary>
    /// <param name="root">Results root.</param>
    /// <param name="folders">Published folder names, newest first (not empty).</param>
    /// <param name="notesFile">The list file of corrections the run pages read, or null when the caller does not check for it.</param>
-   /// <returns>HTML fragment.</returns>
-   private static string PublishedSummary( string root, IReadOnlyList<string> folders, string? notesFile )
+   /// <returns>The header (empty when no file could be read or the file is not in the v8 shape) and the summary, both HTML fragments.</returns>
+   private static ( string Header, string Summary ) PublishedSummary( string root, IReadOnlyList<string> folders, string? notesFile )
    {
       string? failedFolder = null;
       string? failure = null;
@@ -526,7 +530,7 @@ public static class BenchResultsEndpoints
             string block = ConsolidatedHtml( json, folder );
             string source = $"<p class=\"bench-source muted\">Numbers from <a href=\"/bench-results/{Enc( folder )}\">{Enc( folder )}</a>.</p>";
             string fallback = failedFolder == null ? string.Empty : $"<p class=\"errors\">The newest published results, {Enc( failedFolder )}, could not be read ({Enc( failure ?? "no reason given" )}), so the page shows the older {Enc( folder )}.</p>";
-            return fallback + source + NoListNotice( json, notesFile ) + block;
+            return ( BenchHeader.Html( json, folder ), fallback + source + NoListNotice( json, notesFile ) + block );
          }
          catch( Exception ex ) when( IsReadError( ex ) )
          {
@@ -535,7 +539,7 @@ public static class BenchResultsEndpoints
          }
       }
 
-      return $"<p class=\"errors\">{Enc( BenchLegends.UNREADABLE )}: {Enc( failure ?? "no reason given" )}</p>";
+      return ( string.Empty, $"<p class=\"errors\">{Enc( BenchLegends.UNREADABLE )}: {Enc( failure ?? "no reason given" )}</p>" );
    }
 
    /// <summary>

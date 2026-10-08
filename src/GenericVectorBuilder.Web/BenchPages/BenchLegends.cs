@@ -313,6 +313,120 @@ public static class BenchLegends
    /// <summary>Text of the separation cell of a row that is not ranked because its pass was not held.</summary>
    public const string L_NOT_HELD = "not held, not ranked";
 
+   /// <summary>First words of the header at the top of the summary page; the data set's name follows.</summary>
+   public const string L_HEADER_FROM = "These benchmarks were taken from the";
+
+   /// <summary>Word after the data set's name in the header.</summary>
+   public const string L_HEADER_DATASET = "data set";
+
+   /// <summary>Words between the row count and the dimension count in the header's description of the data.</summary>
+   public const string L_HEADER_VECTORS_OF = "vectors of";
+
+   /// <summary>Word after the dimension count in the header's description of the data.</summary>
+   public const string L_HEADER_DIMENSIONS = "dimensions";
+
+   /// <summary>Words before the queries in the header's first sentence.</summary>
+   public const string L_HEADER_AND_FROM = "and from the";
+
+   /// <summary>End of the header's first sentence: what the data set and the queries were used for.</summary>
+   public const string L_HEADER_RAN = "which ran the speed test.";
+
+   /// <summary>Name of a query set the file records as "golden".</summary>
+   public const string L_HEADER_GOLDEN = "golden questions";
+
+   /// <summary>Name of a query set the file records as "random".</summary>
+   public const string L_HEADER_RANDOM = "random stored vectors";
+
+   /// <summary>Name of a query set the file records under any other kind.</summary>
+   public const string L_HEADER_QUERIES = "queries";
+
+   /// <summary>Words before the path of the file the queries were read from.</summary>
+   public const string L_HEADER_QUESTIONS_FROM = "The queries are read from";
+
+   /// <summary>Printed in the header when the file holds no data line, so the data set and the queries are not named.</summary>
+   public const string L_HEADER_NO_DATA = "The file records no data line, so the data set and the queries are not named here.";
+
+   /// <summary>First words of the heading over the order of the engines; the number of searchers follows.</summary>
+   public const string L_HEADER_MULTI_A = "Multi search,";
+
+   /// <summary>Rest of the heading over the order of the engines.</summary>
+   public const string L_HEADER_MULTI_B = "searchers at once: database engines in order";
+
+   /// <summary>What the order of the engines is, as the header states it.</summary>
+   public const string L_HEADER_ORDER = "Most searches per second first.";
+
+   /// <summary>Words before the number of runs the searches per second are the median of.</summary>
+   public const string L_HEADER_MEDIAN_A = "Searches per second is the median of the";
+
+   /// <summary>Word after the number of runs.</summary>
+   public const string L_HEADER_MEDIAN_B = "runs.";
+
+   /// <summary>How the ms per search of the header is made, and that it is not a measured latency.</summary>
+   public const string L_HEADER_MS = "The ms per search is worked out as one second divided by the searches per second, so it is not a timed latency.";
+
+   /// <summary>What each difference of the header is taken from.</summary>
+   public const string L_HEADER_DIFF = "Each difference is from the row above it.";
+
+   /// <summary>Column heading of the engine's name.</summary>
+   public const string L_HEADER_COL_ENGINE = "Engine";
+
+   /// <summary>Column heading of the searches per second.</summary>
+   public const string L_HEADER_COL_QPS = "Searches per second";
+
+   /// <summary>Column heading of the ms per search worked out from the searches per second.</summary>
+   public const string L_HEADER_COL_MS = "ms per search";
+
+   /// <summary>Column heading of the difference in ms per search from the row above.</summary>
+   public const string L_HEADER_COL_DIFF = "Difference from the row above, ms per search";
+
+   /// <summary>Printed in the difference cell of the first row, which has no row above it.</summary>
+   public const string L_HEADER_FIRST = "first in the list";
+
+   /// <summary>Marker on a row that the report's test does not separate from the row above it.</summary>
+   public const string L_HEADER_WITHIN = "within run-to-run spread of the row above";
+
+   /// <summary>What the marker on a row means, and what the order of such rows is.</summary>
+   public const string L_HEADER_WITHIN_LEGEND = "A row marked within run-to-run spread is not separated from the row above by the report's test. The order shown is the order of the medians.";
+
+   /// <summary>Printed after a note that the file binds to an engine's row, such as that it holds its data in memory.</summary>
+   public const string L_HEADER_NOTE_KEEP = "Read this row with that in mind.";
+
+   /// <summary>Label of a row that has one session of figures and is not ranked.</summary>
+   public const string L_HEADER_ONE_SESSION = "one session, not ranked";
+
+   /// <summary>Where the figures of the rows that are not ranked are.</summary>
+   public const string L_HEADER_FIGURES_BELOW = "The figures of a row that is not ranked are in the full results below.";
+
+   /// <summary>Text of the link from the header down to the full results.</summary>
+   public const string L_HEADER_FULL = "Full results below: every table, the flags and every run";
+
+   /// <summary>Words before the builds that measured the runs, in the small text of the header.</summary>
+   public const string L_HEADER_BUILD = "Build that measured the runs:";
+
+   /// <summary>Printed for a session whose runs record no build.</summary>
+   public const string L_HEADER_NOT_RECORDED = "not recorded";
+
+   /// <summary>Printed when the file records no build.</summary>
+   public const string L_HEADER_NO_BUILD = "No build is recorded in this file.";
+
+   /// <summary>Word before the name of the set in the small text of the header.</summary>
+   public const string L_HEADER_SET = "Set:";
+
+   /// <summary>Printed in the header of a set that is marked stopped.</summary>
+   public const string L_HEADER_STOPPED = "This set is marked stopped, so no order is shown. The stopped block below gives the reason.";
+
+   /// <summary>Words before the name of the table the header needs and the file does not hold.</summary>
+   public const string L_HEADER_NO_TABLE_A = "The file holds no table named";
+
+   /// <summary>Words after the name of the table the header needs and the file does not hold.</summary>
+   public const string L_HEADER_NO_TABLE_B = "so no order is shown.";
+
+   /// <summary>Printed when the table of the header holds no ranked row.</summary>
+   public const string L_HEADER_NO_RANKED = "The table holds no ranked row, so no order is shown.";
+
+   /// <summary>Words before the reason the header could not be built.</summary>
+   public const string L_HEADER_ERROR = "The order at the top could not be built";
+
    /// <summary>Summary line of the block that lists the clauses of the engine texts that no sentence of the page prints.</summary>
    public const string H_RECORDED_TEXTS = "Recorded engine texts, clause by clause";
 

@@ -43,6 +43,17 @@ public static class BenchRunList
    #region Public Methods
 
    /// <summary>
+   /// The name a reader sees for a pipeline (data set) name as a results file records it, for example "eShopOnWeb" for "eshoponweb"; the name itself
+   /// when this table does not know it. One table for the run list and the header at the top of the summary page, so the data set is spelled one way.
+   /// </summary>
+   /// <param name="pipeline">The pipeline name as recorded.</param>
+   /// <returns>The name to print.</returns>
+   public static string PipelineName( string pipeline )
+   {
+      return PIPELINES.GetValueOrDefault( pipeline, pipeline );
+   }
+
+   /// <summary>
    /// Describes one folder from its results.json, or its consolidated.json, or its file names, and marks it with
    /// the consolidated folders that use it.
    /// </summary>
@@ -149,7 +160,7 @@ public static class BenchRunList
       string when = Text( r, "startedUtc" ) is string started && DateTime.TryParse( started, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out DateTime at )
          ? at.ToString( "d MMM yyyy, HH:mm", CultureInfo.InvariantCulture )
          : WhenFromName( folder );
-      string pipeline = Text( r, "pipeline" ) is string p ? PIPELINES.GetValueOrDefault( p, p ) : "?";
+      string pipeline = Text( r, "pipeline" ) is string p ? PipelineName( p ) : "?";
       string data = r.TryGetProperty( "rows", out JsonElement rows ) && rows.ValueKind == JsonValueKind.Number && rows.TryGetInt64( out long n ) ? $"{pipeline}, {n.ToString( "N0", CultureInfo.InvariantCulture )} vectors" : pipeline;
       string engines = r.TryGetProperty( "targets", out JsonElement t ) && t.ValueKind == JsonValueKind.Array ? t.GetArrayLength().ToString( CultureInfo.InvariantCulture ) : "-";
       return new BenchRunInfo( folder, when, data, engines, Queries( r ) );

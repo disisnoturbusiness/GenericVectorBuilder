@@ -263,3 +263,31 @@ input[type="text"], input[type="password"], select {
 
 /* Long paths in the run notes wrap instead of pushing the page sideways at phone width. */
 .bench li, .bench p { overflow-wrap: anywhere; }
+
+/* Benchmark header (top of /bench-results): what the numbers are of, then the engines in order of searches per second with eight at once. */
+.bench-header { margin: 0 0 24px; padding: 14px 16px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; }
+.bench .bench-header-lead { font-size: 21px; line-height: 1.35; font-weight: 600; margin: 0 0 6px; }
+.bench-header-from, .bench-header-nodata { margin: 0 0 6px; font-size: 14px; }
+.bench .bench-header h2.bench-header-sub { display: block; margin: 18px 0 4px; font-size: 18px; }
+.bench-header-note, .bench-header-legend { margin: 0 0 8px; font-size: 14px; }
+.bench .preview table.bench-header-table { font-size: 15px; }
+.bench .preview .bench-header-table th, .bench .preview .bench-header-table td { padding: 6px 10px; }
+.bench .bench-header-table .n { text-align: right; font-variant-numeric: tabular-nums; }
+.bench-header-name { font-weight: 600; }
+.bench-header-mark { margin-left: 4px; color: var(--muted); font-size: 12px; }
+.bench .preview .bench-header-table tr.bench-header-note-row td { max-width: none; padding: 0 10px 8px; border-top: 0; }
+.bench-header-note-block { padding: 6px 10px; border-left: 4px solid var(--text); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.bench-header-memory { display: block; font-size: 19px; line-height: 1.25; font-weight: 800; color: var(--text); }
+.bench-header-memory::first-letter { text-transform: uppercase; }
+.bench-header-evidence, .bench-header-keep { display: block; margin-top: 3px; }
+.bench .bench-header-table tr.bench-header-unranked th { text-align: left; font-weight: 600; color: var(--muted); border-top: 2px solid var(--line); }
+.bench .bench-header-table td[data-state="not-held"], .bench .bench-header-table td[data-state="one-session"] { color: var(--warn); font-weight: 600; }
+.bench-header-link { margin: 10px 0 4px; font-weight: 600; }
+.bench-header-build { margin: 0; }
+@media (max-width: 480px) {
+  .bench-header { padding: 10px; }
+  .bench .bench-header-lead { font-size: 18px; }
+  .bench .preview table.bench-header-table { font-size: 13px; }
+  .bench .preview .bench-header-table th, .bench .preview .bench-header-table td { padding: 4px 5px; }
+  .bench-header-memory { font-size: 17px; }
+}

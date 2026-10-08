@@ -18,8 +18,8 @@ public static class BenchConsolidatedFields
 
    private static readonly Dictionary<string, ( string[] Read, string[] LeftOut )> LEVELS = new( StringComparer.Ordinal )
    {
-      [string.Empty] = ( new[] { "sessions", "threshold", "basis", "metrics", "guards", "drift", "recall", "clock", "machine", "images", "engineSettings", "why", "searchSettings", "searchEffort", "sentences", "audit", "status", "runPageNotes", "recordedTexts" },
-         new[] { "format", "createdUtc", "commandLine", "mode", "stopReasons", "targets", "runsPerSession", "runsShown", "claimRunCount", "imageTargets", "headlineNamedCount", "queries", "reuse", "notInReport", "observer", "observerOthers", "notHeld", "build", "recallDerivedSessions", "targetCount", "httpClientCount" } ),
+      [string.Empty] = ( new[] { "sessions", "threshold", "basis", "metrics", "guards", "drift", "recall", "clock", "machine", "images", "engineSettings", "why", "searchSettings", "searchEffort", "sentences", "audit", "status", "runPageNotes", "recordedTexts", "queries", "build" },
+         new[] { "format", "createdUtc", "commandLine", "mode", "stopReasons", "targets", "runsPerSession", "runsShown", "claimRunCount", "imageTargets", "headlineNamedCount", "reuse", "notInReport", "observer", "observerOthers", "notHeld", "recallDerivedSessions", "targetCount", "httpClientCount" } ),
       ["sessions[]"] = ( new[] { "name", "runs" }, Array.Empty<string>() ),
       ["sessions[].runs[]"] = ( new[] { "folder", "seed", "startedUtc", "resultsSha256" }, new[] { "staleLines" } ),
       ["threshold"] = ( new[] { "tBp", "ratio" }, new[] { "rule" } ),
