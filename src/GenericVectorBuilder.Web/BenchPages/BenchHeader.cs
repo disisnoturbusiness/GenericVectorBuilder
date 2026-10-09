@@ -38,11 +38,16 @@ public static class BenchHeader
 
    private const string SEARCHERS_PREFIX = "qps";
    private const string RANKED = "ranked";
-   private const string DATA_SLOT = "subtitle.data";
+   /// <summary>The slot of the sentence that records the data line, which the header and the Golden Questions page read the query count from.</summary>
+   internal const string DATA_SLOT = "subtitle.data";
+
+   /// <summary>The ref of the source that holds the number of queries the runs ran.</summary>
+   internal const string REF_QUERY_COUNT = "results:queryCount";
+
+   private const string GOLDEN_KIND = "golden";
    private const string REF_PIPELINE = "results:pipeline";
    private const string REF_ROWS = "results:rows";
    private const string REF_DIMENSION = "results:dimension";
-   private const string REF_QUERY_COUNT = "results:queryCount";
    private const string REF_RECORDED = "consolidated:queries.recorded";
    private const double MS_PER_SECOND = 1000.0;
    private const int COLUMNS = 4;
@@ -89,6 +94,37 @@ public static class BenchHeader
    public static string FullResultsLink()
    {
       return $"<p class=\"bench-header-link\"><a href=\"{BenchRoutes.FULL_RESULTS}\">{BenchFormat.Enc( BenchLegends.L_HEADER_FULL )}</a></p>";
+   }
+
+   /// <summary>
+   /// True when the recorded query source starts with the kind "golden": the queries are the questions of a questions file.
+   /// </summary>
+   /// <param name="recorded">The recorded query source, or null.</param>
+   /// <returns>True for golden questions.</returns>
+   internal static bool IsGolden( string? recorded )
+   {
+      return string.Equals( ( recorded ?? string.Empty ).Split( ':', 2 )[0].Trim(), GOLDEN_KIND, StringComparison.Ordinal );
+   }
+
+   /// <summary>
+   /// The path of the file the queries were read from, as the recorded query source names it ("... from /path/questions_golden.json, ...").
+   /// Why one reader: the header prints this path and the Golden Questions page reads the questions from it, and they must be the same file.
+   /// </summary>
+   /// <param name="recorded">The recorded query source, or null.</param>
+   /// <returns>The path, or null when the source is absent or names no .json file.</returns>
+   internal static string? QueryFileOf( string? recorded )
+   {
+      return recorded != null && QUERY_FILE.Match( recorded ) is { Success: true } file ? file.Groups[1].Value : null;
+   }
+
+   /// <summary>
+   /// The recorded query source: the text of the file's queries.recorded, or null when the file has none.
+   /// </summary>
+   /// <param name="root">The file's root.</param>
+   /// <returns>The text, or null.</returns>
+   internal static string? RecordedQueries( JsonElement root )
+   {
+      return BenchJson.Get( root, "queries" ) is { ValueKind: JsonValueKind.Object } queries && BenchJson.Text( queries, "recorded", "queries" ) is { Length: > 0 } recorded ? recorded : null;
    }
 
    #endregion Public Methods
@@ -142,10 +178,10 @@ public static class BenchHeader
       string? recorded = RecordedQueries( root );
       var html = new StringBuilder( $"<p class=\"bench-header-lead\">{BenchFormat.Enc( BenchLegends.L_HEADER_FROM )} <strong class=\"bench-header-data\">{BenchFormat.Enc( BenchRunList.PipelineName( pipeline ) )}</strong> {BenchFormat.Enc( BenchLegends.L_HEADER_DATASET )} " );
       html.Append( $"(<span class=\"bench-header-vectors\">{BenchFormat.Enc( rows )}</span> {BenchFormat.Enc( BenchLegends.L_HEADER_VECTORS_OF )} <span class=\"bench-header-dimensions\">{BenchFormat.Enc( dimension )}</span> {BenchFormat.Enc( BenchLegends.L_HEADER_DIMENSIONS )}) " );
-      html.Append( $"{BenchFormat.Enc( BenchLegends.L_HEADER_AND_FROM )} <span class=\"bench-header-count\">{BenchFormat.Enc( count )}</span> <strong>{BenchFormat.Enc( QueryName( recorded ) )}</strong>, {BenchFormat.Enc( BenchLegends.L_HEADER_RAN )}</p>" );
-      if( recorded != null && QUERY_FILE.Match( recorded ) is { Success: true } file )
+      html.Append( $"{BenchFormat.Enc( BenchLegends.L_HEADER_AND_FROM )} <span class=\"bench-header-count\">{BenchFormat.Enc( count )}</span> <strong>{QueryNameHtml( recorded )}</strong>, {BenchFormat.Enc( BenchLegends.L_HEADER_RAN )}</p>" );
+      if( QueryFileOf( recorded ) is { } file )
       {
-         html.Append( $"<p class=\"bench-header-from muted\">{BenchFormat.Enc( BenchLegends.L_HEADER_QUESTIONS_FROM )} <code>{BenchFormat.Enc( file.Groups[1].Value )}</code>.</p>" );
+         html.Append( $"<p class=\"bench-header-from muted\">{BenchFormat.Enc( BenchLegends.L_HEADER_QUESTIONS_FROM )} <code>{BenchFormat.Enc( file )}</code>.</p>" );
       }
 
       var sources = data.Sources.Where( s => s.Ref is REF_PIPELINE or REF_ROWS or REF_DIMENSION or REF_QUERY_COUNT ).ToList();
@@ -352,6 +388,18 @@ public static class BenchHeader
    }
 
    /// <summary>
+   /// The name of the queries as the first sentence prints it: the words of <see cref="QueryName"/>, and, when the file records the queries as golden, a link
+   /// from those words to the Golden Questions page, where the questions can be seen. Any other kind of queries has no questions to show and is not linked.
+   /// </summary>
+   /// <param name="recorded">The recorded query source, or null.</param>
+   /// <returns>HTML fragment.</returns>
+   private static string QueryNameHtml( string? recorded )
+   {
+      string name = BenchFormat.Enc( QueryName( recorded ) );
+      return IsGolden( recorded ) ? $"<a href=\"{BenchRoutes.GOLDEN_QUESTIONS}\">{name}</a>" : name;
+   }
+
+   /// <summary>
    /// The name of the queries for the first sentence: by the kind the file's recorded query source starts with ("golden:" or "random:"), as the run list
    /// names them; any other kind, and a file with no recorded source, is just "queries".
    /// </summary>
@@ -365,16 +413,6 @@ public static class BenchHeader
          "random" => BenchLegends.L_HEADER_RANDOM,
          _ => BenchLegends.L_HEADER_QUERIES,
       };
-   }
-
-   /// <summary>
-   /// The recorded query source: the text of the file's queries.recorded, or null when the file has none.
-   /// </summary>
-   /// <param name="root">The file's root.</param>
-   /// <returns>The text, or null.</returns>
-   private static string? RecordedQueries( JsonElement root )
-   {
-      return BenchJson.Get( root, "queries" ) is { ValueKind: JsonValueKind.Object } queries && BenchJson.Text( queries, "recorded", "queries" ) is { Length: > 0 } recorded ? recorded : null;
    }
 
    /// <summary>

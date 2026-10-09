@@ -8,7 +8,8 @@ namespace GenericVectorBuilder.Web.Endpoints;
 
 /// <summary>
 /// Read-only pages for the benchmark results the Bench tool writes to disk: the Vector search benchmark page at
-/// /benchmark (what the numbers are of, then the engines in order of searches per second with eight at once; see <see cref="BenchHeader"/>), a summary at
+/// /benchmark (what the numbers are of, then the engines in order of searches per second with eight at once; see <see cref="BenchHeader"/>), the questions
+/// the speed test ran at /benchmark/golden-questions (see <see cref="BenchGoldenQuestions"/>), a summary at
 /// /bench-results (the newest published consolidated set, then every run), each folder at
 /// /bench-results/{folder} (a consolidated set drawn from its consolidated.json, a run drawn from its
 /// results.json, then the folder's report with the per-engine detail folded), and the raw .md and .json
@@ -66,6 +67,7 @@ public static class BenchResultsEndpoints
       string root = Path.GetFullPath( app.Configuration[CONFIG_KEY] ?? DEFAULT_ROOT );
       string notesFile = NotesFilePath( root, app.Configuration[NOTES_CONFIG_KEY] );
       app.MapGet( BenchRoutes.BENCHMARK, () => Results.Content( BenchmarkPageHtml( root ), HTML ) );
+      app.MapGet( BenchRoutes.GOLDEN_QUESTIONS, () => Results.Content( GoldenQuestionsPageHtml( root ), HTML ) );
       app.MapGet( "/bench-results", () => Results.Content( ListPageHtml( root, notesFile ), HTML ) );
       app.MapGet( "/bench-results/{run}", ( string run ) => RunPageHtml( root, run, notesFile ) is string page ? Results.Content( page, HTML ) : Results.NotFound( new { error = "No such benchmark run." } ) );
       app.MapGet( "/bench-results/{run}/{file}", ( string run, string file ) => RawFile( root, run, file ) );
@@ -212,6 +214,32 @@ public static class BenchResultsEndpoints
       }
 
       return Page( BenchRoutes.BENCHMARK_NAME, body.ToString() );
+   }
+
+   /// <summary>
+   /// Builds the Golden Questions page: a link back to the Vector search benchmark page, its heading, and the questions the speed test ran, read from the
+   /// questions file that the newest published consolidated.json that can be read records (the same set, by the same rule, as the benchmark page; see
+   /// <see cref="BenchGoldenQuestions"/>). A newer folder that could not be read is named in a notice above the questions, as the benchmark page names it. With
+   /// no published folder, with no file that can be read, or with a questions file that is missing, unreadable or not the file the runs read, the page shows an
+   /// error notice and no table.
+   /// Why a page of its own: the benchmark page says the numbers are of the golden questions; this page is where a reader sees what they are.
+   /// Internal so tests can render it against a folder of their own.
+   /// </summary>
+   /// <param name="root">Results root.</param>
+   /// <returns>Full HTML page.</returns>
+   internal static string GoldenQuestionsPageHtml( string root )
+   {
+      var body = new StringBuilder( BenchGoldenQuestions.BackLink() ).Append( $"<h1>{BenchRoutes.GOLDEN_QUESTIONS_NAME}</h1>" );
+      IReadOnlyList<string> published = PublishedFolders( root );
+      if( published.Count == 0 )
+      {
+         body.Append( BenchGoldenQuestions.Error( BenchLegends.L_BENCHMARK_NONE ) );
+         return Page( BenchRoutes.GOLDEN_QUESTIONS_NAME, body.ToString() );
+      }
+
+      ( PublishedSet? set, string failure ) = ReadNewestPublished( root, published );
+      body.Append( set == null ? BenchGoldenQuestions.Error( $"{BenchLegends.L_GOLDEN_UNREADABLE}: {failure}" ) : set.Fallback + BenchGoldenQuestions.Block( set.Json ) );
+      return Page( BenchRoutes.GOLDEN_QUESTIONS_NAME, body.ToString() );
    }
 
    /// <summary>

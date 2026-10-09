@@ -430,6 +430,57 @@ public static class BenchLegends
    /// <summary>Printed on the Vector search benchmark page when no set has been published.</summary>
    public const string L_BENCHMARK_NONE = "No published benchmark results yet.";
 
+   /// <summary>First words of the sentence on the Golden Questions page that says what the questions are; the number of questions follows.</summary>
+   public const string L_GOLDEN_INTRO_A = "These are the";
+
+   /// <summary>Rest of that sentence, after the number of questions.</summary>
+   public const string L_GOLDEN_INTRO_B = "questions every engine answered in the speed test.";
+
+   /// <summary>Column heading of the question's number on the Golden Questions page.</summary>
+   public const string L_GOLDEN_COL_NUMBER = "#";
+
+   /// <summary>Column heading of the question's text.</summary>
+   public const string L_GOLDEN_COL_QUESTION = "Question";
+
+   /// <summary>Column heading of the question's type, the category the questions file gives it.</summary>
+   public const string L_GOLDEN_COL_TYPE = "Type";
+
+   /// <summary>Column heading of the files a correct answer should return, the relevant files the questions file lists.</summary>
+   public const string L_GOLDEN_COL_FILES = "Files a correct answer should return";
+
+   /// <summary>Words before the path of the file the Golden Questions page read the questions from.</summary>
+   public const string L_GOLDEN_FROM = "The questions are read from";
+
+   /// <summary>Printed after the path when the file's hash is the one the runs recorded.</summary>
+   public const string L_GOLDEN_HASH_MATCH = "Its hash is the one the runs recorded.";
+
+   /// <summary>Words before the name of the benchmark page, in the link back to it from the Golden Questions page.</summary>
+   public const string L_GOLDEN_BACK = "Back to the";
+
+   /// <summary>Words before the reason the Golden Questions page could not show the questions.</summary>
+   public const string L_GOLDEN_UNREADABLE = "The questions could not be shown";
+
+   /// <summary>Printed on the Golden Questions page when the published set records no file of questions.</summary>
+   public const string L_GOLDEN_NO_FILE = "The published set records no file of questions, so there are no questions to show.";
+
+   /// <summary>First words of the notice that the questions file is not the file the runs read; the file's hash follows.</summary>
+   public const string L_GOLDEN_CHANGED_A = "The questions file is not the file the runs read, so no questions are shown. Its hash starts";
+
+   /// <summary>Words between the file's hash and the hash the runs recorded.</summary>
+   public const string L_GOLDEN_CHANGED_B = "and the runs recorded";
+
+   /// <summary>First words of the notice that the questions file holds another number of questions than the runs ran; the file's number follows.</summary>
+   public const string L_GOLDEN_COUNT_A = "The questions file holds";
+
+   /// <summary>Words between the number of questions the file holds and the number the runs recorded.</summary>
+   public const string L_GOLDEN_COUNT_B = "questions and the runs recorded";
+
+   /// <summary>End of that notice, after the number the runs recorded.</summary>
+   public const string L_GOLDEN_COUNT_C = "queries, so no questions are shown.";
+
+   /// <summary>Printed on the Golden Questions page when the questions file holds no question.</summary>
+   public const string L_GOLDEN_EMPTY = "The questions file holds no question, so there are none to show.";
+
    /// <summary>Summary line of the block that lists the clauses of the engine texts that no sentence of the page prints.</summary>
    public const string H_RECORDED_TEXTS = "Recorded engine texts, clause by clause";
 

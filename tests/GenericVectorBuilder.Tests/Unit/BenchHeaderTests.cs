@@ -413,8 +413,8 @@ public sealed class BenchHeaderTests : IDisposable
    }
 
    /// <summary>
-   /// One line links to the full results page, at /bench-results, and it is the only link of the header: the full results are not below the header on this
-   /// page, so there is no anchor to jump to and no "below" in the link's words.
+   /// One line links to the full results page, at /bench-results, and the only other link of the header is the one from the words "golden questions" to the
+   /// Golden Questions page: the full results are not below the header on this page, so there is no anchor to jump to and no "below" in the link's words.
    /// </summary>
    [Fact]
    public void OneLink_GoesToTheFullResultsPage()
@@ -423,8 +423,9 @@ public sealed class BenchHeaderTests : IDisposable
       string page = Page( json );
       string header = HeaderOf( page );
 
-      Assert.Single( Regex.Matches( header, "<a href=" ) );
+      Assert.Equal( 2, Regex.Matches( header, "<a href=" ).Count );
       Assert.Single( Regex.Matches( header, "<a href=\"/bench-results\">" ) );
+      Assert.Single( Regex.Matches( header, "<a href=\"/benchmark/golden-questions\">golden questions</a>" ) );
       Assert.Contains( $"<a href=\"/bench-results\">{BenchLegends.L_HEADER_FULL}</a>", header );
       Assert.DoesNotContain( "bench-full-results", page );
       Assert.DoesNotContain( "below", Visible( header ) );

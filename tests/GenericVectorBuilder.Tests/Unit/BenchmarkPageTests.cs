@@ -33,6 +33,7 @@ public sealed class BenchmarkPageTests : IDisposable
    private const string RUN = "20261006-130619-eshoponweb";
    private const string HEADING_LINK = "<h1><a href=\"/benchmark\">Vector search benchmark</a></h1>";
    private const string HEADING_PLAIN = "<h1>Vector search benchmark</h1>";
+   private const string GOLDEN_LINK = "<strong><a href=\"/benchmark/golden-questions\">golden questions</a></strong>";
    private const string FULL_RESULTS_LINK = "<a href=\"/bench-results\">Full results: every table, the flags and every run</a>";
    private const string TOP_BAR_LINK = "<a href=\"/benchmark\">Benchmark</a></header>";
    private const string TOP_BAR_LINK_WAS = "<a href=\"/bench-results\">Benchmark results</a></header>";
@@ -138,8 +139,9 @@ public sealed class BenchmarkPageTests : IDisposable
 
    /// <summary>
    /// The new page contains exactly the header that was live at 6865c80, for the same file: the same words, numbers, bold block, not-held row, notes and
-   /// small text. Three things differ, each once and each because the full results are no longer below the header: the link goes to /bench-results and
-   /// no longer says "below", the anchor it pointed at is gone, and the sentence about the figures of the rows that are not ranked no longer says "below".
+   /// small text. Four things differ, each once: three because the full results are no longer below the header (the link goes to /bench-results and
+   /// no longer says "below", the anchor it pointed at is gone, and the sentence about the figures of the rows that are not ranked no longer says "below"),
+   /// and one because the words "golden questions" in the first sentence are now a link to the Golden Questions page.
    /// </summary>
    [Fact]
    public void TheNewPage_HoldsTheHeaderThatWasLiveAt6865c80_ExceptThePlacesThatSaidBelow()
@@ -148,6 +150,7 @@ public sealed class BenchmarkPageTests : IDisposable
       string expected = Swap( live, "<a href=\"#bench-full-results\">Full results below: every table, the flags and every run</a>", FULL_RESULTS_LINK );
       expected = Swap( expected, "<a id=\"bench-full-results\"></a>", string.Empty );
       expected = Swap( expected, "are in the full results below.", "are in the full results." );
+      expected = Swap( expected, "<strong>golden questions</strong>", GOLDEN_LINK );
 
       Assert.Equal( expected, HeaderOf( BenchmarkPage() ) );
       Assert.Contains( "Most searches per second first.", expected );
@@ -156,16 +159,18 @@ public sealed class BenchmarkPageTests : IDisposable
    }
 
    /// <summary>
-   /// The new page links to the full results page at /bench-results, with one link in the header, in the header's own words, and has no anchor to a place on
-   /// itself. (The bar at the top of every page links to /benchmark, not to this address.)
+   /// The new page links to the full results page at /bench-results, with one link in the header to it, in the header's own words, and has no anchor to a
+   /// place on itself. The header holds one other link, from the words "golden questions" to the Golden Questions page (see GoldenQuestionsPageTests). (The
+   /// bar at the top of every page links to /benchmark, not to this address.)
    /// </summary>
    [Fact]
    public void TheNewPage_LinksToTheFullResultsPage()
    {
       string page = BenchmarkPage();
 
-      Assert.Single( Regex.Matches( HeaderOf( page ), "href=" ) );
+      Assert.Equal( 2, Regex.Matches( HeaderOf( page ), "href=" ).Count );
       Assert.Single( Regex.Matches( HeaderOf( page ), "href=\"/bench-results\"" ) );
+      Assert.Single( Regex.Matches( HeaderOf( page ), "href=\"/benchmark/golden-questions\"" ) );
       Assert.Contains( "<p class=\"bench-header-link\">" + FULL_RESULTS_LINK + "</p>", page );
       Assert.DoesNotContain( "href=\"#", page );
    }

@@ -291,3 +291,23 @@ input[type="text"], input[type="password"], select {
   .bench .preview .bench-header-table th, .bench .preview .bench-header-table td { padding: 4px 5px; }
   .bench-header-memory { font-size: 17px; }
 }
+
+/* Golden Questions page (/benchmark/golden-questions): the questions the speed test ran, with the files a correct answer should return. */
+.bench-golden-back { margin: 0 0 8px; font-size: 14px; }
+.bench .bench-golden-lead { font-size: 18px; line-height: 1.35; margin: 0 0 6px; }
+.bench .bench-golden-files { margin: 0; padding-left: 18px; font-size: 14px; }
+.bench .bench-golden-files li { margin: 2px 0; }
+.bench .bench-golden-note { display: block; margin-top: 3px; }
+.bench .preview .bench-golden-table th.n, .bench .preview .bench-golden-table td.n { width: 1%; }
+@media (max-width: 720px) {
+  .bench .preview table.bench-golden-table, .bench .bench-golden-table tbody, .bench .bench-golden-table tr, .bench .preview .bench-golden-table td { display: block; }
+  .bench .bench-golden-table thead { display: none; }
+  .bench .bench-golden-table tr { margin: 0 0 10px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
+  .bench .preview .bench-golden-table td { padding: 2px 0; border: 0; max-width: none; }
+  .bench .preview .bench-golden-table td.n { width: auto; text-align: left; font-weight: 700; }
+  .bench .bench-golden-table td.bench-golden-question { font-weight: 600; }
+  .bench .bench-golden-table td.n::before { content: "#"; }
+  .bench .bench-golden-table td[data-label]::before { content: attr(data-label) ": "; color: var(--muted); font-size: 12px; font-weight: 600; }
+  .bench .bench-golden-table td.bench-golden-filecell::before { display: block; }
+  .bench .bench-golden-files { padding-left: 16px; }
+}
