@@ -34,6 +34,8 @@ public sealed class BenchmarkPageTests : IDisposable
    private const string HEADING_LINK = "<h1><a href=\"/benchmark\">Vector search benchmark</a></h1>";
    private const string HEADING_PLAIN = "<h1>Vector search benchmark</h1>";
    private const string FULL_RESULTS_LINK = "<a href=\"/bench-results\">Full results: every table, the flags and every run</a>";
+   private const string TOP_BAR_LINK = "<a href=\"/benchmark\">Benchmark</a></header>";
+   private const string TOP_BAR_LINK_WAS = "<a href=\"/bench-results\">Benchmark results</a></header>";
    private const int SERVER_SECONDS = 60;
    private const int REQUEST_SECONDS = 15;
    private const int LONG_LEGEND = 25;
@@ -155,7 +157,7 @@ public sealed class BenchmarkPageTests : IDisposable
 
    /// <summary>
    /// The new page links to the full results page at /bench-results, with one link in the header, in the header's own words, and has no anchor to a place on
-   /// itself. (The bar at the top of every page has its own link to the same address.)
+   /// itself. (The bar at the top of every page links to /benchmark, not to this address.)
    /// </summary>
    [Fact]
    public void TheNewPage_LinksToTheFullResultsPage()
@@ -202,7 +204,8 @@ public sealed class BenchmarkPageTests : IDisposable
 
    /// <summary>
    /// The full results page, with the link of its heading taken out, is byte for byte the page the code before the header rendered for the same inputs
-   /// (a set published on 8 Oct with its report, and a run it uses).
+   /// (a set published on 8 Oct with its report, and a run it uses). The one thing that is not the page it was is the link at the right of the bar at the
+   /// top, which now says "Benchmark" and goes to /benchmark (see TopBarTests); the stored file is the page as it was, so that link is put back first.
    /// </summary>
    [Fact]
    public void TheFullResultsPage_MinusTheLink_IsThePageBeforeTheHeader()
@@ -212,7 +215,7 @@ public sealed class BenchmarkPageTests : IDisposable
       string page = BenchResultsEndpoints.ListPageHtml( _root );
 
       Assert.Single( Regex.Matches( page, Regex.Escape( HEADING_LINK ) ) );
-      Assert.Equal( was, page.Replace( HEADING_LINK, HEADING_PLAIN ) );
+      Assert.Equal( was, WithTopBarAsItWas( page ).Replace( HEADING_LINK, HEADING_PLAIN ) );
       Assert.Contains( "<h2>All runs</h2>", was );
       Assert.DoesNotContain( "bench-header", was );
    }
@@ -228,9 +231,9 @@ public sealed class BenchmarkPageTests : IDisposable
       string missing = BenchResultsEndpoints.ListPageHtml( Path.Combine( _root, "no-such-folder" ) );
 
       Assert.Contains( "<main class=\"card bench\"><h1>Benchmark results</h1>", empty );
-      Assert.DoesNotContain( "href=\"/benchmark\"", empty );
+      Assert.DoesNotContain( "href=\"/benchmark\"", WithTopBarAsItWas( empty ) );
       Assert.Contains( "<h1>Benchmark results</h1><p class=\"muted\">No results folder yet.</p>", missing );
-      Assert.DoesNotContain( "href=\"/benchmark\"", missing );
+      Assert.DoesNotContain( "href=\"/benchmark\"", WithTopBarAsItWas( missing ) );
    }
 
    /// <summary>
@@ -244,9 +247,9 @@ public sealed class BenchmarkPageTests : IDisposable
       string set = BenchResultsEndpoints.RunPageHtml( _root, FOLDER )!;
       string run = BenchResultsEndpoints.RunPageHtml( _root, RUN )!;
 
-      Assert.Equal( BenchResultsFixtureFiles.Text( "bench-split.set-page.pre-6865c80.html" ), set );
-      Assert.Equal( BenchResultsFixtureFiles.Text( "bench-split.run-page.pre-6865c80.html" ), run );
-      Assert.DoesNotContain( "href=\"/benchmark\"", set + run );
+      Assert.Equal( BenchResultsFixtureFiles.Text( "bench-split.set-page.pre-6865c80.html" ), WithTopBarAsItWas( set ) );
+      Assert.Equal( BenchResultsFixtureFiles.Text( "bench-split.run-page.pre-6865c80.html" ), WithTopBarAsItWas( run ) );
+      Assert.DoesNotContain( "href=\"/benchmark\"", WithTopBarAsItWas( set + run ) );
       Assert.DoesNotContain( "Vector search benchmark", set + run );
    }
 
@@ -339,6 +342,18 @@ public sealed class BenchmarkPageTests : IDisposable
    {
       Assert.Single( Regex.Matches( text, Regex.Escape( old ) ) );
       return text.Replace( old, replacement );
+   }
+
+   /// <summary>
+   /// A page with the link at the right of its top bar put back to what it was before it became the link to /benchmark, so the page can be held against a
+   /// stored file of the page as it was. The page must carry the new link, so a page without it fails here and not by a quiet match.
+   /// </summary>
+   /// <param name="page">The page.</param>
+   /// <returns>The page with the old link.</returns>
+   private static string WithTopBarAsItWas( string page )
+   {
+      Assert.True( page.Contains( TOP_BAR_LINK, StringComparison.Ordinal ), "no top bar link to /benchmark on the page" );
+      return page.Replace( TOP_BAR_LINK, TOP_BAR_LINK_WAS );
    }
 
    /// <summary>

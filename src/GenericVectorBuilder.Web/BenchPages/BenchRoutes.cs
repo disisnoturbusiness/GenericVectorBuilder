@@ -19,5 +19,8 @@ public static class BenchRoutes
    /// <summary>The name of the Vector search benchmark page: its title and its heading, and the text of the link back to it from the full results page.</summary>
    public const string BENCHMARK_NAME = "Vector search benchmark";
 
+   /// <summary>The text of the link at the right of the bar at the top of every page; it goes to <see cref="BENCHMARK"/>.</summary>
+   public const string TOP_BAR_LINK = "Benchmark";
+
    #endregion Data Members
 }

@@ -666,7 +666,7 @@ public static class BenchResultsEndpoints
    {
       return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
          + $"<meta name=\"color-scheme\" content=\"light dark\"><title>{Enc( title )}</title><link rel=\"stylesheet\" href=\"/style.css\"></head><body>"
-         + "<header class=\"topbar\"><h1><a href=\"/\">GenericVectorBuilder</a></h1><a href=\"/bench-results\">Benchmark results</a></header>"
+         + $"<header class=\"topbar\"><h1><a href=\"/\">GenericVectorBuilder</a></h1><a href=\"{BenchRoutes.BENCHMARK}\">{BenchRoutes.TOP_BAR_LINK}</a></header>"
          + $"<main class=\"card bench\">{body}</main></body></html>";
    }
 
